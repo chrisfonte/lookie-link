@@ -1,7 +1,7 @@
 {
-  "name": "ops-file-viewer",
+  "name": "lookout",
   "version": "2.0.0",
-  "description": "Lightweight web file viewer for operations repos over Tailscale",
+  "description": "Lightweight web file viewer for local directories",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

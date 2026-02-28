@@ -13,11 +13,11 @@
 
 ## 2026-02-28 — v1.2.0 — YAML Config File
 
-- Added `spyglass.yaml` configuration file for repo mappings, port, hostname
-- Config priority: env vars > spyglass.yaml > built-in defaults
-- Added `SPYGLASS_CONFIG` env var to point to custom config location
+- Added `lookout.yaml` configuration file for repo mappings, port, hostname
+- Config priority: env vars > lookout.yaml > built-in defaults
+- Added `LOOKOUT_CONFIG` env var to point to custom config location
 - Added `js-yaml` dependency
-- Renamed project to **Spyglass** in all docs
+- Renamed project to **Lookout** in all docs
 - Updated README with full config documentation
 
 ## 1.0.0 - 2026-02-28

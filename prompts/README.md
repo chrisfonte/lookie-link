@@ -1,6 +1,6 @@
 # Prompts
 
-Build prompts used to create Spyglass. The prompt is more valuable than the code — anyone can rebuild the tool from these.
+Build prompts used to create Lookout. The prompt is more valuable than the code — anyone can rebuild the tool from these.
 
 | File | Description |
 |------|-------------|

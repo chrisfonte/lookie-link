@@ -1,4 +1,4 @@
-# Spyglass
+# Lookout
 
 Lightweight web file viewer for local directories. Browse markdown, YAML, and code files with a rendered dark-theme UI. Designed for documentation repos, knowledge bases, and project files.
 
@@ -7,13 +7,13 @@ Lightweight web file viewer for local directories. Browse markdown, YAML, and co
 - Read-only file and directory browser
 - URL format: `/view/<repo>/<path>#<anchor>`
 - Markdown rendering with syntax-highlighted code blocks
-- Hybrid cross-link rendering: `[[name]] (~/repo/path.md#anchor)` -> clickable Spyglass links
+- Hybrid cross-link rendering: `[[name]] (~/repo/path.md#anchor)` -> clickable Lookout links
 - YAML/code rendering with syntax highlighting
 - Anchor linking for markdown headers and YAML top-level keys with one-click copy buttons
 - Inline image rendering for local repo images (`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`)
 - Plain text fallback for unknown extensions
 - Mobile-friendly dark theme
-- Configurable via `spyglass.yaml` or environment variables
+- Configurable via `lookout.yaml` or environment variables
 
 ## Requirements
 
@@ -33,7 +33,7 @@ npm start
 
 ## Configuration
 
-Edit `spyglass.yaml` in the project root:
+Edit `lookout.yaml` in the project root:
 
 ```yaml
 server:
@@ -51,7 +51,7 @@ repositories:
 Settings are resolved in this order (first wins):
 
 1. **Environment variables** (`PORT`, `HOSTNAME`, `ROOT_MAPPINGS`)
-2. **`spyglass.yaml`** (project root, or path set by `SPYGLASS_CONFIG` env)
+2. **`lookout.yaml`** (project root, or path set by `LOOKOUT_CONFIG` env)
 3. **Built-in defaults**
 
 ### Environment Variables (legacy)
@@ -61,11 +61,11 @@ Settings are resolved in this order (first wins):
 | `PORT` | Port to listen on (default: 9876) |
 | `HOSTNAME` | Hostname shown in logs |
 | `ROOT_MAPPINGS` | Comma-separated `repo=path` pairs or JSON object |
-| `SPYGLASS_CONFIG` | Path to a custom `spyglass.yaml` location |
+| `LOOKOUT_CONFIG` | Path to a custom `lookout.yaml` location |
 
 ## Anchor Linking
 
-Spyglass generates anchor IDs for:
+Lookout generates anchor IDs for:
 
 - **Markdown headers**: `## Core Truths` → `#core-truths`
 - **YAML top-level keys**: `learned_patterns:` → `#learned_patterns`
@@ -76,7 +76,7 @@ Each heading/key anchor includes a `🔗` button that copies the full page URL (
 
 ## Cross-Link Rendering
 
-Spyglass rewrites these markdown patterns in rendered output:
+Lookout rewrites these markdown patterns in rendered output:
 
 - `[[wikilink-name]] (~/my-docs/guides/foo.md#bar)` -> `/view/my-docs/guides/foo.md#bar`
 - `[[topic]] (\`~/notes/topic/doc.md\`)` -> `/view/notes/topic/doc.md`
@@ -91,7 +91,7 @@ Rules:
 
 ## Inline Images
 
-Spyglass rewrites markdown image paths to the `/asset` endpoint so local repository images render inline:
+Lookout rewrites markdown image paths to the `/asset` endpoint so local repository images render inline:
 
 - `![alt](image.png)` -> `/asset/<current-repo>/<current-dir>/image.png`
 - `![alt](./image.png)` -> `/asset/<current-repo>/<current-dir>/image.png`
@@ -114,7 +114,7 @@ Supported asset types:
 
 ```
 ops-file-viewer/
-├── spyglass.yaml      # Configuration
+├── lookout.yaml      # Configuration
 ├── server.js          # Main entry point
 ├── lib/
 │   ├── config.js      # Config loading (YAML + env)

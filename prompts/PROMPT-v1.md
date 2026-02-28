@@ -1,4 +1,4 @@
-# Spyglass — Web File Viewer for Local Directories
+# Lookout — Web File Viewer for Local Directories
 
 ## What to Build
 

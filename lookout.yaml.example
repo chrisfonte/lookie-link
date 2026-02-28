@@ -1,6 +1,6 @@
-# Spyglass Configuration
+# Lookout Configuration
 # ---------------------
-# Copy this to spyglass.yaml and customize for your setup.
+# Copy this to lookout.yaml and customize for your setup.
 # After editing, restart the server for changes to take effect.
 
 # Server settings

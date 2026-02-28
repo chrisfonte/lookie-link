@@ -1,16 +1,16 @@
-# Spyglass v2.0 — Feature Build Prompt
+# Lookout v2.0 — Feature Build Prompt
 
 ## Project Context
 
-Spyglass is a lightweight Node.js/Express web file viewer for browsing local directories over your network. It renders markdown, YAML, and code files with syntax highlighting and a dark theme.
+Lookout is a lightweight Node.js/Express web file viewer for browsing local directories over your network. It renders markdown, YAML, and code files with syntax highlighting and a dark theme.
 
 **Key files:**
 - `server.js` — Express app, routes, file serving
 - `lib/renderer.js` — markdown-it rendering, heading anchors, YAML anchors, syntax highlighting
-- `lib/config.js` — YAML config loading (spyglass.yaml), env vars, repo mappings
+- `lib/config.js` — YAML config loading (lookout.yaml), env vars, repo mappings
 - `lib/path-utils.js` — path resolution, security (jail-break prevention)
 - `public/style.css` — dark theme styles
-- `spyglass.yaml` — repo mappings and server config
+- `lookout.yaml` — repo mappings and server config
 
 ## Feature 1: Render Hybrid Cross-Links as Clickable Links (Closes #1)
 
@@ -19,7 +19,7 @@ Our documentation uses a "hybrid link" format: `[[wikilink-name]] (~/path/to/doc
 **Requirements:**
 - In rendered markdown output, detect the pattern `[[...]] (~/path/to/file.md...)` and convert it to a clickable `<a>` tag
 - The visible text should be the wikilink name (text between `[[` and `]]`)
-- The href should map the path to a Spyglass URL:
+- The href should map the path to a Lookout URL:
   - `~/docs/guides/foo.md#bar` → `/view/docs/guides/foo.md#bar`
   - `~/notes/topic/doc.md` → `/view/notes/topic/doc.md`
   - `~/project/README.md` → `/view/project/README.md`
@@ -32,7 +32,7 @@ Our documentation uses a "hybrid link" format: `[[wikilink-name]] (~/path/to/doc
 After `markdown.render(source)`, run a regex replacement on the HTML output that:
 1. Matches `[[...]] (~/...)` patterns (but not inside `<code>` or `<pre>` tags)
 2. Extracts the wikilink text and the path
-3. Converts the path to a Spyglass URL
+3. Converts the path to a Lookout URL
 4. Wraps in `<a href="..." class="cross-link">wikilink-text</a>`
 
 Also handle the case where the path is wrapped in backticks: `[[name]] (\`~/path\`)` — strip the backticks.
