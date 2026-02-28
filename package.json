@@ -10,9 +10,11 @@
     "node": ">=20"
   },
   "dependencies": {
+    "dompurify": "^3.3.1",
     "express": "^4.21.2",
     "highlight.js": "^11.11.1",
     "js-yaml": "^4.1.1",
+    "jsdom": "^28.1.0",
     "markdown-it": "^14.1.0"
   }
 }
