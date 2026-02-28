@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-02-28 — v1.2.0 — YAML Config File
+
+- Added `spyglass.yaml` configuration file for repo mappings, port, hostname
+- Config priority: env vars > spyglass.yaml > built-in defaults
+- Added `SPYGLASS_CONFIG` env var to point to custom config location
+- Added `js-yaml` dependency
+- Renamed project to **Spyglass** in all docs
+- Updated README with full config documentation
+
 ## 1.0.0 - 2026-02-28
 
 - Initial release of `ops-file-viewer`
