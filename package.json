@@ -1,7 +1,7 @@
 {
-  "name": "lookout",
+  "name": "lookie-link",
   "version": "2.0.0",
-  "description": "Lightweight web file viewer for local directories",
+  "description": "Lightweight web file viewer for local directories \u2014 look at things, via links",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

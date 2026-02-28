@@ -1,4 +1,4 @@
-# Lookout — Web File Viewer for Local Directories
+# Lookie-Link — Web File Viewer for Local Directories
 
 ## What to Build
 
