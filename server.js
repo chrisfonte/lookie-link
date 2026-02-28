@@ -205,6 +205,7 @@ app.get('/view/*', async (req, res) => {
   const parentRel = parentPath(relativePath);
   const html = renderDocumentPage({
     repo,
+    repoRoot: rootPath,
     relativePath,
     source,
     parentHref: parentRel === null ? '/view' : buildHref(repo, parentRel),
