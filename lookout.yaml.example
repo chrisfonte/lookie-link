@@ -1,6 +1,6 @@
 # Lookout Configuration
 # ---------------------
-# Copy this to lookout.yaml and customize for your setup.
+# Copy this to ~/.config/lookout/lookout.yaml and customize for your setup.
 # After editing, restart the server for changes to take effect.
 
 # Server settings

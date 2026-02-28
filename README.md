@@ -33,7 +33,7 @@ npm start
 
 ## Configuration
 
-Edit `lookout.yaml` in the project root:
+Create `~/.config/lookout/lookout.yaml`:
 
 ```yaml
 server:
@@ -51,8 +51,9 @@ repositories:
 Settings are resolved in this order (first wins):
 
 1. **Environment variables** (`PORT`, `HOSTNAME`, `ROOT_MAPPINGS`)
-2. **`lookout.yaml`** (project root, or path set by `LOOKOUT_CONFIG` env)
-3. **Built-in defaults**
+2. **`~/.config/lookout/lookout.yaml`** (user config)
+3. **`lookout.yaml`** in project root (development fallback)
+4. **Built-in defaults**
 
 ### Environment Variables (legacy)
 
@@ -61,7 +62,7 @@ Settings are resolved in this order (first wins):
 | `PORT` | Port to listen on (default: 9876) |
 | `HOSTNAME` | Hostname shown in logs |
 | `ROOT_MAPPINGS` | Comma-separated `repo=path` pairs or JSON object |
-| `LOOKOUT_CONFIG` | Path to a custom `lookout.yaml` location |
+| `LOOKOUT_CONFIG` | Path to a custom `lookout.yaml` location (overrides all) |
 
 ## Anchor Linking
 
@@ -114,7 +115,7 @@ Supported asset types:
 
 ```
 ops-file-viewer/
-├── lookout.yaml      # Configuration
+├── lookout.yaml.example  # Config template (copy to ~/.config/lookout/)
 ├── server.js          # Main entry point
 ├── lib/
 │   ├── config.js      # Config loading (YAML + env)
