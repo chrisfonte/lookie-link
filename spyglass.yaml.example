@@ -1,28 +1,25 @@
 # Spyglass Configuration
 # ---------------------
-# This file controls which repositories/directories Spyglass serves
-# and how it binds to the network.
-#
+# Copy this to spyglass.yaml and customize for your setup.
 # After editing, restart the server for changes to take effect.
 
 # Server settings
 server:
   port: 9876
-  hostname: mac-mini-2.bobcat-tetra.ts.net
+  hostname: localhost  # e.g., my-server.local or my-host.tailnet.ts.net
 
 # Repository mappings
 # Each key becomes a URL prefix: /view/<key>/<path>
 # Values are absolute paths or ~-relative paths to local directories.
 repositories:
-  operations: ~/operations
-  operations-fontastic: ~/operations-fontastic
-  operations-chris-fonte: ~/operations-chris-fonte
-  clawd: ~/clawd
+  docs: ~/Documents/docs
+  notes: ~/notes
+  # project: ~/projects/my-project
 
 # Future settings (not yet implemented)
 # search:
 #   enabled: false
 # auth:
-#   enabled: false    # Tailscale handles network-level access
+#   enabled: false
 # theme:
 #   default: dark

@@ -1,14 +1,16 @@
 # Spyglass
 
-Lightweight web file viewer for operations repositories. Runs on a local macOS gateway and serves rendered files over Tailscale.
+Lightweight web file viewer for local directories. Browse markdown, YAML, and code files with a rendered dark-theme UI. Designed for documentation repos, knowledge bases, and project files.
 
 ## Features
 
 - Read-only file and directory browser
 - URL format: `/view/<repo>/<path>#<anchor>`
 - Markdown rendering with syntax-highlighted code blocks
+- Hybrid cross-link rendering: `[[name]] (~/repo/path.md#anchor)` -> clickable Spyglass links
 - YAML/code rendering with syntax highlighting
-- Anchor linking for markdown headers and YAML top-level keys
+- Anchor linking for markdown headers and YAML top-level keys with one-click copy buttons
+- Inline image rendering for local repo images (`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`)
 - Plain text fallback for unknown extensions
 - Mobile-friendly dark theme
 - Configurable via `spyglass.yaml` or environment variables
@@ -36,13 +38,12 @@ Edit `spyglass.yaml` in the project root:
 ```yaml
 server:
   port: 9876
-  hostname: mac-mini-2.bobcat-tetra.ts.net
+  hostname: my-server.example.com
 
 repositories:
-  operations: ~/operations
-  operations-fontastic: ~/operations-fontastic
-  operations-chris-fonte: ~/operations-chris-fonte
-  clawd: ~/clawd
+  my-docs: ~/Documents/docs
+  notes: ~/notes
+  project: ~/projects/my-project
 ```
 
 ### Config Priority
@@ -69,7 +70,36 @@ Spyglass generates anchor IDs for:
 - **Markdown headers**: `## Core Truths` → `#core-truths`
 - **YAML top-level keys**: `learned_patterns:` → `#learned_patterns`
 
-Append the anchor to any URL: `/view/clawd/SOUL.md#core-truths`
+Append the anchor to any URL: `/view/my-docs/guide.md#core-truths`
+
+Each heading/key anchor includes a `🔗` button that copies the full page URL (with `#anchor`) to clipboard.
+
+## Cross-Link Rendering
+
+Spyglass rewrites these markdown patterns in rendered output:
+
+- `[[wikilink-name]] (~/my-docs/guides/foo.md#bar)` -> `/view/my-docs/guides/foo.md#bar`
+- `[[topic]] (\`~/notes/topic/doc.md\`)` -> `/view/notes/topic/doc.md`
+- `[[readme]] (~/project/README.md)` -> `/view/project/README.md`
+
+Rules:
+
+- The visible text is the `[[wikilink-name]]` label
+- The `~/` prefix is stripped and mapped as `/view/<repo>/<path>`
+- `<private-repo>` placeholders are intentionally not linkified
+- Content inside code blocks/inline code is not rewritten
+
+## Inline Images
+
+Spyglass rewrites markdown image paths to the `/asset` endpoint so local repository images render inline:
+
+- `![alt](image.png)` -> `/asset/<current-repo>/<current-dir>/image.png`
+- `![alt](./image.png)` -> `/asset/<current-repo>/<current-dir>/image.png`
+- `![alt](~/my-docs/img/diagram.png)` -> `/asset/my-docs/img/diagram.png`
+
+Supported asset types:
+
+- `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`
 
 ## Endpoints
 
@@ -78,6 +108,7 @@ Append the anchor to any URL: `/view/clawd/SOUL.md#core-truths`
 | `GET /` | Repository index |
 | `GET /healthz` | Health check |
 | `GET /view/<repo>/<path>` | File or directory view |
+| `GET /asset/<repo>/<path>` | Read-only image asset serving for inline docs |
 
 ## Project Structure
 

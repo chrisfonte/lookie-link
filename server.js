@@ -19,6 +19,14 @@ const { renderDocumentPage, renderDirectoryPage } = require('./lib/renderer');
 
 const app = express();
 let mappings = null;
+const ASSET_MIME_TYPES = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+};
 
 function isBinaryBuffer(buffer) {
   const sampleSize = Math.min(buffer.length, 2048);
@@ -205,6 +213,73 @@ app.get('/view/*', async (req, res) => {
   });
 
   res.status(200).type('html').send(html);
+});
+
+app.get('/asset/:repo/*', async (req, res) => {
+  const repo = req.params.repo;
+  const relativePath = req.params[0] || '';
+  const rootPath = mappings[repo];
+
+  if (!rootPath) {
+    res.status(404).type('text/plain').send(`Unknown repository: ${repo}`);
+    return;
+  }
+
+  const extension = path.extname(relativePath).toLowerCase();
+  const mimeType = ASSET_MIME_TYPES[extension];
+  if (!mimeType) {
+    res.status(415).type('text/plain').send('Unsupported asset type.');
+    return;
+  }
+
+  let resolved;
+  try {
+    resolved = await safeResolve(rootPath, relativePath);
+  } catch (error) {
+    if (error && error.code === 'EACCES') {
+      res.status(403).type('text/plain').send('Invalid path.');
+      return;
+    }
+
+    if (error && error.code === 'ENOENT') {
+      res.status(404).type('text/plain').send('Asset not found.');
+      return;
+    }
+
+    console.error('Failed to resolve asset path', { rootPath, relativePath, error });
+    res.status(500).type('text/plain').send('Failed to resolve asset path.');
+    return;
+  }
+
+  let stat;
+  try {
+    stat = await fs.stat(resolved);
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      res.status(404).type('text/plain').send('Asset not found.');
+      return;
+    }
+
+    console.error('Failed to stat asset path', { resolved, error });
+    res.status(500).type('text/plain').send('Failed to read asset metadata.');
+    return;
+  }
+
+  if (!stat.isFile()) {
+    res.status(404).type('text/plain').send('Asset not found.');
+    return;
+  }
+
+  res.type(mimeType).sendFile(resolved, (error) => {
+    if (!error) {
+      return;
+    }
+
+    console.error('Failed to serve asset', { resolved, error });
+    if (!res.headersSent) {
+      res.status(500).type('text/plain').send('Failed to read asset.');
+    }
+  });
 });
 
 app.get('/view', (_req, res) => {
