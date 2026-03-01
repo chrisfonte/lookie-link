@@ -395,26 +395,7 @@ tbody tr:last-child td {
   background: var(--toolbar-btn-hover);
 }
 
-.toc-fab {
-  position: fixed;
-  right: max(0.75rem, env(safe-area-inset-right));
-  bottom: max(0.85rem, env(safe-area-inset-bottom));
-  z-index: 31;
-  width: 2.4rem;
-  height: 2.4rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--toolbar-bg);
-  color: var(--toolbar-btn-text);
-  font-size: 1.05rem;
-  line-height: 1;
-  cursor: pointer;
-  backdrop-filter: blur(6px);
-}
-
-.toc-fab:hover {
-  background: var(--toolbar-btn-hover);
-}
+/* toc-fab removed — TOC button now lives in .viewer-toolbar */
 
 .toc-overlay {
   position: fixed;
@@ -433,22 +414,27 @@ tbody tr:last-child td {
 
 .toc-panel {
   position: fixed;
-  top: 0;
-  right: 0;
+  top: 3rem;
+  right: 0.75rem;
   z-index: 28;
   width: min(85vw, 320px);
-  height: 100vh;
+  max-height: 70vh;
   display: flex;
   flex-direction: column;
   background: var(--bg-elev);
-  border-left: 1px solid var(--border);
-  box-shadow: -12px 0 30px rgba(0, 0, 0, 0.24);
-  transform: translateX(105%);
-  transition: transform 200ms ease;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+  transform: scale(0.95) translateY(-8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 180ms ease, opacity 180ms ease;
 }
 
 .toc-panel.is-open {
-  transform: translateX(0);
+  transform: scale(1) translateY(0);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .toc-panel-title {
@@ -517,12 +503,9 @@ tbody tr:last-child td {
     right: 0.55rem;
   }
 
-  .toc-fab {
-    right: max(0.55rem, env(safe-area-inset-right));
-    bottom: max(0.65rem, env(safe-area-inset-bottom));
-  }
-
   .toc-panel {
-    width: min(88vw, 320px);
+    top: 2.8rem;
+    right: 0.55rem;
+    width: min(90vw, 320px);
   }
 }
