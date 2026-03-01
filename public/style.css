@@ -413,28 +413,22 @@ tbody tr:last-child td {
 }
 
 .toc-panel {
+  display: none;
   position: fixed;
   top: 3rem;
   right: 0.75rem;
   z-index: 28;
   width: min(85vw, 320px);
   max-height: 70vh;
-  display: flex;
   flex-direction: column;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
-  transform: scale(0.95) translateY(-8px);
-  opacity: 0;
-  pointer-events: none;
-  transition: transform 180ms ease, opacity 180ms ease;
 }
 
 .toc-panel.is-open {
-  transform: scale(1) translateY(0);
-  opacity: 1;
-  pointer-events: auto;
+  display: flex;
 }
 
 .toc-panel-title {
