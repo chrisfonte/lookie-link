@@ -3,7 +3,7 @@
 ## Context
 Lookie-Link is a Node.js/Express file viewer that renders markdown files as HTML. It serves files from configured repo directories over Tailscale.
 
-- **Project**: This repo (`~/projects/fontastic/ops-file-viewer/`)
+- **Project**: This repo
 - **Entry point**: `server.js`
 - **Config**: `~/.config/lookie-link/lookie-link.yaml` (repo mappings)
 - **Current version**: v2.1.0
