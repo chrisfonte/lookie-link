@@ -1,6 +1,6 @@
 {
   "name": "lookie-link",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Lightweight web file viewer for local directories \u2014 look at things, via links",
   "main": "server.js",
   "scripts": {
@@ -16,5 +16,10 @@
     "js-yaml": "^4.1.1",
     "jsdom": "^28.1.0",
     "markdown-it": "^14.1.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chrisfonte/lookie-link.git"
   }
 }

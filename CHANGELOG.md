@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-02-28 — v2.1.0 — DOMPurify, Rename, Public-Ready
+
+- Replaced extract/restore YouTube hack with DOMPurify sanitization pipeline (#21)
+- Enable `html: true` + `linkify: true` in markdown-it, sanitize with DOMPurify allowlist
+- YouTube iframes allowed (`youtube.com/embed/` only), `sandbox` auto-injected
+- `<script>`, `<object>`, `<embed>`, `<form>`, event handlers stripped
+- Renamed project: Lookout → Lookie-Link (#22)
+- Config path: `~/.config/lookie-link/lookie-link.yaml`
+- Added LICENSE (MIT), EXAMPLES.md, Contributing section
+- README rewritten: why it exists, security model, design history
+- Closes #21, #22
+
 ## 2026-02-28 — v2.0.0 — Cross-Links, Copy Anchors, Inline Images
 
 - Added hybrid cross-link rendering for `[[name]] (~/repo/path.md#anchor)` patterns in markdown

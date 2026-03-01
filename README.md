@@ -1,35 +1,49 @@
 # Lookie-Link
 
-Lightweight web file viewer for local directories. Browse markdown, YAML, and code files with a rendered dark-theme UI. Designed for documentation repos, knowledge bases, and project files.
+A read-only web file viewer for browsing local directories over your network. Point it at your documentation repos, knowledge bases, or project files and get rendered markdown, syntax-highlighted code, and clickable cross-links — all in a dark-theme UI.
+
+## Why This Exists
+
+If you maintain multiple documentation repos (operations docs, knowledge bases, project files), you're constantly switching between your editor, GitHub, and terminal to read them. GitHub doesn't render local files. Editors don't render cross-repo links. Neither gives you a URL you can share with someone on your network.
+
+Lookie-Link maps your local directories to URL paths and renders everything in the browser. Paste a link in a chat, click it, read the doc. That's it.
 
 ## Features
 
-- Read-only file and directory browser
-- URL format: `/view/<repo>/<path>#<anchor>`
-- Markdown rendering with syntax-highlighted code blocks
-- Hybrid cross-link rendering: `[[name]] (~/repo/path.md#anchor)` -> clickable Lookie-Link links
-- YAML/code rendering with syntax highlighting
-- Anchor linking for markdown headers and YAML top-level keys with one-click copy buttons
-- Inline image rendering for local repo images (`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`)
-- Plain text fallback for unknown extensions
-- Mobile-friendly dark theme
-- Configurable via `lookie-link.yaml` or environment variables
+- **Read-only file browser** — directory listings, rendered documents, no write access
+- **Markdown rendering** — full CommonMark with syntax-highlighted code blocks
+- **Cross-link rendering** — `[[name]] (~/repo/path.md#anchor)` becomes a clickable link
+- **YouTube iframe embeds** — write `<iframe>` tags in markdown, they render with sandboxed security
+- **Anchor linking** — every markdown heading and YAML top-level key gets a `🔗` copy-link button
+- **Inline images** — local repo images render inline (png, jpg, gif, webp, svg)
+- **YAML/code rendering** — syntax-highlighted with highlight.js
+- **URL format** — `/view/<repo>/<path>#<anchor>` — predictable, shareable, deep-linkable
+- **Dark theme** — mobile-friendly, single stylesheet
+- **Configurable** — YAML config file or environment variables
 
-## Requirements
+## Security Model
 
-- Node.js 20+
+Lookie-Link is designed for private networks (Tailscale, LAN). It is **not** a public-facing web server.
 
-## Install
+HTML in markdown is enabled but sanitized through [DOMPurify](https://github.com/cure53/DOMPurify):
+
+- **Allowed**: standard HTML tags (p, div, table, etc.)
+- **Allowed**: `<iframe>` tags with `src` matching `youtube.com/embed/` only
+- **Stripped**: `<script>`, `<object>`, `<embed>`, `<form>`, all event handlers (`onclick`, etc.)
+- **Auto-injected**: `sandbox="allow-scripts allow-same-origin"` on all iframes
+
+This approach was informed by [comparative research](https://github.com/cure53/DOMPurify) of how Jekyll, Hugo, Docusaurus, GitHub, and Obsidian handle embedded HTML. See the `prompts/` directory for the full design history.
+
+## Quick Start
 
 ```bash
+git clone https://github.com/chrisfonte/lookie-link.git
+cd lookie-link
 npm install
-```
-
-## Run
-
-```bash
 npm start
 ```
+
+Open `http://localhost:9876` in your browser.
 
 ## Configuration
 
@@ -41,66 +55,69 @@ server:
   hostname: my-server.example.com
 
 repositories:
-  my-docs: ~/Documents/docs
+  docs: ~/Documents/docs
   notes: ~/notes
   project: ~/projects/my-project
 ```
 
+Each key under `repositories` becomes a URL prefix: `/view/docs/...`, `/view/notes/...`, etc.
+
+A sample config is included: `lookie-link.yaml.example`.
+
 ### Config Priority
 
-Settings are resolved in this order (first wins):
+Settings resolve in this order (first wins):
 
-1. **Environment variables** (`PORT`, `HOSTNAME`, `ROOT_MAPPINGS`)
+1. **Environment variables** (`PORT`, `HOSTNAME`, `ROOT_MAPPINGS`, `LOOKIE_LINK_CONFIG`)
 2. **`~/.config/lookie-link/lookie-link.yaml`** (user config)
 3. **`lookie-link.yaml`** in project root (development fallback)
-4. **Built-in defaults**
+4. **Built-in defaults** (port 9876)
 
-### Environment Variables (legacy)
+### Environment Variables
 
 | Variable | Description |
 |----------|-------------|
 | `PORT` | Port to listen on (default: 9876) |
-| `HOSTNAME` | Hostname shown in logs |
+| `HOSTNAME` | Hostname shown in startup logs |
 | `ROOT_MAPPINGS` | Comma-separated `repo=path` pairs or JSON object |
-| `LOOKIE_LINK_CONFIG` | Path to a custom `lookie-link.yaml` location (overrides all) |
-
-## Anchor Linking
-
-Lookie-Link generates anchor IDs for:
-
-- **Markdown headers**: `## Core Truths` → `#core-truths`
-- **YAML top-level keys**: `learned_patterns:` → `#learned_patterns`
-
-Append the anchor to any URL: `/view/my-docs/guide.md#core-truths`
-
-Each heading/key anchor includes a `🔗` button that copies the full page URL (with `#anchor`) to clipboard.
+| `LOOKIE_LINK_CONFIG` | Path to a custom config file (overrides search) |
 
 ## Cross-Link Rendering
 
-Lookie-Link rewrites these markdown patterns in rendered output:
+Lookie-Link rewrites hybrid cross-link patterns in rendered markdown:
 
-- `[[wikilink-name]] (~/my-docs/guides/foo.md#bar)` -> `/view/my-docs/guides/foo.md#bar`
-- `[[topic]] (\`~/notes/topic/doc.md\`)` -> `/view/notes/topic/doc.md`
-- `[[readme]] (~/project/README.md)` -> `/view/project/README.md`
+```markdown
+[[Getting Started]] (~/docs/guides/getting-started.md#installation)
+[[API Reference]] (`~/project/docs/api.md`)
+```
+
+These become clickable links to `/view/docs/guides/getting-started.md#installation`, etc.
 
 Rules:
-
-- The visible text is the `[[wikilink-name]]` label
-- The `~/` prefix is stripped and mapped as `/view/<repo>/<path>`
+- The visible text is the `[[wikilink]]` label
+- `~/` paths are mapped to `/view/<repo>/<path>`
+- Content inside `<pre>` blocks is not rewritten
 - `<private-repo>` placeholders are intentionally not linkified
-- Content inside code blocks/inline code is not rewritten
+
+## Anchor Linking
+
+Every markdown heading and YAML top-level key gets an anchor ID and a `🔗` button that copies the full URL (with `#fragment`) to clipboard.
+
+- `## Core Truths` → `#core-truths`
+- `learned_patterns:` (YAML) → `#learned_patterns`
+
+Append anchors to any URL: `/view/docs/guide.md#core-truths`
 
 ## Inline Images
 
-Lookie-Link rewrites markdown image paths to the `/asset` endpoint so local repository images render inline:
+Markdown image paths are rewritten to serve local repo images:
 
-- `![alt](image.png)` -> `/asset/<current-repo>/<current-dir>/image.png`
-- `![alt](./image.png)` -> `/asset/<current-repo>/<current-dir>/image.png`
-- `![alt](~/my-docs/img/diagram.png)` -> `/asset/my-docs/img/diagram.png`
+```markdown
+![Diagram](./images/architecture.png)
+![Logo](~/docs/assets/logo.svg)
+```
 
-Supported asset types:
-
-- `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`
+Supported: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`
 
 ## Endpoints
 
@@ -108,22 +125,43 @@ Supported asset types:
 |-------|-------------|
 | `GET /` | Repository index |
 | `GET /healthz` | Health check |
-| `GET /view/<repo>/<path>` | File or directory view |
-| `GET /asset/<repo>/<path>` | Read-only image asset serving for inline docs |
+| `GET /view/<repo>/<path>` | Rendered file or directory listing |
+| `GET /asset/<repo>/<path>` | Image asset serving (for inline images) |
 
 ## Project Structure
 
 ```
-ops-file-viewer/
-├── lookie-link.yaml.example  # Config template (copy to ~/.config/lookie-link/)
-├── server.js          # Main entry point
+lookie-link/
+├── server.js              # Express entry point
 ├── lib/
-│   ├── config.js      # Config loading (YAML + env)
-│   ├── renderer.js    # Markdown/YAML/code rendering
-│   └── path-utils.js  # Path resolution and formatting
+│   ├── config.js          # YAML + env config loading
+│   ├── renderer.js        # Markdown/YAML/code rendering + DOMPurify
+│   └── path-utils.js      # Path resolution, escaping, formatting
 ├── public/
-│   └── style.css      # Dark theme styles
-├── PROMPT.md          # Original build prompt
+│   └── style.css          # Dark theme
+├── views/                 # EJS templates (if applicable)
+├── prompts/               # Build prompts (design history)
+│   ├── PROMPT-v1.md       # Original build prompt
+│   ├── PROMPT-v2.md       # Feature expansion prompt
+│   └── README.md          # Prompt index
+├── lookie-link.yaml.example
 ├── CHANGELOG.md
 └── README.md
 ```
+
+## Contributing
+
+Issues and PRs welcome. This is a simple tool — the codebase is ~600 lines of JavaScript across three files.
+
+If you're adding a new post-processing step to the renderer, note the execution order in `postProcessHtml()`:
+
+1. `rewriteHybridCrossLinks()` — wiki-link patterns → clickable links
+2. `rewriteTildeLinks()` — plain `~/path` references → clickable links
+3. `rewriteImageSources()` — image paths → `/asset/` endpoint
+4. `addHeadingAnchorLinks()` — heading anchors + copy buttons
+5. `addYamlAnchorLinks()` — YAML key anchors + copy buttons
+6. `sanitizeHtml()` — DOMPurify (always last)
+
+## License
+
+MIT
