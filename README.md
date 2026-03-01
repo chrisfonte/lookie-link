@@ -168,6 +168,10 @@ If you're adding a new post-processing step to the renderer, note the execution 
 5. `addYamlAnchorLinks()` — YAML key anchors + copy buttons
 6. `sanitizeHtml()` — DOMPurify (always last)
 
+## Inspiration
+
+The idea for Lookie-Link came from watching Brian Castle's video ["How to Create JOBS for OpenClaw Agents"](https://www.youtube.com/watch?v=uUN1oy2PRHo) (February 2026). Castle built **Brainown**, a markdown viewer that syncs via Dropbox and lets him tap links from Telegram to jump straight to rendered documentation on his phone. Same problem, same insight — agents modify files and you need to read them from mobile without SSHing in or scrolling through chat dumps. Lookie-Link takes the same concept and builds it as a self-hosted web server for Tailscale networks, eliminating the Dropbox dependency.
+
 ## License
 
 MIT
