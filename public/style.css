@@ -371,6 +371,7 @@ tbody tr:last-child td {
   right: 0.8rem;
   z-index: 20;
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 0.45rem;
   background: var(--toolbar-bg);
   border: 1px solid var(--border);
@@ -414,9 +415,10 @@ tbody tr:last-child td {
 
 .toc-panel {
   display: none;
-  position: fixed;
-  top: 3rem;
-  right: 0.75rem;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.5rem;
   z-index: 28;
   width: min(85vw, 320px);
   max-height: 70vh;
@@ -498,8 +500,6 @@ tbody tr:last-child td {
   }
 
   .toc-panel {
-    top: 2.8rem;
-    right: 0.55rem;
     width: min(90vw, 320px);
   }
 }
