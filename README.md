@@ -4,9 +4,11 @@ A read-only web file viewer for browsing local directories over your network. Po
 
 ## Why This Exists
 
-If you maintain multiple documentation repos (operations docs, knowledge bases, project files), you're constantly switching between your editor, GitHub, and terminal to read them. GitHub doesn't render local files. Editors don't render cross-repo links. Neither gives you a URL you can share with someone on your network.
+If you work with AI agents that read and write files — Claude Code, OpenClaw, Codex, or anything similar — you know the problem: the agent modifies a file, and now you need to see what it did. Your options are bad. The agent dumps the entire file into Telegram or Slack (unreadable on a phone). You SSH in and `cat` it. You open your laptop and find it in your editor. None of these work well when you're reviewing from a phone or tablet.
 
-Lookie-Link maps your local directories to URL paths and renders everything in the browser. Paste a link in a chat, click it, read the doc. That's it.
+Lookie-Link solves this by giving every file a URL. The agent modifies a document, drops a link in chat, and you tap it. You're reading the rendered file in your browser — formatted markdown, syntax-highlighted code, deep-linked to the exact section that changed. You can review, comment back, and the agent makes another pass. The whole loop works from a phone over Tailscale without ever touching a terminal.
+
+This also works for anyone managing multiple documentation repos (operations docs, knowledge bases, project files). GitHub doesn't render local files. Editors don't render cross-repo links. Neither gives you a shareable URL. Lookie-Link does.
 
 ## Features
 
@@ -21,9 +23,13 @@ Lookie-Link maps your local directories to URL paths and renders everything in t
 - **Dark theme** — mobile-friendly, single stylesheet
 - **Configurable** — YAML config file or environment variables
 
-## Security Model
+## Network Model
 
-Lookie-Link is designed for private networks (Tailscale, LAN). It is **not** a public-facing web server.
+Lookie-Link is designed for private networks — specifically [Tailscale](https://tailscale.com) or similar mesh VPNs. It runs on a machine with access to your repos (a Mac Mini, a home server, a NAS) and serves files to any device on your tailnet. Your phone, your tablet, your laptop at a coffee shop — if it's on the VPN, it can reach Lookie-Link.
+
+It also works on a plain LAN, but Tailscale is the intended deployment: set `hostname` in your config to your Tailscale machine name and every link works from anywhere.
+
+This is **not** a public-facing web server. There is no authentication layer — access control comes from your network.
 
 HTML in markdown is enabled but sanitized through [DOMPurify](https://github.com/cure53/DOMPurify):
 
