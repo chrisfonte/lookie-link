@@ -1,6 +1,6 @@
 # Lookie-Link
 
-A read-only web file viewer for browsing local directories over your network. Point it at your documentation repos, knowledge bases, or project files and get rendered markdown, syntax-highlighted code, and clickable cross-links — all in a dark-theme UI.
+A web file viewer for browsing local directories over your network, with an opt-in editable mode for trusted environments. Point it at your documentation repos, knowledge bases, or project files and get rendered markdown, syntax-highlighted code, clickable cross-links, and in-browser save-back when editing is enabled.
 
 ## Why This Exists
 
@@ -12,12 +12,14 @@ This also works for anyone managing multiple documentation repos (operations doc
 
 ## Features
 
-- **Read-only file browser** — directory listings, rendered documents, no write access
+- **File browser + renderer** — directory listings, rendered markdown/code/YAML views
+- **Opt-in editable mode** — edit markdown, YAML, and supported text/code files, then save back to disk
 - **Markdown rendering** — full CommonMark with syntax-highlighted code blocks
+- **Edit/Preview workflow** — markdown and YAML/text preview from the edit page before saving
 - **Cross-link rendering** — `[[name]] (~/repo/path.md#anchor)` becomes a clickable link
 - **YouTube iframe embeds** — write `<iframe>` tags in markdown, they render with sandboxed security
 - **Anchor linking** — every markdown heading and YAML top-level key gets a `🔗` copy-link button
-- **Inline images** — local repo images render inline (png, jpg, gif, webp, svg)
+- **Inline + direct image views** — embedded images render inline, and direct local image links open clean image pages
 - **YAML/code rendering** — syntax-highlighted with highlight.js
 - **URL format** — `/view/<repo>/<path>#<anchor>` — predictable, shareable, deep-linkable
 - **Dark theme** — mobile-friendly, single stylesheet
@@ -30,6 +32,8 @@ Lookie-Link is designed for private networks — specifically [Tailscale](https:
 It also works on a plain LAN, but Tailscale is the intended deployment: set `hostname` in your config to your Tailscale machine name and every link works from anywhere.
 
 This is **not** a public-facing web server. There is no authentication layer — access control comes from your network.
+
+Editable mode increases risk because the server can mutate files. Keep editing disabled unless you are on a trusted private network and intentionally want write access.
 
 HTML in markdown is enabled but sanitized through [DOMPurify](https://github.com/cure53/DOMPurify):
 
@@ -59,6 +63,7 @@ Create `~/.config/lookie-link/lookie-link.yaml`:
 server:
   port: 9876
   hostname: my-server.example.com
+  enableEditing: false
 
 repositories:
   docs: ~/Documents/docs
@@ -87,6 +92,39 @@ Settings resolve in this order (first wins):
 | `HOSTNAME` | Hostname shown in startup logs |
 | `ROOT_MAPPINGS` | Comma-separated `repo=path` pairs or JSON object |
 | `LOOKIE_LINK_CONFIG` | Path to a custom config file (overrides search) |
+| `LOOKIE_LINK_ENABLE_EDITING` | Boolean override for edit mode (`true/false`, `1/0`, `yes/no`) |
+
+## Editable Mode
+
+Editing is disabled by default.
+
+Enable it with config:
+
+```yaml
+server:
+  enableEditing: true
+```
+
+Or with env:
+
+```bash
+LOOKIE_LINK_ENABLE_EDITING=true npm start
+```
+
+Supported editable files:
+- Markdown: `.md`, `.markdown`, `.mdown`
+- YAML: `.yaml`, `.yml`
+- Text/code/config extensions such as `.txt`, `.json`, `.toml`, `.ini`, `.conf`, `.env`, `.sh`, `.py`, `.js`, `.ts`, `.css`, `.html`, plus `Dockerfile`/`Makefile`
+
+Not editable:
+- directories
+- binary files
+- image files (view-only)
+
+Safety behaviors:
+- path resolution for writes uses `safeResolve()` against configured repo roots
+- stale-write guard via `expectedMtimeMs` returns `409 Conflict` if file changed on disk
+- saves use a temp file + rename pattern to reduce partial-write risk
 
 ## Cross-Link Rendering
 
@@ -133,6 +171,9 @@ Supported: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`
 | `GET /healthz` | Health check |
 | `GET /view/<repo>/<path>` | Rendered file or directory listing |
 | `GET /asset/<repo>/<path>` | Image asset serving (for inline images) |
+| `GET /edit/<repo>/<path>` | Edit page for supported text files (only when editing enabled) |
+| `POST /api/save/<repo>/<path>` | Save updated file content (JSON) |
+| `POST /api/preview/<repo>/<path>` | Render preview HTML from draft editor content (JSON) |
 
 ## Project Structure
 
@@ -167,6 +208,14 @@ If you're adding a new post-processing step to the renderer, note the execution 
 4. `addHeadingAnchorLinks()` — heading anchors + copy buttons
 5. `addYamlAnchorLinks()` — YAML key anchors + copy buttons
 6. `sanitizeHtml()` — DOMPurify (always last)
+
+## Validation
+
+Run editable-mode validation coverage (route-level checks + real temp-file writes):
+
+```bash
+npm run validate:editable
+```
 
 ## Inspiration
 

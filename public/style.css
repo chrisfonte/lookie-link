@@ -101,11 +101,60 @@ a:hover {
   margin-top: 0.25rem;
 }
 
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--bg-code);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.button-link-primary {
+  background: var(--accent);
+  color: #042118;
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 0.55rem;
+  margin: 0.75rem 0;
+}
+
+.editor-tabs {
+  display: flex;
+  gap: 0.45rem;
+  margin-bottom: 0.6rem;
+}
+
+.button-link-tab {
+  background: var(--bg-elev);
+}
+
+.button-link-tab.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .notice {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.85rem;
+}
+
+.notice-success {
+  border-color: #3fb08f;
+}
+
+.notice-error {
+  border-color: #e06b6b;
 }
 
 .table-wrap {
@@ -221,8 +270,40 @@ tbody tr:last-child td {
   height: auto;
 }
 
+.content.image-view {
+  text-align: center;
+}
+
 .content.raw pre {
   white-space: pre;
+}
+
+.editor-shell {
+  padding: 0;
+}
+
+.editor-pane {
+  width: 100%;
+}
+
+.editor-textarea {
+  width: 100%;
+  min-height: 62vh;
+  border: 0;
+  border-radius: 12px;
+  background: var(--bg-code);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+  font-size: 0.93rem;
+  line-height: 1.45;
+  padding: 1rem;
+  resize: vertical;
+}
+
+.editor-preview {
+  border: 0;
+  border-radius: 0;
+  min-height: 62vh;
 }
 
 .frontmatter-panel {
