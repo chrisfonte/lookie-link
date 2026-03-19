@@ -279,16 +279,21 @@ tbody tr:last-child td {
 }
 
 .editor-shell {
+  display: flex;
+  flex-direction: column;
   padding: 0;
 }
 
 .editor-pane {
   width: 100%;
+  min-height: 0;
 }
 
 .editor-textarea {
   width: 100%;
-  min-height: 62vh;
+  height: calc(100dvh - 260px);
+  box-sizing: border-box;
+  min-height: 300px;
   border: 0;
   border-radius: 12px;
   background: var(--bg-code);
