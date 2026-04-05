@@ -21,6 +21,15 @@ Run editable-mode validation coverage (route-level checks + real temp-file write
 npm run validate:editable
 ```
 
+## Smoke Testing
+
+For local visual smoke testing, run Lookie-Link on a temporary port with a known repo mapping and open a real `/view/...` URL:
+
+```bash
+PORT=9987 ROOT_MAPPINGS='demo=/absolute/path/to/lookie-link' npm start
+# then open /view/demo/
+```
+
 ## Design History
 
 See the `prompts/` directory for the original build prompts and feature design documents that shaped this project.

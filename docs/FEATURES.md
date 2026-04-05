@@ -56,7 +56,7 @@ Click any inline image to open it in a full-screen lightbox. Close with the X bu
 - **Noir** — high-contrast monochrome
 - **Indigo** — deep navy/violet
 
-Cycle through themes with the toolbar button. Toggle dark/light mode with the sun/moon button. Preferences persist via localStorage.
+Select a theme from the toolbar dropdown. Toggle dark/light mode with the sun/moon button. Preferences persist via localStorage.
 
 Custom themes can be defined in the YAML config file. See [CONFIGURATION.md](CONFIGURATION.md#custom-themes).
 

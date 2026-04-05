@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-04-03 — v2.2.0 — Stitch-Informed Theme Polish
+
+- Added a narrow editorial-style theme polish pass inspired by a Stitch File Index concept
+- Introduced Space Grotesk + Inter typography for stronger heading and brand hierarchy
+- Retuned dark/light theme tokens toward a slate/blue review-oriented palette
+- Upgraded directory listing presentation with richer file-row hierarchy and softer card/table treatment
+- Preserved existing app structure and route behavior (no redesign, no framework migration)
+- Added `prompts/PROMPT-v4-stitch-theme-polish.md` to document the prompt/spec for the theme pass
+
 ## 2026-02-28 — v2.1.0 — DOMPurify, Rename, Public-Ready
 
 - Replaced extract/restore YouTube hack with DOMPurify sanitization pipeline (#21)
