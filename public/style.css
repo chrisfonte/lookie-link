@@ -67,20 +67,215 @@ html { scroll-behavior: smooth; }
 /* ─── Teal theme light ─── */
 :root[data-color-scheme="teal"][data-theme="light"] {
   color-scheme: light;
-  --bg: #f5f7fa;
+  --bg: #ecfdf5;
   --bg-elev: #ffffff;
-  --bg-code: #eef2f7;
-  --text: #162434;
-  --text-soft: #4f6074;
-  --accent: #116e5c;
-  --border: #d5dfeb;
-  --link: #0b5ea8;
-  --page-bg: linear-gradient(160deg, #f7f9fc 0%, #eef3f8 100%);
-  --toolbar-bg: rgba(255, 255, 255, 0.93);
-  --toolbar-btn-bg: #f2f6fa;
-  --toolbar-btn-hover: #e4ebf4;
+  --bg-code: #d1fae5;
+  --text: #064e3b;
+  --text-soft: #047857;
+  --accent: #059669;
+  --border: #a7f3d0;
+  --link: #0d9488;
+  --page-bg: linear-gradient(160deg, #ecfdf5 0%, #d1fae5 100%);
+  --toolbar-bg: rgba(255, 255, 255, 0.94);
+  --toolbar-btn-bg: #d1fae5;
+  --toolbar-btn-hover: #a7f3d0;
   --toolbar-btn-text: var(--text);
-  --toc-active-bg: rgba(17, 110, 92, 0.15);
+  --toc-active-bg: rgba(5, 150, 105, 0.15);
+}
+
+/* ─── Nord theme dark — Arctic, blue-grey palette ─── */
+:root[data-color-scheme="nord"] {
+  color-scheme: dark;
+  --bg: #2e3440;
+  --bg-elev: #3b4252;
+  --bg-code: #2e3440;
+  --text: #eceff4;
+  --text-soft: #d8dee9;
+  --accent: #88c0d0;
+  --border: #4c566a;
+  --link: #81a1c1;
+  --page-bg: radial-gradient(circle at top right, #3b4252, #2e3440 50%);
+  --toolbar-bg: rgba(59, 66, 82, 0.94);
+  --toolbar-btn-bg: #434c5e;
+  --toolbar-btn-hover: #4c566a;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(136, 192, 208, 0.18);
+  --heading-font: inherit;
+}
+
+/* ─── Nord theme light ─── */
+:root[data-color-scheme="nord"][data-theme="light"] {
+  color-scheme: light;
+  --bg: #eceff4;
+  --bg-elev: #ffffff;
+  --bg-code: #e5e9f0;
+  --text: #2e3440;
+  --text-soft: #4c566a;
+  --accent: #5e81ac;
+  --border: #d8dee9;
+  --link: #5e81ac;
+  --page-bg: linear-gradient(160deg, #eceff4 0%, #e5e9f0 100%);
+  --toolbar-bg: rgba(255, 255, 255, 0.94);
+  --toolbar-btn-bg: #e5e9f0;
+  --toolbar-btn-hover: #d8dee9;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(94, 129, 172, 0.15);
+}
+
+/* ─── Rosé Pine theme dark — muted, warm retro ─── */
+:root[data-color-scheme="rose-pine"] {
+  color-scheme: dark;
+  --bg: #191724;
+  --bg-elev: #1f1d2e;
+  --bg-code: #26233a;
+  --text: #e0def4;
+  --text-soft: #908caa;
+  --accent: #c4a7e7;
+  --border: #393552;
+  --link: #9ccfd8;
+  --page-bg: radial-gradient(circle at top right, #26233a, #191724 50%);
+  --toolbar-bg: rgba(31, 29, 46, 0.94);
+  --toolbar-btn-bg: #26233a;
+  --toolbar-btn-hover: #393552;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(196, 167, 231, 0.18);
+  --heading-font: inherit;
+}
+
+/* ─── Rosé Pine theme light (Dawn) ─── */
+:root[data-color-scheme="rose-pine"][data-theme="light"] {
+  color-scheme: light;
+  --bg: #faf4ed;
+  --bg-elev: #fffaf3;
+  --bg-code: #f2e9e1;
+  --text: #575279;
+  --text-soft: #797593;
+  --accent: #907aa9;
+  --border: #dfdad9;
+  --link: #56949f;
+  --page-bg: linear-gradient(160deg, #faf4ed 0%, #f2e9e1 100%);
+  --toolbar-bg: rgba(255, 250, 243, 0.94);
+  --toolbar-btn-bg: #f2e9e1;
+  --toolbar-btn-hover: #dfdad9;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(144, 122, 169, 0.15);
+}
+
+/* ─── Monokai theme dark — classic warm syntax palette ─── */
+:root[data-color-scheme="monokai"] {
+  color-scheme: dark;
+  --bg: #272822;
+  --bg-elev: #2d2e27;
+  --bg-code: #1e1f1a;
+  --text: #f8f8f2;
+  --text-soft: #a6a78a;
+  --accent: #a6e22e;
+  --border: #49483e;
+  --link: #66d9ef;
+  --page-bg: radial-gradient(circle at top right, #34352e, #272822 50%);
+  --toolbar-bg: rgba(45, 46, 39, 0.94);
+  --toolbar-btn-bg: #3e3d32;
+  --toolbar-btn-hover: #49483e;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(166, 226, 46, 0.18);
+  --heading-font: inherit;
+}
+
+/* ─── Monokai theme light ─── */
+:root[data-color-scheme="monokai"][data-theme="light"] {
+  color-scheme: light;
+  --bg: #fdfdf6;
+  --bg-elev: #ffffff;
+  --bg-code: #f5f5ec;
+  --text: #272822;
+  --text-soft: #6e7066;
+  --accent: #4d7a0f;
+  --border: #e0e0d0;
+  --link: #0b7e8a;
+  --page-bg: linear-gradient(160deg, #fdfdf6 0%, #f5f5ec 100%);
+  --toolbar-bg: rgba(255, 255, 255, 0.94);
+  --toolbar-btn-bg: #f0f0e4;
+  --toolbar-btn-hover: #e0e0d0;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(77, 122, 15, 0.15);
+}
+
+/* ─── Solarized theme dark ─── */
+:root[data-color-scheme="solarized"] {
+  color-scheme: dark;
+  --bg: #002b36;
+  --bg-elev: #073642;
+  --bg-code: #002028;
+  --text: #839496;
+  --text-soft: #657b83;
+  --accent: #2aa198;
+  --border: #586e75;
+  --link: #268bd2;
+  --page-bg: radial-gradient(circle at top right, #073642, #002b36 50%);
+  --toolbar-bg: rgba(7, 54, 66, 0.94);
+  --toolbar-btn-bg: #0a4050;
+  --toolbar-btn-hover: #0d4d5e;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(42, 161, 152, 0.18);
+  --heading-font: inherit;
+}
+
+/* ─── Solarized theme light ─── */
+:root[data-color-scheme="solarized"][data-theme="light"] {
+  color-scheme: light;
+  --bg: #fdf6e3;
+  --bg-elev: #eee8d5;
+  --bg-code: #f5efdc;
+  --text: #657b83;
+  --text-soft: #93a1a1;
+  --accent: #2aa198;
+  --border: #d3cbab;
+  --link: #268bd2;
+  --page-bg: linear-gradient(160deg, #fdf6e3 0%, #f5efdc 100%);
+  --toolbar-bg: rgba(238, 232, 213, 0.94);
+  --toolbar-btn-bg: #f5efdc;
+  --toolbar-btn-hover: #eee8d5;
+  --toolbar-btn-text: #586e75;
+  --toc-active-bg: rgba(42, 161, 152, 0.15);
+}
+
+/* ─── GitHub theme dark — GitHub's code view palette ─── */
+:root[data-color-scheme="github"] {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --bg-elev: #161b22;
+  --bg-code: #1c2128;
+  --text: #e6edf3;
+  --text-soft: #8b949e;
+  --accent: #58a6ff;
+  --border: #30363d;
+  --link: #58a6ff;
+  --page-bg: radial-gradient(circle at top right, #161b22, #0d1117 50%);
+  --toolbar-bg: rgba(22, 27, 34, 0.94);
+  --toolbar-btn-bg: #21262d;
+  --toolbar-btn-hover: #30363d;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(88, 166, 255, 0.18);
+  --heading-font: inherit;
+}
+
+/* ─── GitHub theme light ─── */
+:root[data-color-scheme="github"][data-theme="light"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-elev: #f6f8fa;
+  --bg-code: #f6f8fa;
+  --text: #1f2328;
+  --text-soft: #656d76;
+  --accent: #0969da;
+  --border: #d0d7de;
+  --link: #0969da;
+  --page-bg: linear-gradient(160deg, #ffffff 0%, #f6f8fa 100%);
+  --toolbar-bg: rgba(255, 255, 255, 0.94);
+  --toolbar-btn-bg: #f6f8fa;
+  --toolbar-btn-hover: #eaeef2;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(9, 105, 218, 0.12);
 }
 
 * {
@@ -320,10 +515,79 @@ tbody tr:last-child td {
 .content img {
   max-width: 100%;
   height: auto;
+  cursor: zoom-in;
 }
 
 .content.image-view {
   text-align: center;
+}
+
+.lightbox-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.lightbox-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.lightbox-box {
+  position: relative;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: calc(100vw - 3rem);
+  height: calc(100vh - 3rem);
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 60px rgba(0, 0, 0, 0.5);
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border);
+  background: var(--bg-code);
+  color: var(--text);
+  border-radius: 999px;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.lightbox-close:hover {
+  background: var(--toolbar-btn-hover);
+}
+
+.lightbox-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
 }
 
 .content.raw pre {
@@ -532,24 +796,6 @@ tbody tr:last-child td {
   background: var(--toolbar-btn-hover);
 }
 
-.toolbar-select {
-  border: 1px solid var(--border);
-  background: var(--toolbar-btn-bg);
-  color: var(--text);
-  border-radius: 999px;
-  padding: 0.2rem 0.5rem;
-  font-size: 0.82rem;
-  font-weight: 600;
-  line-height: 1.3;
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  outline: none;
-}
-
-.toolbar-select:hover {
-  background: var(--toolbar-btn-hover);
-}
 
 .content.toc-view {
   overflow-x: hidden;

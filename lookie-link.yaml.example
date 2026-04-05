@@ -17,10 +17,36 @@ repositories:
   notes: ~/notes
   # project: ~/projects/my-project
 
-# Future settings (not yet implemented)
-# search:
-#   enabled: false
-# auth:
-#   enabled: false
-# theme:
-#   default: dark
+# Custom themes
+# Each theme needs dark and/or light variants.
+# CSS property names use underscores (bg_elev → --bg-elev).
+# themes:
+#   midnight:
+#     dark:
+#       bg: "#0a0a1a"
+#       bg_elev: "#12122a"
+#       bg_code: "#08081a"
+#       text: "#c8c8ff"
+#       text_soft: "#8888bb"
+#       accent: "#7c6aff"
+#       border: "#2a2a55"
+#       link: "#9b8aff"
+#       page_bg: "radial-gradient(circle at top right, #1a1a3a, #0a0a1a 50%)"
+#       toolbar_bg: "rgba(18, 18, 42, 0.94)"
+#       toolbar_btn_bg: "#1a1a3a"
+#       toolbar_btn_hover: "#2a2a4a"
+#       toc_active_bg: "rgba(124, 106, 255, 0.18)"
+#     light:
+#       bg: "#f0f0ff"
+#       bg_elev: "#ffffff"
+#       bg_code: "#e8e8f8"
+#       text: "#1a1a3a"
+#       text_soft: "#5555aa"
+#       accent: "#4a3ad9"
+#       border: "#d0d0ee"
+#       link: "#4a3ad9"
+#       page_bg: "linear-gradient(160deg, #f0f0ff 0%, #e8e8f8 100%)"
+#       toolbar_bg: "rgba(255, 255, 255, 0.94)"
+#       toolbar_btn_bg: "#e8e8f8"
+#       toolbar_btn_hover: "#d8d8ee"
+#       toc_active_bg: "rgba(74, 58, 217, 0.15)"

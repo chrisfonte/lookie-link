@@ -9,6 +9,9 @@ const {
   getPort,
   getHostname,
   getEditingEnabled,
+  loadCustomThemes,
+  generateCustomThemeCss,
+  BUILT_IN_THEMES,
 } = require('./lib/config');
 const {
   safeResolve,
@@ -30,6 +33,7 @@ const {
   renderImagePage,
   renderEditPage,
   renderPreviewHtml,
+  setThemeList,
 } = require('./lib/renderer');
 
 const ASSET_MIME_TYPES = {
@@ -152,6 +156,7 @@ function createApp(options = {}) {
   const app = express();
   const mappings = options.mappings || loadRootMappings();
   const editingEnabled = options.editingEnabled === undefined ? getEditingEnabled() : Boolean(options.editingEnabled);
+  const customThemeCss = options.customThemeCss || '';
 
   app.disable('x-powered-by');
   app.set('trust proxy', true);
@@ -177,6 +182,7 @@ function createApp(options = {}) {
         mtime: '-',
       })),
       notice: 'Choose a repository to browse files.',
+      customThemeCss,
     });
 
     res.status(200).type('html').send(html);
@@ -250,6 +256,7 @@ function createApp(options = {}) {
           parentHref: parentRel === null ? '/view' : buildHref(repo, parentRel),
           entries: rows,
           notice: rows.length === 0 ? 'Directory is empty.' : null,
+          customThemeCss,
         });
 
         res.status(200).type('html').send(html);
@@ -276,6 +283,7 @@ function createApp(options = {}) {
         imageHref: buildAssetHref(repo, relativePath),
         mtime: formatMTime(stat.mtime),
         size: formatFileSize(stat.size),
+        customThemeCss,
       });
 
       res.status(200).type('html').send(html);
@@ -311,7 +319,8 @@ function createApp(options = {}) {
       parentHref: parentRel === null ? '/view' : buildHref(repo, parentRel),
       mtime: formatMTime(stat.mtime),
       size: formatFileSize(stat.size),
-      editHref: editingEnabled && isEditableFile(relativePath) ? buildEditHref(repo, relativePath) : null,
+      editHref: editingEnabled ? buildEditHref(repo, relativePath) : null,
+      customThemeCss,
     });
 
     res.status(200).type('html').send(html);
@@ -367,11 +376,6 @@ function createApp(options = {}) {
       return;
     }
 
-    if (!isEditableFile(relativePath)) {
-      res.status(415).type('text/plain').send('File type is not editable.');
-      return;
-    }
-
     let sourceBuffer;
     try {
       sourceBuffer = await fs.readFile(resolved);
@@ -397,6 +401,7 @@ function createApp(options = {}) {
       viewHref: buildHref(repo, relativePath),
       saveHref: buildSaveHref(repo, relativePath),
       previewHref: buildPreviewHref(repo, relativePath),
+      customThemeCss,
     });
 
     res.status(200).type('html').send(html);
@@ -455,11 +460,6 @@ function createApp(options = {}) {
 
     if (!stat.isFile()) {
       res.status(415).json({ ok: false, error: 'Unsupported path type.' });
-      return;
-    }
-
-    if (!isEditableFile(relativePath)) {
-      res.status(415).json({ ok: false, error: 'File type is not editable.' });
       return;
     }
 
@@ -591,11 +591,6 @@ function createApp(options = {}) {
       return;
     }
 
-    if (!isEditableFile(relativePath)) {
-      res.status(415).json({ ok: false, error: 'File type is not editable.' });
-      return;
-    }
-
     const html = renderPreviewHtml({
       repo,
       repoRoot: rootPath,
@@ -694,11 +689,25 @@ function startServer() {
   const hostname = getHostname();
   const mappings = loadRootMappings();
   const editingEnabled = getEditingEnabled();
-  const app = createApp({ mappings, editingEnabled });
+
+  const customThemes = loadCustomThemes();
+  const customThemeCss = generateCustomThemeCss(customThemes);
+
+  const builtInThemes = BUILT_IN_THEMES.map((slug) => ({
+    slug,
+    label: slug.split('-').map((w) => w[0].toUpperCase() + w.slice(1)).join(' '),
+  }));
+  const allThemes = [...builtInThemes, ...customThemes.map((t) => ({ slug: t.slug, label: t.label }))];
+  setThemeList(allThemes);
+
+  const app = createApp({ mappings, editingEnabled, customThemeCss });
 
   app.listen(port, '0.0.0.0', () => {
-    console.log(`ops-file-viewer listening on http://${hostname}:${port}`);
+    console.log(`Lookie Link listening on http://${hostname}:${port}`);
     console.log(`Editing mode: ${editingEnabled ? 'enabled' : 'disabled'}`);
+    if (customThemes.length > 0) {
+      console.log(`Custom themes: ${customThemes.map((t) => t.label).join(', ')}`);
+    }
     console.log('Configured repositories:');
     Object.entries(mappings).forEach(([repo, root]) => {
       console.log(`  /view/${repo} -> ${root}`);
