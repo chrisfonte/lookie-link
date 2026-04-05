@@ -278,6 +278,123 @@ html { scroll-behavior: smooth; }
   --toc-active-bg: rgba(9, 105, 218, 0.12);
 }
 
+/* ─── Ember theme dark — warm amber/orange ─── */
+:root[data-color-scheme="ember"] {
+  color-scheme: dark;
+  --bg: #1a1008;
+  --bg-elev: #221810;
+  --bg-code: #160e06;
+  --text: #f0dcc8;
+  --text-soft: #b89a78;
+  --accent: #e8943a;
+  --border: #3d2e1a;
+  --link: #f0a850;
+  --page-bg: radial-gradient(circle at top right, #2a1c0e, #1a1008 50%);
+  --toolbar-bg: rgba(34, 24, 16, 0.94);
+  --toolbar-btn-bg: #2a1c0e;
+  --toolbar-btn-hover: #3d2e1a;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(232, 148, 58, 0.18);
+  --heading-font: inherit;
+}
+
+/* ─── Ember theme light ─── */
+:root[data-color-scheme="ember"][data-theme="light"] {
+  color-scheme: light;
+  --bg: #fdf6ee;
+  --bg-elev: #ffffff;
+  --bg-code: #f8efe2;
+  --text: #3d2200;
+  --text-soft: #8a6530;
+  --accent: #c06a10;
+  --border: #e8d5bb;
+  --link: #b05800;
+  --page-bg: linear-gradient(160deg, #fdf6ee 0%, #f8efe2 100%);
+  --toolbar-bg: rgba(255, 255, 255, 0.94);
+  --toolbar-btn-bg: #f8efe2;
+  --toolbar-btn-hover: #e8d5bb;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(192, 106, 16, 0.15);
+}
+
+/* ─── Noir theme dark — high-contrast monochrome ─── */
+:root[data-color-scheme="noir"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --bg-elev: #0a0a0a;
+  --bg-code: #050505;
+  --text: #f0f0f0;
+  --text-soft: #888888;
+  --accent: #ffffff;
+  --border: #2a2a2a;
+  --link: #cccccc;
+  --page-bg: #000000;
+  --toolbar-bg: rgba(10, 10, 10, 0.94);
+  --toolbar-btn-bg: #1a1a1a;
+  --toolbar-btn-hover: #2a2a2a;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(255, 255, 255, 0.12);
+  --heading-font: inherit;
+}
+
+/* ─── Noir theme light ─── */
+:root[data-color-scheme="noir"][data-theme="light"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-elev: #fafafa;
+  --bg-code: #f0f0f0;
+  --text: #0a0a0a;
+  --text-soft: #666666;
+  --accent: #000000;
+  --border: #d0d0d0;
+  --link: #333333;
+  --page-bg: #ffffff;
+  --toolbar-bg: rgba(250, 250, 250, 0.94);
+  --toolbar-btn-bg: #f0f0f0;
+  --toolbar-btn-hover: #e0e0e0;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(0, 0, 0, 0.08);
+}
+
+/* ─── Indigo theme dark — deep navy/violet ─── */
+:root[data-color-scheme="indigo"] {
+  color-scheme: dark;
+  --bg: #12101e;
+  --bg-elev: #1a1730;
+  --bg-code: #0e0c18;
+  --text: #d8d0f0;
+  --text-soft: #9088b8;
+  --accent: #a78bfa;
+  --border: #302a50;
+  --link: #c4b5fd;
+  --page-bg: radial-gradient(circle at top right, #1e1a38, #12101e 50%);
+  --toolbar-bg: rgba(26, 23, 48, 0.94);
+  --toolbar-btn-bg: #221e3a;
+  --toolbar-btn-hover: #302a50;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(167, 139, 250, 0.18);
+  --heading-font: inherit;
+}
+
+/* ─── Indigo theme light ─── */
+:root[data-color-scheme="indigo"][data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f3ff;
+  --bg-elev: #ffffff;
+  --bg-code: #ede9fe;
+  --text: #1e1b4b;
+  --text-soft: #6366a0;
+  --accent: #6d28d9;
+  --border: #ddd6fe;
+  --link: #4f46e5;
+  --page-bg: linear-gradient(160deg, #f5f3ff 0%, #ede9fe 100%);
+  --toolbar-bg: rgba(255, 255, 255, 0.94);
+  --toolbar-btn-bg: #ede9fe;
+  --toolbar-btn-hover: #ddd6fe;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(109, 40, 217, 0.15);
+}
+
 * {
   box-sizing: border-box;
 }
