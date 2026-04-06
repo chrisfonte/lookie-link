@@ -21,6 +21,44 @@ Lookie-Link solves this by giving every file a URL. The agent modifies a documen
 - **YouTube iframe embeds** — sandboxed security via DOMPurify
 - **URL format** — `/view/<repo>/<path>#<anchor>` — predictable, shareable, deep-linkable
 
+## Themes
+
+10 built-in color themes, each with full dark and light variants. Switch themes from the dropdown in the toolbar; toggle dark/light mode with the sun/moon button. Both preferences persist in localStorage.
+
+| Theme | Style |
+|-------|-------|
+| **Slate** | Cool grey editorial — default |
+| **Teal** | Deep teal accents |
+| **Nord** | Arctic blue-grey |
+| **Rosé Pine** | Warm purple/mauve |
+| **Monokai** | Classic warm syntax palette |
+| **Solarized** | Precision color science |
+| **GitHub** | GitHub's code view colors |
+| **Ember** | Warm amber/orange |
+| **Noir** | High-contrast monochrome |
+| **Indigo** | Deep navy/violet |
+
+### Add your own theme
+
+Define custom themes in `~/.config/lookie-link/lookie-link.yaml`:
+
+```yaml
+themes:
+  Lava:
+    dark:
+      bg: "#1a0a00"
+      text: "#f0d0b0"
+      accent: "#ff4400"
+      border: "#5a2000"
+    light:
+      bg: "#fff8f0"
+      text: "#2a1500"
+      accent: "#cc3300"
+      border: "#ffb090"
+```
+
+Custom themes appear in the theme dropdown alongside built-in themes. See [CONFIGURATION.md](docs/CONFIGURATION.md) for all config options.
+
 ## Quick Start
 
 ```bash
