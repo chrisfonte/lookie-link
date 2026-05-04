@@ -30,6 +30,10 @@ async function makeFixture() {
       alpha: alphaRoot,
       beta: betaRoot,
     },
+    grantPaths: {
+      store: path.join(root, 'grants.yaml'),
+      projection: path.join(root, 'grants-projection.yaml'),
+    },
   };
 }
 
@@ -278,6 +282,294 @@ test('bearer auth is preferred for agent flows and preserves token metadata for 
       delete process.env.LOOKIE_TEST_HEADER_TOKEN;
     } else {
       process.env.LOOKIE_TEST_HEADER_TOKEN = priorToken;
+    }
+  }
+});
+
+test('managed grant API creates issue-linked grants and enforces grant tokens', async () => {
+  const fixture = await makeFixture();
+  const priorAdminToken = process.env.LOOKIE_TEST_GRANT_ADMIN_TOKEN;
+  process.env.LOOKIE_TEST_GRANT_ADMIN_TOKEN = 'grant-admin-token';
+
+  const server = await startTestServer({
+    mappings: fixture.mappings,
+    editingEnabled: true,
+    accessConfig: {
+      humanDefault: 'restricted',
+      grants: {
+        storePath: fixture.grantPaths.store,
+        projectionPath: fixture.grantPaths.projection,
+        repoOwners: {
+          alpha: 'source-company',
+        },
+        repoRoots: fixture.mappings,
+        adminTokens: {
+          paperclip: {
+            secretEnv: 'LOOKIE_TEST_GRANT_ADMIN_TOKEN',
+          },
+        },
+      },
+    },
+  });
+
+  try {
+    const createResponse = await server.request('/api/grants', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer grant-admin-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        repoId: 'alpha',
+        sourceCompanyId: 'source-company',
+        targetCompanyId: 'target-company',
+        subject: {
+          companyId: 'target-company',
+          agentIds: ['agent-bob'],
+        },
+        permissions: {
+          view: true,
+          edit: false,
+        },
+        paths: ['docs/'],
+        sourceIssueId: 'FON-3675',
+        approvalId: 'APR-100',
+        reason: 'Cross-company review requested in issue.',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+        issuer: {
+          role: 'manager_agent',
+          companyId: 'source-company',
+          agentId: 'agent-manager',
+        },
+        adapterAllowRoots: [fixture.mappings.alpha],
+      }),
+    });
+    assert.equal(createResponse.status, 201);
+    const createPayload = await createResponse.json();
+    assert.equal(createPayload.ok, true);
+    assert.equal(createPayload.grant.sourceIssueId, 'FON-3675');
+    assert.match(createPayload.issueComment.markdown, /\[FON-3675\]\(\/FON\/issues\/FON-3675\)/);
+    assert.ok(createPayload.token);
+
+    const grantedView = await server.request('/view/alpha/docs/guide.md', {
+      headers: {
+        Authorization: `Bearer ${createPayload.token}`,
+      },
+    });
+    assert.equal(grantedView.status, 200);
+
+    const deniedView = await server.request('/view/alpha/secret/hidden.md', {
+      headers: {
+        Authorization: `Bearer ${createPayload.token}`,
+      },
+    });
+    assert.equal(deniedView.status, 403);
+
+    const projectionRaw = await fs.readFile(fixture.grantPaths.projection, 'utf8');
+    assert.match(projectionRaw, /id:/);
+    assert.doesNotMatch(projectionRaw, /Cross-company review requested in issue/);
+
+    const listResponse = await server.request('/api/grants?state=active&includeAudit=1', {
+      headers: {
+        Authorization: 'Bearer grant-admin-token',
+      },
+    });
+    assert.equal(listResponse.status, 200);
+    const listPayload = await listResponse.json();
+    assert.equal(listPayload.grants.length, 1);
+    assert.ok(Array.isArray(listPayload.auditEvents));
+
+    const renewResponse = await server.request(`/api/grants/${createPayload.grant.id}/renew`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer grant-admin-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        issuer: {
+          role: 'manager_agent',
+          companyId: 'source-company',
+          agentId: 'agent-manager',
+        },
+        reason: 'Need additional review time.',
+        expiresAt: '2099-01-02T00:00:00.000Z',
+      }),
+    });
+    assert.equal(renewResponse.status, 200);
+    const renewPayload = await renewResponse.json();
+    assert.equal(renewPayload.grant.expiresAt, '2099-01-02T00:00:00.000Z');
+    assert.ok(renewPayload.token);
+    assert.match(renewPayload.issueComment.markdown, /Renewed Lookie-Link grant/);
+
+    const oldTokenDenied = await server.request('/view/alpha/docs/guide.md', {
+      headers: {
+        Authorization: `Bearer ${createPayload.token}`,
+      },
+    });
+    assert.equal(oldTokenDenied.status, 403);
+
+    const renewedTokenView = await server.request('/view/alpha/docs/guide.md', {
+      headers: {
+        Authorization: `Bearer ${renewPayload.token}`,
+      },
+    });
+    assert.equal(renewedTokenView.status, 200);
+
+    const revokeResponse = await server.request(`/api/grants/${createPayload.grant.id}/revoke`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer grant-admin-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        issuer: {
+          role: 'manager_agent',
+          companyId: 'source-company',
+          agentId: 'agent-manager',
+        },
+        reason: 'Issue resolved.',
+      }),
+    });
+    assert.equal(revokeResponse.status, 200);
+    const revokePayload = await revokeResponse.json();
+    assert.equal(revokePayload.grant.state, 'revoked');
+    assert.match(revokePayload.issueComment.markdown, /Revoked Lookie-Link grant/);
+
+    const revokedView = await server.request('/view/alpha/docs/guide.md', {
+      headers: {
+        Authorization: `Bearer ${renewPayload.token}`,
+      },
+    });
+    assert.equal(revokedView.status, 403);
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+
+    if (priorAdminToken === undefined) {
+      delete process.env.LOOKIE_TEST_GRANT_ADMIN_TOKEN;
+    } else {
+      process.env.LOOKIE_TEST_GRANT_ADMIN_TOKEN = priorAdminToken;
+    }
+  }
+});
+
+test('managed grant API rejects issue-linked creates and renewals without explicit expiry', async () => {
+  const fixture = await makeFixture();
+  const priorAdminToken = process.env.LOOKIE_TEST_GRANT_ADMIN_TOKEN;
+  process.env.LOOKIE_TEST_GRANT_ADMIN_TOKEN = 'grant-admin-token';
+
+  const server = await startTestServer({
+    mappings: fixture.mappings,
+    editingEnabled: true,
+    accessConfig: {
+      humanDefault: 'restricted',
+      grants: {
+        storePath: fixture.grantPaths.store,
+        repoOwners: {
+          alpha: 'source-company',
+        },
+        repoRoots: fixture.mappings,
+        adminTokens: {
+          paperclip: {
+            secretEnv: 'LOOKIE_TEST_GRANT_ADMIN_TOKEN',
+          },
+        },
+      },
+    },
+  });
+
+  try {
+    const createResponse = await server.request('/api/grants', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer grant-admin-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        repoId: 'alpha',
+        sourceCompanyId: 'source-company',
+        targetCompanyId: 'source-company',
+        subject: {
+          companyId: 'source-company',
+          agentIds: ['agent-bob'],
+        },
+        permissions: {
+          view: true,
+          edit: false,
+        },
+        paths: ['docs/'],
+        sourceIssueId: 'FON-3675',
+        reason: 'Missing explicit expiry should fail.',
+        issuer: {
+          role: 'manager_agent',
+          companyId: 'source-company',
+          agentId: 'agent-manager',
+        },
+      }),
+    });
+    assert.equal(createResponse.status, 400);
+    const createPayload = await createResponse.json();
+    assert.match(createPayload.error, /expiresAt is required/);
+
+    const seededCreate = await server.request('/api/grants', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer grant-admin-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        repoId: 'alpha',
+        sourceCompanyId: 'source-company',
+        targetCompanyId: 'source-company',
+        subject: {
+          companyId: 'source-company',
+          agentIds: ['agent-bob'],
+        },
+        permissions: {
+          view: true,
+          edit: false,
+        },
+        paths: ['docs/'],
+        sourceIssueId: 'FON-3675',
+        approvalId: 'APR-101',
+        reason: 'Seed grant for renew validation.',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+        issuer: {
+          role: 'manager_agent',
+          companyId: 'source-company',
+          agentId: 'agent-manager',
+        },
+      }),
+    });
+    assert.equal(seededCreate.status, 201);
+    const seededPayload = await seededCreate.json();
+
+    const renewResponse = await server.request(`/api/grants/${seededPayload.grant.id}/renew`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer grant-admin-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        issuer: {
+          role: 'manager_agent',
+          companyId: 'source-company',
+          agentId: 'agent-manager',
+        },
+        reason: 'Missing explicit expiry should fail.',
+      }),
+    });
+    assert.equal(renewResponse.status, 400);
+    const renewPayload = await renewResponse.json();
+    assert.match(renewPayload.error, /expiresAt is required/);
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+
+    if (priorAdminToken === undefined) {
+      delete process.env.LOOKIE_TEST_GRANT_ADMIN_TOKEN;
+    } else {
+      process.env.LOOKIE_TEST_GRANT_ADMIN_TOKEN = priorAdminToken;
     }
   }
 });

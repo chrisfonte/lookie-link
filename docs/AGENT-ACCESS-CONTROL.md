@@ -24,7 +24,8 @@ Recommended implementation sequence:
 4. Run a buy/build comparison against existing documentation and knowledge-base
    systems before committing to the full managed grant store.
 5. Define the agent API/CLI access path for explicit Lookie-Link access without
-   replacing normal lazy-load filesystem reads.
+   replacing normal lazy-load filesystem reads or same-company filesystem
+   instructions.
 6. Add audit logs before enabling cross-company access by default.
 
 ## Access Model
@@ -289,6 +290,28 @@ The agent access surface should answer:
 - **Audit path:** how reads and writes tie back to Paperclip issue IDs, agent
   IDs, and grant IDs.
 
+Operating contract:
+
+- **Same-company lazy-load:** direct filesystem reads remain the default for
+  `AGENTS.md`, `TOOLS.md`, YAML knowledge files, and normal project docs inside
+  the agent's scoped workspace. No Lookie-Link token or CLI hop is required.
+- **Shared public reference material:** cross-company public operations docs
+  should come from an explicit read-only filesystem allowlist that Paperclip and
+  local runtimes treat as safe shared reference material. This is still
+  filesystem-native; Lookie-Link may mirror it for human/mobile review, but
+  agents should not need Lookie-Link just to read it.
+- **Private cross-company access:** any non-public read or write across company
+  boundaries must use a Lookie-Link grant or another evaluated documentation
+  system with equivalent path scoping, expiry, and auditability.
+
+Non-goals:
+
+- Do not require rewriting normal lazy-load instructions into `lookie get` or
+  `/api/files/...` calls.
+- Do not make Lookie-Link the default transport for same-company file reads.
+- Do not treat possession of a Lookie-Link token as permission to browse outside
+  the granted repo/path scope.
+
 Likely CLI shape:
 
 ```bash
@@ -309,6 +332,27 @@ PUT  /api/files/:repo/*path
 POST /api/grants/request
 ```
 
+CLI/API contract:
+
+- `lookie whoami` / `GET /api/whoami` should return the presented subject,
+  company, repo/path scopes, expiry, and any associated Paperclip issue/grant
+  metadata.
+- `lookie repos` / `GET /api/repos` should list only repos and path roots
+  visible to the presented token. It must not reveal unauthorized repo names or
+  directory names.
+- `lookie get` / `GET /api/files/:repo/*path` is for explicit scoped document
+  access when the caller does not already have filesystem access. It is not a
+  replacement for ordinary local file opens.
+- `lookie put` / `PUT /api/files/:repo/*path` is only for scoped edit flows
+  where the caller should write through Lookie-Link rather than through the
+  host filesystem directly.
+- `lookie grant request` / `POST /api/grants/request` should request a grant or
+  grant refresh through Paperclip policy; it should not mint ambient long-lived
+  credentials locally.
+- Search/list behavior must be scope-preserving. Directory listings and any
+  future search endpoint may enumerate only explicitly granted roots, not
+  adjacent paths.
+
 The CLI should prefer `Authorization: Bearer` headers over query-string tokens
 so credentials do not leak through pasted URLs, shell history, browser logs, or
 chat transcripts. Short signed URLs may still be useful for human browser
@@ -317,13 +361,16 @@ review, but they should be treated as a separate sharing mode.
 Credential storage guidance:
 
 - For managed agents, Paperclip should project the active Lookie-Link token into
-  the run environment or a short-lived private file, not require the agent to
-  know a long-lived secret.
+  the run environment or a short-lived private file only for explicit
+  Lookie-Link operations. Normal same-company filesystem lazy-loads should not
+  depend on any Lookie-Link credential.
 - BWS is a good candidate for long-lived service credentials and token issuer
   material, but individual short-lived grant tokens should be generated and
   expired by the grant workflow.
 - Committed config may reference `secretEnv`; it must not contain cleartext
   shared secrets.
+- If a shared public filesystem allowlist is introduced, that allowlist should
+  be modeled as runtime path policy, not as a broad reusable bearer token.
 
 Lazy-load rule:
 
@@ -335,6 +382,18 @@ Lazy-load rule:
   evaluated documentation system.
 - Do not mechanically convert `AGENTS.md`, `TOOLS.md`, or lazy-load file
   references to Lookie-Link URLs.
+
+Implementation guidance for FON-3682 / FON-3671 coordination:
+
+- Treat the grant lifecycle API already being added for FON-3671 as the control
+  plane for explicit shared access.
+- Keep the proposed agent `whoami`/`repos`/`files` endpoints as a thin data
+  plane over the same repo/path enforcement model rather than a second policy
+  system.
+- If endpoint naming changes during implementation, preserve the contract above:
+  filesystem-first for same-company reads, read-only shared public allowlist for
+  public cross-company references, and grant-backed Lookie-Link for private
+  cross-company access.
 
 ## Problem
 

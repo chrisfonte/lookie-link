@@ -188,7 +188,7 @@ tokens whose grant ID is revoked.
 
 2. Add issue-linked grant workflow helpers.
    - Create grants from an issue or approval context.
-   - Require `sourceIssueId`, reason, expiry, subject, resource, and permission.
+   - Require `sourceIssueId`, reason, explicit expiry, subject, resource, and permission.
    - Post grant lifecycle comments back to the source issue with linked ticket
      references.
 

@@ -9,6 +9,10 @@
 | `GET /edit/<repo>/<path>` | Edit page (only when editing enabled) |
 | `POST /api/save/<repo>/<path>` | Save updated file content (JSON body) |
 | `POST /api/preview/<repo>/<path>` | Render preview HTML from draft content (JSON body) |
+| `GET /api/grants` | List managed grants (`Authorization: Bearer <admin-token>`) |
+| `POST /api/grants` | Create a managed grant and return token + issue comment helper |
+| `POST /api/grants/:grantId/renew` | Renew a managed grant and return issue comment helper |
+| `POST /api/grants/:grantId/revoke` | Revoke a managed grant and return issue comment helper |
 
 ## Access Tokens
 
@@ -16,6 +20,10 @@ Agent requests can authenticate with either:
 
 - `Authorization: Bearer <secret>`
 - `?token=<secret>`
+
+Managed grant tokens use the same auth shape as static tokens. The server checks
+static `access.tokens` first, then falls back to the managed grant store when
+`access.grants.storePath` is configured.
 
 Route enforcement in phase 1:
 
@@ -53,3 +61,44 @@ Request body:
 ```
 
 Returns `{"ok": true, "html": "rendered HTML"}`.
+
+## Managed Grant Lifecycle
+
+When `access.grants` is configured, grant lifecycle endpoints are enabled and
+require a grant admin token from `access.grants.adminTokens`.
+
+Issue-linked create and renew requests require an explicit `expiresAt` value.
+
+Create request example:
+
+```json
+{
+  "repoId": "operations-fontastic",
+  "sourceCompanyId": "fontastic",
+  "targetCompanyId": "target-company",
+  "subject": {
+    "companyId": "target-company",
+    "agentIds": ["agent-bob"]
+  },
+  "permissions": {
+    "view": true,
+    "edit": false
+  },
+  "paths": ["clients/rfc-media/briefs/"],
+  "sourceIssueId": "FON-3675",
+  "reason": "Cross-company review requested in issue.",
+  "expiresAt": "2026-05-10T00:00:00.000Z",
+  "issuer": {
+    "role": "manager_agent",
+    "companyId": "fontastic",
+    "agentId": "agent-manager"
+  },
+  "adapterAllowRoots": ["/absolute/repo/root"]
+}
+```
+
+Create and renew responses include:
+
+- `grant`: normalized grant record with computed `state`
+- `token`: opaque bearer secret for the new or rotated grant
+- `issueComment`: markdown payload Paperclip can post back to the linked issue

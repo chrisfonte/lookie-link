@@ -57,6 +57,37 @@ Notes:
 - Static tokens may carry optional `subject`, `issuer`, and `audit` metadata so future agent-facing `whoami/repos/grant` APIs can identify the Paperclip issue, agent, or projected grant behind a token without changing the phase 1 config shape.
 - Query-string tokens are preserved across rendered links so tokenized browser sessions can keep navigating.
 
+## Managed Grants
+
+Managed grants add a writable grant store, optional read-only projection, and
+admin-auth lifecycle API for Paperclip or another issuer workflow.
+
+```yaml
+access:
+  humanDefault: restricted
+  grants:
+    storePath: ~/.local/share/lookie-link/grants.yaml
+    projectionPath: ~/.local/share/lookie-link/grants-projection.yaml
+    repoOwners:
+      docs: fontastic
+    repoRoots:
+      docs: ~/Documents/docs
+    adminTokens:
+      paperclip:
+        secretEnv: LOOKIE_LINK_GRANT_ADMIN_TOKEN
+```
+
+Notes:
+
+- `storePath` enables the managed grant lifecycle and is required.
+- `projectionPath` is optional; when set, Lookie-Link writes active grants only,
+  without reasons or revocation metadata, for runtime projection use.
+- `repoOwners` maps each repo id to the company allowed to issue grants for it.
+- `repoRoots` should mirror the configured repository roots when you want
+  cross-company `adapterAllowRoots` enforcement.
+- Cross-company grant creation requires `adapterAllowRoots` in the API request
+  and rejects targets outside those absolute roots.
+
 ## Config Priority
 
 Settings resolve in this order (first wins):

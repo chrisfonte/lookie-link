@@ -19,7 +19,12 @@ const {
   authenticateRequest,
   canAccessPath,
   appendAccessToken,
+  extractPresentedToken,
 } = require('./lib/access-control');
+const {
+  GrantStore,
+  buildIssueComment,
+} = require('./lib/grant-store');
 const {
   safeResolve,
   toPosixPath,
@@ -168,6 +173,18 @@ function sendAccessError(res, accessContext, asJson = false) {
   res.status(accessContext.denialStatus).type('text/plain').send(accessContext.denialMessage);
 }
 
+function parseBooleanQuery(value) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+}
+
+function sendGrantJsonError(res, status, error) {
+  res.status(status).json({ ok: false, error });
+}
+
 function createApp(options = {}) {
   const app = express();
   const mappings = options.mappings || loadRootMappings();
@@ -175,20 +192,142 @@ function createApp(options = {}) {
   const customThemeCss = options.customThemeCss || '';
   const rawAccessConfig = options.accessConfig === undefined ? getAccessConfig() : options.accessConfig;
   const accessConfig = parseAccessConfig(rawAccessConfig);
-  const resolveAccessContext = (req) => req.accessContext || authenticateRequest(req, accessConfig);
+  const grantStore = options.grantStore === undefined
+    ? GrantStore.fromAccessConfig(rawAccessConfig.grants)
+    : options.grantStore;
+  const resolveAccessContext = (req) => {
+    if (req.accessContext) {
+      return req.accessContext;
+    }
+
+    const accessContext = authenticateRequest(req, accessConfig);
+    if (accessContext.mode === 'scoped' || !grantStore || !grantStore.isEnabled()) {
+      return accessContext;
+    }
+
+    const presentedToken = extractPresentedToken(req);
+    if (!presentedToken) {
+      return accessContext;
+    }
+
+    const grantAccess = grantStore.authenticateGrantToken(
+      presentedToken,
+      accessContext.source || null,
+      accessContext.queryToken || null
+    );
+    return grantAccess || accessContext;
+  };
+
+  const authenticateGrantAdmin = (req) => {
+    if (!grantStore || !grantStore.isEnabled()) {
+      return { ok: false, status: 404, error: 'Managed grants are not configured.' };
+    }
+
+    const secret = extractPresentedToken(req);
+    if (!secret) {
+      return { ok: false, status: 401, error: 'Grant admin authentication required.' };
+    }
+
+    const admin = grantStore.authenticateAdminToken(secret);
+    if (!admin) {
+      return { ok: false, status: 403, error: 'Invalid grant admin token.' };
+    }
+
+    return { ok: true, admin };
+  };
 
   app.disable('x-powered-by');
   app.set('trust proxy', true);
 
   app.use(express.json({ limit: '2mb' }));
   app.use((req, _res, next) => {
-    req.accessContext = authenticateRequest(req, accessConfig);
+    req.accessContext = resolveAccessContext(req);
     next();
   });
   app.use('/public', express.static(path.join(__dirname, 'public'), {
     etag: true,
     maxAge: '1h',
   }));
+
+  app.get('/api/grants', (req, res) => {
+    const auth = authenticateGrantAdmin(req);
+    if (!auth.ok) {
+      sendGrantJsonError(res, auth.status, auth.error);
+      return;
+    }
+
+    try {
+      const result = grantStore.listGrants({
+        sourceCompanyId: typeof req.query.sourceCompanyId === 'string' ? req.query.sourceCompanyId.trim() : undefined,
+        targetCompanyId: typeof req.query.targetCompanyId === 'string' ? req.query.targetCompanyId.trim() : undefined,
+        repoId: typeof req.query.repoId === 'string' ? req.query.repoId.trim() : undefined,
+        state: typeof req.query.state === 'string' ? req.query.state.trim() : undefined,
+        includeAudit: parseBooleanQuery(req.query.includeAudit),
+      });
+      res.status(200).json({ ok: true, ...result });
+    } catch (error) {
+      sendGrantJsonError(res, 400, error.message);
+    }
+  });
+
+  app.post('/api/grants', (req, res) => {
+    const auth = authenticateGrantAdmin(req);
+    if (!auth.ok) {
+      sendGrantJsonError(res, auth.status, auth.error);
+      return;
+    }
+
+    try {
+      const result = grantStore.createGrant(req.body || {});
+      res.status(201).json({
+        ok: true,
+        ...result,
+        issueComment: buildIssueComment('created', result.grant),
+      });
+    } catch (error) {
+      sendGrantJsonError(res, 400, error.message);
+    }
+  });
+
+  app.post('/api/grants/:grantId/renew', (req, res) => {
+    const auth = authenticateGrantAdmin(req);
+    if (!auth.ok) {
+      sendGrantJsonError(res, auth.status, auth.error);
+      return;
+    }
+
+    try {
+      const result = grantStore.renewGrant(req.params.grantId, req.body || {});
+      res.status(200).json({
+        ok: true,
+        ...result,
+        issueComment: buildIssueComment('renewed', result.grant),
+      });
+    } catch (error) {
+      const status = error.message === 'Grant not found.' ? 404 : 400;
+      sendGrantJsonError(res, status, error.message);
+    }
+  });
+
+  app.post('/api/grants/:grantId/revoke', (req, res) => {
+    const auth = authenticateGrantAdmin(req);
+    if (!auth.ok) {
+      sendGrantJsonError(res, auth.status, auth.error);
+      return;
+    }
+
+    try {
+      const result = grantStore.revokeGrant(req.params.grantId, req.body || {});
+      res.status(200).json({
+        ok: true,
+        ...result,
+        issueComment: buildIssueComment('revoked', result.grant),
+      });
+    } catch (error) {
+      const status = error.message === 'Grant not found.' ? 404 : 400;
+      sendGrantJsonError(res, status, error.message);
+    }
+  });
 
   app.get('/', (req, res) => {
     const accessContext = resolveAccessContext(req);
