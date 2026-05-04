@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const os = require('node:os');
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const yaml = require('js-yaml');
 
 const { createApp } = require('../server');
 const { parseAccessConfig, authenticateRequest } = require('../lib/access-control');
@@ -562,6 +563,94 @@ test('managed grant API rejects issue-linked creates and renewals without explic
     assert.equal(renewResponse.status, 400);
     const renewPayload = await renewResponse.json();
     assert.match(renewPayload.error, /expiresAt is required/);
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+
+    if (priorAdminToken === undefined) {
+      delete process.env.LOOKIE_TEST_GRANT_ADMIN_TOKEN;
+    } else {
+      process.env.LOOKIE_TEST_GRANT_ADMIN_TOKEN = priorAdminToken;
+    }
+  }
+});
+
+test('managed grant expiry emits a linked issue comment helper in audit events', async () => {
+  const fixture = await makeFixture();
+  const priorAdminToken = process.env.LOOKIE_TEST_GRANT_ADMIN_TOKEN;
+  process.env.LOOKIE_TEST_GRANT_ADMIN_TOKEN = 'grant-admin-token';
+
+  const server = await startTestServer({
+    mappings: fixture.mappings,
+    editingEnabled: true,
+    accessConfig: {
+      humanDefault: 'restricted',
+      grants: {
+        storePath: fixture.grantPaths.store,
+        repoOwners: {
+          alpha: 'source-company',
+        },
+        repoRoots: fixture.mappings,
+        adminTokens: {
+          paperclip: {
+            secretEnv: 'LOOKIE_TEST_GRANT_ADMIN_TOKEN',
+          },
+        },
+      },
+    },
+  });
+
+  try {
+    const createResponse = await server.request('/api/grants', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer grant-admin-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        repoId: 'alpha',
+        sourceCompanyId: 'source-company',
+        targetCompanyId: 'source-company',
+        subject: {
+          companyId: 'source-company',
+          agentIds: ['agent-bob'],
+        },
+        permissions: {
+          view: true,
+          edit: false,
+        },
+        paths: ['docs/'],
+        sourceIssueId: 'FON-3675',
+        approvalId: 'APR-102',
+        reason: 'Grant that will be force-expired for audit coverage.',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+        issuer: {
+          role: 'manager_agent',
+          companyId: 'source-company',
+          agentId: 'agent-manager',
+        },
+      }),
+    });
+    assert.equal(createResponse.status, 201);
+    const created = await createResponse.json();
+
+    const storeRaw = await fs.readFile(fixture.grantPaths.store, 'utf8');
+    const store = yaml.load(storeRaw);
+    store.grants[0].expiresAt = '2000-01-01T00:00:00.000Z';
+    await fs.writeFile(fixture.grantPaths.store, yaml.dump(store, { noRefs: true, sortKeys: true }), 'utf8');
+
+    const listResponse = await server.request('/api/grants?includeAudit=1', {
+      headers: {
+        Authorization: 'Bearer grant-admin-token',
+      },
+    });
+    assert.equal(listResponse.status, 200);
+    const listPayload = await listResponse.json();
+    const expiredEvent = listPayload.auditEvents.find((event) => event.grantId === created.grant.id && event.type === 'grant.expired');
+    assert.ok(expiredEvent);
+    assert.equal(expiredEvent.expiresAt, '2000-01-01T00:00:00.000Z');
+    assert.equal(expiredEvent.issueComment.issueId, 'FON-3675');
+    assert.match(expiredEvent.issueComment.markdown, /Expired Lookie-Link grant/);
   } finally {
     await server.close();
     await fs.rm(fixture.root, { recursive: true, force: true });

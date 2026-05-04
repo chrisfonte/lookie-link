@@ -102,3 +102,7 @@ Create and renew responses include:
 - `grant`: normalized grant record with computed `state`
 - `token`: opaque bearer secret for the new or rotated grant
 - `issueComment`: markdown payload Paperclip can post back to the linked issue
+
+`GET /api/grants?includeAudit=1` also returns one-time `grant.expired` audit
+events with an `issueComment` payload when Lookie-Link first observes an expired
+grant.
