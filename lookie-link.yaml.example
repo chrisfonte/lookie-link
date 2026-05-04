@@ -17,6 +17,47 @@ repositories:
   notes: ~/notes
   # project: ~/projects/my-project
 
+# Optional agent access control
+# Secrets should normally come from env vars on the host machine.
+# access:
+#   humanDefault: full # full | restricted | none
+#   tokens:
+#     docs_reader:
+#       secretEnv: LOOKIE_TOKEN_DOCS_READER
+#       subject:
+#         companyId: fontastic
+#         agentIds: [agent-bob]
+#       issuer:
+#         system: paperclip
+#         issueId: FON-3671
+#       audit:
+#         grantId: static-phase1-docs-reader
+#       repos:
+#         docs:
+#           paths:
+#             - guides/
+#             - README.md
+#       permissions:
+#         view: true
+#         edit: false
+#     docs_editor:
+#       secretEnv: LOOKIE_TOKEN_DOCS_EDITOR
+#       repos:
+#         docs:
+#           paths:
+#             - drafts/
+#       permissions:
+#         view: true
+#         edit: true
+#   grants:
+#     storePath: ~/.local/share/lookie-link/grants.yaml
+#     projectionPath: ~/.local/share/lookie-link/grants-projection.yaml
+#     repoOwners:
+#       docs: source-company-id
+#     adminTokens:
+#       paperclip:
+#         secretEnv: LOOKIE_LINK_GRANT_ADMIN_TOKEN
+
 # Custom themes
 # Each theme needs dark and/or light variants.
 # CSS property names use underscores (bg_elev → --bg-elev).

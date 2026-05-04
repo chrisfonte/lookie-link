@@ -9,10 +9,18 @@ const {
   getPort,
   getHostname,
   getEditingEnabled,
+  getAccessConfig,
   loadCustomThemes,
   generateCustomThemeCss,
   BUILT_IN_THEMES,
 } = require('./lib/config');
+const {
+  parseAccessConfig,
+  authenticateRequest,
+  canAccessPath,
+  appendAccessToken,
+} = require('./lib/access-control');
+const { GrantStore } = require('./lib/grant-store');
 const {
   safeResolve,
   toPosixPath,
@@ -152,23 +160,153 @@ function sendPathJsonError(res, error) {
   res.status(error.status).json({ ok: false, error: error.message });
 }
 
+function sendAccessError(res, accessContext, asJson = false) {
+  if (asJson) {
+    res.status(accessContext.denialStatus).json({ ok: false, error: accessContext.denialMessage });
+    return;
+  }
+
+  res.status(accessContext.denialStatus).type('text/plain').send(accessContext.denialMessage);
+}
+
+function extractBearerToken(req) {
+  const header = typeof req.get === 'function'
+    ? req.get('authorization')
+    : (req.headers && (req.headers.authorization || req.headers.Authorization));
+  if (typeof header !== 'string') {
+    return null;
+  }
+
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    return null;
+  }
+
+  const token = match[1].trim();
+  return token || null;
+}
+
+function sendGrantApiError(res, status, error) {
+  res.status(status).json({ ok: false, error });
+}
+
 function createApp(options = {}) {
   const app = express();
   const mappings = options.mappings || loadRootMappings();
   const editingEnabled = options.editingEnabled === undefined ? getEditingEnabled() : Boolean(options.editingEnabled);
   const customThemeCss = options.customThemeCss || '';
+  const rawAccessConfig = options.accessConfig === undefined ? getAccessConfig() : options.accessConfig;
+  const accessConfig = parseAccessConfig(rawAccessConfig);
+  const grantStore = options.grantStore === undefined
+    ? GrantStore.fromAccessConfig({
+        ...(rawAccessConfig && rawAccessConfig.grants ? rawAccessConfig.grants : {}),
+        repoRoots: mappings,
+      })
+    : options.grantStore;
+
+  const resolveAccessContext = (req) => req.accessContext || authenticateRequest(req, accessConfig, grantStore);
+  const resolveGrantAdminContext = (req) => {
+    if (!grantStore || !grantStore.isEnabled()) {
+      return { ok: false, status: 404, error: 'Grant lifecycle API is not configured.' };
+    }
+
+    const adminToken = grantStore.authenticateAdminToken(extractBearerToken(req));
+    if (!adminToken) {
+      return { ok: false, status: 401, error: 'Grant admin authentication required.' };
+    }
+
+    return { ok: true, adminToken };
+  };
 
   app.disable('x-powered-by');
   app.set('trust proxy', true);
 
   app.use(express.json({ limit: '2mb' }));
+  app.use((req, _res, next) => {
+    req.accessContext = authenticateRequest(req, accessConfig, grantStore);
+    next();
+  });
   app.use('/public', express.static(path.join(__dirname, 'public'), {
     etag: true,
     maxAge: '1h',
   }));
 
-  app.get('/', (_req, res) => {
-    const entries = Object.entries(mappings).map(([repo, rootPath]) => ({ repo, rootPath }));
+  app.get('/api/grants', (req, res) => {
+    const adminContext = resolveGrantAdminContext(req);
+    if (!adminContext.ok) {
+      sendGrantApiError(res, adminContext.status, adminContext.error);
+      return;
+    }
+
+    const includeAudit = String(req.query.includeAudit || '').trim().toLowerCase() === 'true';
+    const grants = grantStore.listGrants({
+      sourceCompanyId: req.query.sourceCompanyId ? String(req.query.sourceCompanyId).trim() : undefined,
+      targetCompanyId: req.query.targetCompanyId ? String(req.query.targetCompanyId).trim() : undefined,
+      repoId: req.query.repoId ? String(req.query.repoId).trim() : undefined,
+      state: req.query.state ? String(req.query.state).trim() : undefined,
+      includeAudit,
+    });
+
+    res.status(200).json({ ok: true, ...grants });
+  });
+
+  app.post('/api/grants', (req, res) => {
+    const adminContext = resolveGrantAdminContext(req);
+    if (!adminContext.ok) {
+      sendGrantApiError(res, adminContext.status, adminContext.error);
+      return;
+    }
+
+    try {
+      const created = grantStore.createGrant(req.body || {});
+      res.status(201).json({ ok: true, ...created });
+    } catch (error) {
+      sendGrantApiError(res, 400, error.message);
+    }
+  });
+
+  app.post('/api/grants/:grantId/renew', (req, res) => {
+    const adminContext = resolveGrantAdminContext(req);
+    if (!adminContext.ok) {
+      sendGrantApiError(res, adminContext.status, adminContext.error);
+      return;
+    }
+
+    try {
+      const renewed = grantStore.renewGrant(req.params.grantId, req.body || {});
+      res.status(200).json({ ok: true, ...renewed });
+    } catch (error) {
+      const status = error.message === 'Grant not found.' ? 404 : 400;
+      sendGrantApiError(res, status, error.message);
+    }
+  });
+
+  app.post('/api/grants/:grantId/revoke', (req, res) => {
+    const adminContext = resolveGrantAdminContext(req);
+    if (!adminContext.ok) {
+      sendGrantApiError(res, adminContext.status, adminContext.error);
+      return;
+    }
+
+    try {
+      const revoked = grantStore.revokeGrant(req.params.grantId, req.body || {});
+      res.status(200).json({ ok: true, ...revoked });
+    } catch (error) {
+      const status = error.message === 'Grant not found.' ? 404 : 400;
+      sendGrantApiError(res, status, error.message);
+    }
+  });
+
+  app.get('/', (req, res) => {
+    const accessContext = resolveAccessContext(req);
+    if (accessContext.mode === 'denied') {
+      sendAccessError(res, accessContext);
+      return;
+    }
+
+    const entries = Object.entries(mappings)
+      .filter(([repo]) => canAccessPath(accessContext, 'view', repo, '', 'directory'))
+      .map(([repo, rootPath]) => ({ repo, rootPath }));
     const html = renderDirectoryPage({
       title: 'Available Repositories',
       repo: null,
@@ -176,13 +314,14 @@ function createApp(options = {}) {
       parentHref: null,
       entries: entries.map((entry) => ({
         name: entry.repo,
-        href: buildHref(entry.repo, ''),
+        href: appendAccessToken(buildHref(entry.repo, ''), accessContext),
         isDirectory: true,
         size: '-',
         mtime: '-',
       })),
-      notice: 'Choose a repository to browse files.',
+      notice: entries.length > 0 ? 'Choose a repository to browse files.' : 'No repositories are authorized for this token.',
       customThemeCss,
+      queryToken: accessContext.queryToken,
     });
 
     res.status(200).type('html').send(html);
@@ -193,6 +332,7 @@ function createApp(options = {}) {
   });
 
   app.get('/view/*', async (req, res) => {
+    const accessContext = resolveAccessContext(req);
     let resolvedInput;
     try {
       resolvedInput = await resolveFromRequest(mappings, req.params[0] || '');
@@ -224,11 +364,24 @@ function createApp(options = {}) {
     }
 
     if (stat.isDirectory()) {
+      if (!canAccessPath(accessContext, 'view', repo, relativePath, 'directory')) {
+        res.status(403).type('text/plain').send('Access denied.');
+        return;
+      }
+
       try {
         const dirents = await fs.readdir(resolved, { withFileTypes: true });
-        const rows = await Promise.all(dirents.map(async (dirent) => {
+        const rows = (await Promise.all(dirents.map(async (dirent) => {
           const childRel = toPosixPath(path.posix.join(relativePath, dirent.name));
           const childAbs = path.join(resolved, dirent.name);
+          const isVisible = dirent.isDirectory()
+            ? canAccessPath(accessContext, 'view', repo, childRel, 'directory')
+            : canAccessPath(accessContext, 'view', repo, childRel, 'file');
+
+          if (!isVisible) {
+            return null;
+          }
+
           let childStat = null;
 
           try {
@@ -239,12 +392,12 @@ function createApp(options = {}) {
 
           return {
             name: dirent.name,
-            href: buildHref(repo, childRel),
+            href: appendAccessToken(buildHref(repo, childRel), accessContext),
             isDirectory: dirent.isDirectory(),
             size: childStat && !dirent.isDirectory() ? formatFileSize(childStat.size) : '-',
             mtime: childStat ? formatMTime(childStat.mtime) : '-',
           };
-        }));
+        }))).filter(Boolean);
 
         rows.sort(compareEntries);
 
@@ -253,10 +406,11 @@ function createApp(options = {}) {
           title: `${repo}/${relativePath || ''}`,
           repo,
           currentPath: relativePath,
-          parentHref: parentRel === null ? '/view' : buildHref(repo, parentRel),
+          parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
           entries: rows,
-          notice: rows.length === 0 ? 'Directory is empty.' : null,
+          notice: rows.length === 0 ? 'Directory is empty or no entries are authorized.' : null,
           customThemeCss,
+          queryToken: accessContext.queryToken,
         });
 
         res.status(200).type('html').send(html);
@@ -273,17 +427,23 @@ function createApp(options = {}) {
       return;
     }
 
+    if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
+      res.status(403).type('text/plain').send('Access denied.');
+      return;
+    }
+
     const extension = path.extname(relativePath).toLowerCase();
     if (IMAGE_EXTENSIONS.has(extension)) {
       const parentRel = parentPath(relativePath);
       const html = renderImagePage({
         repo,
         relativePath,
-        parentHref: parentRel === null ? '/view' : buildHref(repo, parentRel),
-        imageHref: buildAssetHref(repo, relativePath),
+        parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
+        imageHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
         mtime: formatMTime(stat.mtime),
         size: formatFileSize(stat.size),
         customThemeCss,
+        queryToken: accessContext.queryToken,
       });
 
       res.status(200).type('html').send(html);
@@ -316,17 +476,21 @@ function createApp(options = {}) {
       repoRoot: rootPath,
       relativePath,
       source,
-      parentHref: parentRel === null ? '/view' : buildHref(repo, parentRel),
+      parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
       mtime: formatMTime(stat.mtime),
       size: formatFileSize(stat.size),
-      editHref: editingEnabled ? buildEditHref(repo, relativePath) : null,
+      editHref: editingEnabled && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
+        ? appendAccessToken(buildEditHref(repo, relativePath), accessContext)
+        : null,
       customThemeCss,
+      queryToken: accessContext.queryToken,
     });
 
     res.status(200).type('html').send(html);
   });
 
   app.get('/edit/*', async (req, res) => {
+    const accessContext = resolveAccessContext(req);
     if (!editingEnabled) {
       res.status(404).type('text/plain').send('Editing mode is disabled.');
       return;
@@ -349,6 +513,11 @@ function createApp(options = {}) {
     const { repo, relativePath, rootPath, resolved } = resolvedInput;
     if (!relativePath) {
       res.status(400).type('text/plain').send('Edit requires a file path.');
+      return;
+    }
+
+    if (!canAccessPath(accessContext, 'edit', repo, relativePath, 'file')) {
+      res.status(403).type('text/plain').send('Access denied.');
       return;
     }
 
@@ -398,16 +567,18 @@ function createApp(options = {}) {
       mtimeMs: Math.trunc(stat.mtimeMs),
       mtime: formatMTime(stat.mtime),
       size: formatFileSize(stat.size),
-      viewHref: buildHref(repo, relativePath),
-      saveHref: buildSaveHref(repo, relativePath),
-      previewHref: buildPreviewHref(repo, relativePath),
+      viewHref: appendAccessToken(buildHref(repo, relativePath), accessContext),
+      saveHref: appendAccessToken(buildSaveHref(repo, relativePath), accessContext),
+      previewHref: appendAccessToken(buildPreviewHref(repo, relativePath), accessContext),
       customThemeCss,
+      queryToken: accessContext.queryToken,
     });
 
     res.status(200).type('html').send(html);
   });
 
   app.post('/api/save/*', async (req, res) => {
+    const accessContext = resolveAccessContext(req);
     if (!editingEnabled) {
       res.status(404).json({ ok: false, error: 'Editing mode is disabled.' });
       return;
@@ -430,6 +601,11 @@ function createApp(options = {}) {
     const { repo, relativePath, resolved } = resolvedInput;
     if (!relativePath) {
       res.status(400).json({ ok: false, error: 'Save requires a file path.' });
+      return;
+    }
+
+    if (!canAccessPath(accessContext, 'edit', repo, relativePath, 'file')) {
+      res.status(403).json({ ok: false, error: 'Access denied.' });
       return;
     }
 
@@ -536,6 +712,7 @@ function createApp(options = {}) {
   });
 
   app.post('/api/preview/*', async (req, res) => {
+    const accessContext = resolveAccessContext(req);
     if (!editingEnabled) {
       res.status(404).json({ ok: false, error: 'Editing mode is disabled.' });
       return;
@@ -558,6 +735,11 @@ function createApp(options = {}) {
     const { repo, relativePath, rootPath, resolved } = resolvedInput;
     if (!relativePath) {
       res.status(400).json({ ok: false, error: 'Preview requires a file path.' });
+      return;
+    }
+
+    if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
+      res.status(403).json({ ok: false, error: 'Access denied.' });
       return;
     }
 
@@ -596,12 +778,14 @@ function createApp(options = {}) {
       repoRoot: rootPath,
       relativePath,
       source: content,
+      queryToken: accessContext.queryToken,
     });
 
     res.status(200).json({ ok: true, html });
   });
 
   app.get('/asset/:repo/*', async (req, res) => {
+    const accessContext = resolveAccessContext(req);
     const repo = req.params.repo;
     const relativePath = req.params[0] || '';
     const rootPath = mappings[repo];
@@ -615,6 +799,11 @@ function createApp(options = {}) {
     const mimeType = ASSET_MIME_TYPES[extension];
     if (!mimeType) {
       res.status(415).type('text/plain').send('Unsupported asset type.');
+      return;
+    }
+
+    if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
+      res.status(403).type('text/plain').send('Access denied.');
       return;
     }
 
@@ -668,8 +857,8 @@ function createApp(options = {}) {
     });
   });
 
-  app.get('/view', (_req, res) => {
-    res.redirect(302, '/');
+  app.get('/view', (req, res) => {
+    res.redirect(302, appendAccessToken('/', resolveAccessContext(req)));
   });
 
   app.use((req, res) => {
@@ -689,6 +878,7 @@ function startServer() {
   const hostname = getHostname();
   const mappings = loadRootMappings();
   const editingEnabled = getEditingEnabled();
+  const accessConfig = getAccessConfig();
 
   const customThemes = loadCustomThemes();
   const customThemeCss = generateCustomThemeCss(customThemes);
@@ -700,7 +890,7 @@ function startServer() {
   const allThemes = [...builtInThemes, ...customThemes.map((t) => ({ slug: t.slug, label: t.label }))];
   setThemeList(allThemes);
 
-  const app = createApp({ mappings, editingEnabled, customThemeCss });
+  const app = createApp({ mappings, editingEnabled, customThemeCss, accessConfig });
 
   app.listen(port, '0.0.0.0', () => {
     console.log(`Lookie Link listening on http://${hostname}:${port}`);

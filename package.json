@@ -4,6 +4,7 @@
   "description": "Lightweight web file viewer for local directories \u2014 look at things, via links",
   "main": "server.js",
   "scripts": {
+    "test": "node --test",
     "start": "node server.js",
     "validate:editable": "node scripts/validate-editable-mode.js"
   },

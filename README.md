@@ -12,6 +12,9 @@ Lookie-Link solves this by giving every file a URL. The agent modifies a documen
 
 - **File browser + renderer** — directory listings, rendered markdown/code/YAML views
 - **Opt-in editable mode** — edit any non-binary file, then save back to disk
+- **Managed Paperclip grants** — issue time-limited repo/path tokens with audit history
+- **Grant projection writer** — optionally export active managed grants to a read-only private projection for Paperclip/runtime wiring
+- **Cross-company grant guardrail** — rejects managed grants that fall outside the Paperclip adapter's allowed filesystem roots
 - **Markdown rendering** — full CommonMark with syntax-highlighted code blocks
 - **Cross-link rendering** — `[[name]] (~/repo/path.md#anchor)` becomes a clickable link
 - **Anchor linking** — every heading and YAML key gets a copy-link button
@@ -74,12 +77,14 @@ Open `http://localhost:9876` in your browser.
 
 Lookie-Link is designed for private networks — specifically [Tailscale](https://tailscale.com) or similar mesh VPNs. It runs on a machine with access to your repos and serves files to any device on your tailnet.
 
-This is **not** a public-facing web server. There is no authentication layer — access control comes from your network.
+This is **not** a public-facing web server. By default, human access still comes from your network, but you can now add token-scoped agent access in config so a single instance does not expose every repo to every agent on the tailnet.
 
 ## Documentation
 
 - [Configuration](docs/CONFIGURATION.md) — YAML config, env vars, custom themes
 - [Editing](docs/EDITING.md) — editable mode, safety behaviors
+- [Agent Access Control](docs/AGENT-ACCESS-CONTROL.md) — token-scoped repo/path access for agents
+- [Paperclip Grant Workflow](docs/PAPERCLIP-GRANT-WORKFLOW.md) — managed cross-company access contract
 - [Features](docs/FEATURES.md) — cross-links, anchors, images, themes, YouTube embeds
 - [API](docs/API.md) — endpoint reference
 - [Contributing](docs/CONTRIBUTING.md) — renderer pipeline, validation, design history
