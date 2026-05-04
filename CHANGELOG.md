@@ -8,15 +8,6 @@
 - Preserved query-token navigation across rendered links and editor actions
 - Documented the new `access.tokens` config shape and API behavior
 
-## 2026-05-03 — Unreleased — Managed Paperclip Grants
-
-- Added a private managed grant store with append-only lifecycle audit events
-- Added `/api/grants` create/list/renew/revoke endpoints protected by admin bearer tokens
-- Added optional `access.grants.projectionPath` output for active-grant enforcement snapshots
-- Enforced source-company repo ownership, issuer role rules, approval requirements, expiry, revocation, and token rotation
-- Enforced `adapterAllowRoots` validation for cross-company grants before Lookie-Link mints a managed bearer token
-- Allowed managed grant bearer secrets to authenticate against the existing view/edit/save/asset/preview enforcement paths
-
 ## 2026-04-03 — v2.2.0 — Stitch-Informed Theme Polish
 
 - Added a narrow editorial-style theme polish pass inspired by a Stitch File Index concept

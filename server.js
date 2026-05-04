@@ -20,7 +20,6 @@ const {
   canAccessPath,
   appendAccessToken,
 } = require('./lib/access-control');
-const { GrantStore } = require('./lib/grant-store');
 const {
   safeResolve,
   toPosixPath,
@@ -169,27 +168,6 @@ function sendAccessError(res, accessContext, asJson = false) {
   res.status(accessContext.denialStatus).type('text/plain').send(accessContext.denialMessage);
 }
 
-function extractBearerToken(req) {
-  const header = typeof req.get === 'function'
-    ? req.get('authorization')
-    : (req.headers && (req.headers.authorization || req.headers.Authorization));
-  if (typeof header !== 'string') {
-    return null;
-  }
-
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  if (!match) {
-    return null;
-  }
-
-  const token = match[1].trim();
-  return token || null;
-}
-
-function sendGrantApiError(res, status, error) {
-  res.status(status).json({ ok: false, error });
-}
-
 function createApp(options = {}) {
   const app = express();
   const mappings = options.mappings || loadRootMappings();
@@ -197,105 +175,20 @@ function createApp(options = {}) {
   const customThemeCss = options.customThemeCss || '';
   const rawAccessConfig = options.accessConfig === undefined ? getAccessConfig() : options.accessConfig;
   const accessConfig = parseAccessConfig(rawAccessConfig);
-  const grantStore = options.grantStore === undefined
-    ? GrantStore.fromAccessConfig({
-        ...(rawAccessConfig && rawAccessConfig.grants ? rawAccessConfig.grants : {}),
-        repoRoots: mappings,
-      })
-    : options.grantStore;
-
-  const resolveAccessContext = (req) => req.accessContext || authenticateRequest(req, accessConfig, grantStore);
-  const resolveGrantAdminContext = (req) => {
-    if (!grantStore || !grantStore.isEnabled()) {
-      return { ok: false, status: 404, error: 'Grant lifecycle API is not configured.' };
-    }
-
-    const adminToken = grantStore.authenticateAdminToken(extractBearerToken(req));
-    if (!adminToken) {
-      return { ok: false, status: 401, error: 'Grant admin authentication required.' };
-    }
-
-    return { ok: true, adminToken };
-  };
+  const resolveAccessContext = (req) => req.accessContext || authenticateRequest(req, accessConfig);
 
   app.disable('x-powered-by');
   app.set('trust proxy', true);
 
   app.use(express.json({ limit: '2mb' }));
   app.use((req, _res, next) => {
-    req.accessContext = authenticateRequest(req, accessConfig, grantStore);
+    req.accessContext = authenticateRequest(req, accessConfig);
     next();
   });
   app.use('/public', express.static(path.join(__dirname, 'public'), {
     etag: true,
     maxAge: '1h',
   }));
-
-  app.get('/api/grants', (req, res) => {
-    const adminContext = resolveGrantAdminContext(req);
-    if (!adminContext.ok) {
-      sendGrantApiError(res, adminContext.status, adminContext.error);
-      return;
-    }
-
-    const includeAudit = String(req.query.includeAudit || '').trim().toLowerCase() === 'true';
-    const grants = grantStore.listGrants({
-      sourceCompanyId: req.query.sourceCompanyId ? String(req.query.sourceCompanyId).trim() : undefined,
-      targetCompanyId: req.query.targetCompanyId ? String(req.query.targetCompanyId).trim() : undefined,
-      repoId: req.query.repoId ? String(req.query.repoId).trim() : undefined,
-      state: req.query.state ? String(req.query.state).trim() : undefined,
-      includeAudit,
-    });
-
-    res.status(200).json({ ok: true, ...grants });
-  });
-
-  app.post('/api/grants', (req, res) => {
-    const adminContext = resolveGrantAdminContext(req);
-    if (!adminContext.ok) {
-      sendGrantApiError(res, adminContext.status, adminContext.error);
-      return;
-    }
-
-    try {
-      const created = grantStore.createGrant(req.body || {});
-      res.status(201).json({ ok: true, ...created });
-    } catch (error) {
-      sendGrantApiError(res, 400, error.message);
-    }
-  });
-
-  app.post('/api/grants/:grantId/renew', (req, res) => {
-    const adminContext = resolveGrantAdminContext(req);
-    if (!adminContext.ok) {
-      sendGrantApiError(res, adminContext.status, adminContext.error);
-      return;
-    }
-
-    try {
-      const renewed = grantStore.renewGrant(req.params.grantId, req.body || {});
-      res.status(200).json({ ok: true, ...renewed });
-    } catch (error) {
-      const status = error.message === 'Grant not found.' ? 404 : 400;
-      sendGrantApiError(res, status, error.message);
-    }
-  });
-
-  app.post('/api/grants/:grantId/revoke', (req, res) => {
-    const adminContext = resolveGrantAdminContext(req);
-    if (!adminContext.ok) {
-      sendGrantApiError(res, adminContext.status, adminContext.error);
-      return;
-    }
-
-    try {
-      const revoked = grantStore.revokeGrant(req.params.grantId, req.body || {});
-      res.status(200).json({ ok: true, ...revoked });
-    } catch (error) {
-      const status = error.message === 'Grant not found.' ? 404 : 400;
-      sendGrantApiError(res, status, error.message);
-    }
-  });
 
   app.get('/', (req, res) => {
     const accessContext = resolveAccessContext(req);
