@@ -41,6 +41,30 @@ Supported: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`
 
 Click any inline image to open it in a full-screen lightbox. Close with the X button, clicking outside, or pressing Escape.
 
+## Audio Playback
+
+Markdown links to local audio files are rendered as an inline `<audio>` player so you can tap **Play** without leaving the page. The original link text is preserved underneath as a caption that points at the dedicated player page.
+
+Supported extensions: `.m4a`, `.mp3`, `.wav`, `.ogg`, `.oga`, `.opus`, `.flac`, `.aac`
+
+All three of these link forms render as a player:
+
+```markdown
+[NotebookLM overview](./notebooks/2026-05-12-cruz-meeting.m4a)
+[NotebookLM overview](~/operations-chris-fonte/notebooks/2026-05-12-cruz-meeting.m4a)
+[NotebookLM overview](http://<tailscale-host>:9876/view/operations-chris-fonte/notebooks/2026-05-12-cruz-meeting.m4a)
+```
+
+Browsing an audio file directly at `/view/<repo>/<path>.<audio-ext>` renders a dedicated player page with the same controls plus a **Download** link and file metadata (size, mtime).
+
+Under the hood, audio is streamed from `/asset/<repo>/<path>.<audio-ext>` with the correct `Content-Type` and `Range` request support, so `<audio>` can seek without re-downloading.
+
+Notes:
+
+- Audio files are classified as binary, so they are **not** editable in editable mode.
+- Audio links inside fenced ` ``` ` code blocks are left as code, not rewritten to a player.
+- The image lightbox does not apply to `<audio>` (it's a separate, non-binary widget).
+
 ## Themes
 
 10 built-in color themes, each with dark and light variants:

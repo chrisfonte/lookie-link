@@ -5,9 +5,11 @@
 - Added audio playback support for `.m4a`, `.mp3`, `.wav`, `.ogg`, `.oga`, `.opus`, `.flac`, `.aac`
 - Browsing an audio file directly renders a dedicated player page with controls and a download link
 - Markdown links to audio files (e.g. NotebookLM `.m4a` overviews) get an inline `<audio>` player with the original link caption
+- Inline player also triggers for fully-qualified `http(s)://<host>:9876/view/<repo>/<path>.<audio-ext>` URLs — the Paperclip-style labeled-link form — not just `./relative` and `~/repo` paths
 - `/asset/<repo>/<path>` route serves audio with correct MIME types and Range requests for seeking
 - Audio files are excluded from editable mode (binary)
-- Closes FON-5963
+- Documented in `docs/FEATURES.md` (new Audio Playback section) and `~/operations/ai-tools/knowledge/integrations/lookie-link.yaml` (v1.2)
+- Closes FON-5963, GH#54
 
 ## 2026-05-03 — Unreleased — Phase 1 Token-Scoped Access
 

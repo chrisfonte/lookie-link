@@ -19,7 +19,7 @@ Lookie-Link solves this by giving every file a URL. The agent modifies a documen
 - **Cross-link rendering** — `[[name]] (~/repo/path.md#anchor)` becomes a clickable link
 - **Anchor linking** — every heading and YAML key gets a copy-link button
 - **Image lightbox** — click any inline image for a full-screen view
-- **Audio playback** — `.m4a`, `.mp3`, `.wav`, `.ogg`, `.opus`, `.flac`, `.aac` get an inline `<audio>` player when linked in markdown, plus a dedicated player page when browsed directly
+- **Audio playback** — `.m4a`, `.mp3`, `.wav`, `.ogg`, `.opus`, `.flac`, `.aac` get an inline `<audio>` player when linked in markdown (relative path, `~/repo` path, or fully-qualified `/view/...` URL), plus a dedicated player page when browsed directly. See [FEATURES.md](docs/FEATURES.md#audio-playback) for examples.
 - **10 built-in themes** — Slate, Teal, Nord, Rosé Pine, Monokai, Solarized, GitHub, Ember, Noir, Indigo (dark + light)
 - **Custom themes** — define your own in the YAML config
 - **YouTube iframe embeds** — sandboxed security via DOMPurify
