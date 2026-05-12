@@ -43,12 +43,13 @@ const {
   renderDocumentPage,
   renderDirectoryPage,
   renderImagePage,
+  renderAudioPage,
   renderEditPage,
   renderPreviewHtml,
   setThemeList,
 } = require('./lib/renderer');
 
-const ASSET_MIME_TYPES = {
+const IMAGE_MIME_TYPES = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -57,7 +58,20 @@ const ASSET_MIME_TYPES = {
   '.svg': 'image/svg+xml',
 };
 
-const IMAGE_EXTENSIONS = new Set(Object.keys(ASSET_MIME_TYPES));
+const AUDIO_MIME_TYPES = {
+  '.m4a': 'audio/mp4',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.oga': 'audio/ogg',
+  '.opus': 'audio/ogg',
+  '.flac': 'audio/flac',
+  '.aac': 'audio/aac',
+};
+
+const ASSET_MIME_TYPES = { ...IMAGE_MIME_TYPES, ...AUDIO_MIME_TYPES };
+const IMAGE_EXTENSIONS = new Set(Object.keys(IMAGE_MIME_TYPES));
+const AUDIO_EXTENSIONS = new Set(Object.keys(AUDIO_MIME_TYPES));
 const EDITABLE_EXTENSIONS = new Set([
   '.md', '.markdown', '.mdown',
   '.yaml', '.yml',
@@ -98,7 +112,7 @@ function isEditableFile(relativePath) {
     return false;
   }
 
-  if (IMAGE_EXTENSIONS.has(extension)) {
+  if (IMAGE_EXTENSIONS.has(extension) || AUDIO_EXTENSIONS.has(extension)) {
     return false;
   }
 
@@ -472,6 +486,24 @@ function createApp(options = {}) {
         relativePath,
         parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
         imageHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
+        mtime: formatMTime(stat.mtime),
+        size: formatFileSize(stat.size),
+        customThemeCss,
+        queryToken: accessContext.queryToken,
+      });
+
+      res.status(200).type('html').send(html);
+      return;
+    }
+
+    if (AUDIO_EXTENSIONS.has(extension)) {
+      const parentRel = parentPath(relativePath);
+      const html = renderAudioPage({
+        repo,
+        relativePath,
+        parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
+        audioHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
+        mimeType: AUDIO_MIME_TYPES[extension],
         mtime: formatMTime(stat.mtime),
         size: formatFileSize(stat.size),
         customThemeCss,

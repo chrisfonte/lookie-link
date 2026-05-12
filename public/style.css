@@ -637,6 +637,47 @@ tbody tr:last-child td {
   text-align: center;
 }
 
+.content.audio-view {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.content.audio-view audio {
+  width: 100%;
+  max-width: 640px;
+}
+
+.audio-download {
+  margin-top: 1rem;
+  font-size: 0.95rem;
+}
+
+.audio-embed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.audio-embed audio {
+  width: 100%;
+}
+
+.audio-embed-link {
+  font-size: 0.9rem;
+  color: var(--text-soft);
+  text-decoration: none;
+}
+
+.audio-embed-link:hover {
+  color: var(--link);
+  text-decoration: underline;
+}
+
 .lightbox-overlay {
   position: fixed;
   top: 0;
