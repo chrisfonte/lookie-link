@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-05-13 — Unreleased — HTML Source Rendering
+
+- Render `.htm` files with the same syntax-highlighted code view and editable-mode support as `.html`
+- Added integration coverage for direct `/view/.../.htm` rendering and `/edit/.../.htm` access
+- Closes FON-6175
+
 ## 2026-05-12 — Unreleased — Audio File Playback
 
 - Added audio playback support for `.m4a`, `.mp3`, `.wav`, `.ogg`, `.oga`, `.opus`, `.flac`, `.aac`

@@ -21,6 +21,7 @@ async function makeFixture() {
 
   await fs.writeFile(path.join(alphaRoot, 'README.md'), '# Alpha\n');
   await fs.writeFile(path.join(alphaRoot, 'docs', 'guide.md'), '# Guide\n![Diagram](diagram.png)\n');
+  await fs.writeFile(path.join(alphaRoot, 'docs', 'landing.htm'), '<section><h1>Hello</h1><script>alert(1)</script></section>\n');
   await fs.writeFile(path.join(alphaRoot, 'docs', 'diagram.png'), 'png-bytes');
   await fs.writeFile(path.join(alphaRoot, 'secret', 'hidden.md'), '# Hidden\n');
   await fs.writeFile(path.join(betaRoot, 'notes.md'), '# Beta\n');
@@ -172,6 +173,33 @@ test('edit-scoped token can save while restricted humans and invalid tokens are 
 
     const savedContent = await fs.readFile(targetFile, 'utf8');
     assert.equal(savedContent, '# Updated\n');
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('html and htm files render as highlighted code and keep edit access', async () => {
+  const fixture = await makeFixture();
+  const server = await startTestServer({
+    mappings: fixture.mappings,
+    editingEnabled: true,
+  });
+
+  try {
+    const viewResponse = await server.request('/view/alpha/docs/landing.htm');
+    assert.equal(viewResponse.status, 200);
+    const viewHtml = await viewResponse.text();
+    assert.match(viewHtml, /language-xml/);
+    assert.match(viewHtml, /&lt;<span class="hljs-name">section<\/span>&gt;/);
+    assert.match(viewHtml, /&lt;<span class="hljs-name">script<\/span>&gt;/);
+    assert.doesNotMatch(viewHtml, /<script>alert\(1\)/);
+    assert.match(viewHtml, /· code<\/p>/);
+
+    const editResponse = await server.request('/edit/alpha/docs/landing.htm');
+    assert.equal(editResponse.status, 200);
+    const editHtml = await editResponse.text();
+    assert.match(editHtml, /Edit landing\.htm/);
   } finally {
     await server.close();
     await fs.rm(fixture.root, { recursive: true, force: true });

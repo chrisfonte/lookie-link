@@ -77,7 +77,7 @@ const EDITABLE_EXTENSIONS = new Set([
   '.yaml', '.yml',
   '.txt', '.json', '.toml', '.ini', '.conf', '.env',
   '.sh', '.bash', '.zsh', '.py', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
-  '.css', '.scss', '.html', '.xml', '.sql', '.go', '.rs', '.java', '.c', '.h', '.cpp',
+  '.css', '.scss', '.html', '.htm', '.xml', '.sql', '.go', '.rs', '.java', '.c', '.h', '.cpp',
   '.swift', '.rb', '.php', '.dockerignore', '.gitignore',
 ]);
 

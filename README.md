@@ -11,6 +11,7 @@ Lookie-Link solves this by giving every file a URL. The agent modifies a documen
 ## Features
 
 - **File browser + renderer** — directory listings, rendered markdown/code/YAML views
+- **HTML source rendering** — `.html` and `.htm` render as syntax-highlighted source, with the same view/edit flow as other code files
 - **Opt-in editable mode** — edit any non-binary file, then save back to disk
 - **Managed Paperclip grants** — issue time-limited repo/path tokens with audit history
 - **Grant projection writer** — optionally export active managed grants to a read-only private projection for Paperclip/runtime wiring
