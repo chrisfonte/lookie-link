@@ -9,11 +9,13 @@ const yaml = require('js-yaml');
 
 const { createApp } = require('../server');
 const { parseAccessConfig, authenticateRequest } = require('../lib/access-control');
+const HTML_FIXTURE_PATH = path.join(__dirname, 'fixtures', 'html', 'render-demo.htm');
 
 async function makeFixture() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lookie-link-access-'));
   const alphaRoot = path.join(root, 'alpha');
   const betaRoot = path.join(root, 'beta');
+  const htmlFixture = await fs.readFile(HTML_FIXTURE_PATH, 'utf8');
 
   await fs.mkdir(path.join(alphaRoot, 'docs'), { recursive: true });
   await fs.mkdir(path.join(alphaRoot, 'secret'), { recursive: true });
@@ -21,7 +23,7 @@ async function makeFixture() {
 
   await fs.writeFile(path.join(alphaRoot, 'README.md'), '# Alpha\n');
   await fs.writeFile(path.join(alphaRoot, 'docs', 'guide.md'), '# Guide\n![Diagram](diagram.png)\n');
-  await fs.writeFile(path.join(alphaRoot, 'docs', 'landing.htm'), '<section><h1>Hello</h1><script>alert(1)</script></section>\n');
+  await fs.writeFile(path.join(alphaRoot, 'docs', 'landing.htm'), htmlFixture);
   await fs.writeFile(path.join(alphaRoot, 'docs', 'diagram.png'), 'png-bytes');
   await fs.writeFile(path.join(alphaRoot, 'secret', 'hidden.md'), '# Hidden\n');
   await fs.writeFile(path.join(betaRoot, 'notes.md'), '# Beta\n');
@@ -191,7 +193,7 @@ test('html and htm files render as sanitized documents with raw toggle and edit 
     assert.equal(viewResponse.status, 200);
     const viewHtml = await viewResponse.text();
     assert.match(viewHtml, /<article class="content html" data-rendered-view>/);
-    assert.match(viewHtml, /<section><h1 id="hello">Hello<a class="anchor-link"/);
+    assert.match(viewHtml, /<section>\s*<h1 id="hello">Hello<a class="anchor-link"/);
     assert.doesNotMatch(viewHtml, /<script>alert\(1\)<\/script>/);
     assert.match(viewHtml, /data-raw-toggle/);
     assert.match(viewHtml, /language-xml" data-raw-code/);
