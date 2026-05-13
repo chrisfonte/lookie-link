@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Lookie-Link is a self-hosted Express.js server for browsing and editing local directories over a private network. It renders markdown, syntax-highlighted code, and YAML files viewable from any device (designed for Tailscale / private networks, no auth).
+Lookie-Link is a self-hosted Express.js server for browsing and editing local directories over a private network. It renders markdown, sanitized HTML, syntax-highlighted code, and YAML files viewable from any device (designed for Tailscale / private networks, no auth).
 
 ## Commands
 
@@ -20,7 +20,7 @@ Three core modules plus a client-side script:
 
 - **`server.js`** — Express app setup, all route handlers (`/`, `/healthz`, `/view/*`, `/edit/*`, `/api/save/*`, `/api/preview/*`, `/asset/*`), binary detection, path safety via `safeResolve()`. Loads custom themes at startup and passes `customThemeCss` to all render functions.
 - **`lib/config.js`** — Config loading with priority: env vars > user YAML (`~/.config/lookie-link/lookie-link.yaml`) > project YAML > defaults. Key settings: PORT, HOSTNAME, ROOT_MAPPINGS, LOOKIE_LINK_ENABLE_EDITING. Also handles custom theme loading from YAML config (`loadCustomThemes()`, `generateCustomThemeCss()`).
-- **`lib/renderer.js`** — Rendering pipeline: markdown-it for markdown, highlight.js for code/YAML. Post-processing chain in `postProcessHtml()`: cross-link rewriting → tilde link rewriting → image source rewriting → heading anchors → YAML anchors → DOMPurify sanitization (always last). Shared `toolbarHtml()` and `themeScript()` provide the toolbar and theme switching JS on every page type. Image lightbox is injected via `baseHtml()`.
+- **`lib/renderer.js`** — Rendering pipeline: markdown-it for markdown, sanitized inline HTML documents for `.html`/`.htm`, highlight.js for code/YAML. Post-processing chain in `postProcessHtml()`: cross-link rewriting → tilde link rewriting → image source rewriting → heading anchors → YAML anchors → DOMPurify sanitization (always last). Shared `toolbarHtml()` and `themeScript()` provide the toolbar and theme switching JS on every page type. Image lightbox is injected via `baseHtml()`.
 - **`lib/path-utils.js`** — Path resolution, URL-safe escaping, breadcrumb building.
 - **`public/editor.js`** — Client-side vanilla JS for edit/preview tab switching, debounced preview, save with conflict detection.
 - **`public/style.css`** — Theme system via CSS custom properties and `data-color-scheme`/`data-theme` attributes. Built-in themes: Slate, Teal, Nord, Rosé Pine, Monokai, Solarized, GitHub. Custom themes injected as inline `<style>` from YAML config.

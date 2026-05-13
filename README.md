@@ -11,7 +11,7 @@ Lookie-Link solves this by giving every file a URL. The agent modifies a documen
 ## Features
 
 - **File browser + renderer** — directory listings, rendered markdown/code/YAML views
-- **HTML source rendering** — `.html` and `.htm` render as syntax-highlighted source, with the same view/edit flow as other code files
+- **HTML rendering** — `.html` and `.htm` render as sanitized documents with a Raw toggle back to source view
 - **Opt-in editable mode** — edit any non-binary file, then save back to disk
 - **Managed Paperclip grants** — issue time-limited repo/path tokens with audit history
 - **Grant projection writer** — optionally export active managed grants to a read-only private projection for Paperclip/runtime wiring
@@ -94,6 +94,8 @@ This is **not** a public-facing web server. By default, human access still comes
 ## Inspiration
 
 The idea for Lookie-Link came from watching Brian Castle's video ["How to Create JOBS for OpenClaw Agents"](https://www.youtube.com/watch?v=uUN1oy2PRHo) (February 2026). Castle built **Brainown**, a markdown viewer that syncs via Dropbox and lets him tap links from Telegram to jump straight to rendered documentation on his phone. Lookie-Link takes the same concept and builds it as a self-hosted web server for Tailscale networks, eliminating the Dropbox dependency.
+
+The HTML-file rendering path was additionally nudged by the demo at https://www.youtube.com/watch?v=S9EGx6ik-18, which showed the value of previewing standalone HTML artifacts inside the same mobile-friendly review loop.
 
 ## License
 

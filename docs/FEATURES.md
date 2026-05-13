@@ -65,6 +65,28 @@ Notes:
 - Audio links inside fenced ` ``` ` code blocks are left as code, not rewritten to a player.
 - The image lightbox does not apply to `<audio>` (it's a separate, non-binary widget).
 
+## HTML Rendering
+
+Standalone `.html` and `.htm` files render as sanitized document content instead of raw source by default.
+
+Example:
+
+```html
+<section>
+  <h1>Hello</h1>
+  <p><img src="./diagram.png" alt="Diagram"></p>
+  <script>alert('remove me')</script>
+</section>
+```
+
+Behavior:
+
+- The default view renders the HTML fragment/document inline inside Lookie-Link
+- A **Raw** toolbar button swaps back to syntax-highlighted source
+- `<script>` tags and inline event handlers are stripped by DOMPurify
+- Local `<img src="./file.png">` references are rewritten through `/asset/<repo>/<path>` so images still load from the repo
+- Heading anchors and TOC generation apply to rendered HTML headings the same way they do for markdown
+
 ## Themes
 
 10 built-in color themes, each with dark and light variants:

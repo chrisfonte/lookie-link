@@ -179,7 +179,7 @@ test('edit-scoped token can save while restricted humans and invalid tokens are 
   }
 });
 
-test('html and htm files render as highlighted code and keep edit access', async () => {
+test('html and htm files render as sanitized documents with raw toggle and edit access', async () => {
   const fixture = await makeFixture();
   const server = await startTestServer({
     mappings: fixture.mappings,
@@ -190,11 +190,12 @@ test('html and htm files render as highlighted code and keep edit access', async
     const viewResponse = await server.request('/view/alpha/docs/landing.htm');
     assert.equal(viewResponse.status, 200);
     const viewHtml = await viewResponse.text();
-    assert.match(viewHtml, /language-xml/);
-    assert.match(viewHtml, /&lt;<span class="hljs-name">section<\/span>&gt;/);
-    assert.match(viewHtml, /&lt;<span class="hljs-name">script<\/span>&gt;/);
-    assert.doesNotMatch(viewHtml, /<script>alert\(1\)/);
-    assert.match(viewHtml, /· code<\/p>/);
+    assert.match(viewHtml, /<article class="content html" data-rendered-view>/);
+    assert.match(viewHtml, /<section><h1 id="hello">Hello<a class="anchor-link"/);
+    assert.doesNotMatch(viewHtml, /<script>alert\(1\)<\/script>/);
+    assert.match(viewHtml, /data-raw-toggle/);
+    assert.match(viewHtml, /language-xml" data-raw-code/);
+    assert.match(viewHtml, /· html<\/p>/);
 
     const editResponse = await server.request('/edit/alpha/docs/landing.htm');
     assert.equal(editResponse.status, 200);
