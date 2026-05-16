@@ -5,7 +5,7 @@
 | `GET /` | Repository index |
 | `GET /healthz` | Health check (returns `{"status":"ok","editingEnabled":bool}`) |
 | `GET /view/<repo>/<path>` | Rendered file or directory listing |
-| `GET /asset/<repo>/<path>` | Asset serving for inline images and audio. Supports `Range` requests so `<audio>` can seek. MIME type derived from extension (`.png`/`.jpg`/`.gif`/`.webp`/`.svg`/`.jpeg` for images; `.m4a`/`.mp3`/`.wav`/`.ogg`/`.oga`/`.opus`/`.flac`/`.aac` for audio). |
+| `GET /asset/<repo>/<path>` | Asset serving for inline images, audio, and PDFs. Supports `Range` requests so `<audio>` can seek, and also backs the embedded PDF viewer page. MIME type derived from extension (`.png`/`.jpg`/`.gif`/`.webp`/`.svg`/`.jpeg` for images; `.m4a`/`.mp3`/`.wav`/`.ogg`/`.oga`/`.opus`/`.flac`/`.aac` for audio; `.pdf` for PDFs). |
 | `GET /edit/<repo>/<path>` | Edit page (only when editing enabled) |
 | `POST /api/save/<repo>/<path>` | Save updated file content (JSON body) |
 | `POST /api/preview/<repo>/<path>` | Render preview HTML from draft content (JSON body) |

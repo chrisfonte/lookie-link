@@ -24,6 +24,7 @@ async function makeFixture() {
   await fs.writeFile(path.join(alphaRoot, 'README.md'), '# Alpha\n');
   await fs.writeFile(path.join(alphaRoot, 'docs', 'guide.md'), '# Guide\n![Diagram](diagram.png)\n');
   await fs.writeFile(path.join(alphaRoot, 'docs', 'landing.htm'), htmlFixture);
+  await fs.writeFile(path.join(alphaRoot, 'docs', 'manual.pdf'), '%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n');
   await fs.writeFile(path.join(alphaRoot, 'docs', 'diagram.png'), 'png-bytes');
   await fs.writeFile(path.join(alphaRoot, 'secret', 'hidden.md'), '# Hidden\n');
   await fs.writeFile(path.join(betaRoot, 'notes.md'), '# Beta\n');
@@ -203,6 +204,49 @@ test('html and htm files render as sanitized documents with raw toggle and edit 
     assert.equal(editResponse.status, 200);
     const editHtml = await editResponse.text();
     assert.match(editHtml, /Edit landing\.htm/);
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('pdf files render in a dedicated viewer page and stream from the asset route', async () => {
+  const fixture = await makeFixture();
+  const server = await startTestServer({
+    mappings: fixture.mappings,
+    editingEnabled: true,
+    accessConfig: {
+      tokens: {
+        viewer: {
+          secret: 'viewer-token',
+          repos: {
+            alpha: { paths: ['docs/'] },
+          },
+          permissions: {
+            view: true,
+            edit: false,
+          },
+        },
+      },
+    },
+  });
+
+  try {
+    const viewResponse = await server.request('/view/alpha/docs/manual.pdf?token=viewer-token');
+    assert.equal(viewResponse.status, 200);
+    const viewHtml = await viewResponse.text();
+    assert.match(viewHtml, /class="content pdf-view"/);
+    assert.match(viewHtml, /<iframe[\s\S]*class="pdf-frame"/);
+    assert.match(viewHtml, /\/asset\/alpha\/docs\/manual\.pdf\?token=viewer-token#view=FitH/);
+    assert.match(viewHtml, /· pdf<\/p>/);
+    assert.doesNotMatch(viewHtml, />Edit</);
+
+    const assetResponse = await server.request('/asset/alpha/docs/manual.pdf?token=viewer-token');
+    assert.equal(assetResponse.status, 200);
+    assert.equal(assetResponse.headers.get('content-type'), 'application/pdf');
+
+    const editResponse = await server.request('/edit/alpha/docs/manual.pdf?token=viewer-token');
+    assert.equal(editResponse.status, 403);
   } finally {
     await server.close();
     await fs.rm(fixture.root, { recursive: true, force: true });

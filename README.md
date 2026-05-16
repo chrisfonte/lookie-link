@@ -12,6 +12,7 @@ Lookie-Link solves this by giving every file a URL. The agent modifies a documen
 
 - **File browser + renderer** — directory listings, rendered markdown/code/YAML views
 - **HTML rendering** — `.html` and `.htm` render as sanitized documents with a Raw toggle back to source view
+- **PDF rendering** — `.pdf` files open in an embedded viewer page with browser-open and download actions
 - **Opt-in editable mode** — edit any non-binary file, then save back to disk
 - **Managed Paperclip grants** — issue time-limited repo/path tokens with audit history
 - **Grant projection writer** — optionally export active managed grants to a read-only private projection for Paperclip/runtime wiring
@@ -21,6 +22,7 @@ Lookie-Link solves this by giving every file a URL. The agent modifies a documen
 - **Anchor linking** — every heading and YAML key gets a copy-link button
 - **Image lightbox** — click any inline image for a full-screen view
 - **Audio playback** — `.m4a`, `.mp3`, `.wav`, `.ogg`, `.opus`, `.flac`, `.aac` get an inline `<audio>` player when linked in markdown (relative path, `~/repo` path, or fully-qualified `/view/...` URL), plus a dedicated player page when browsed directly. See [FEATURES.md](docs/FEATURES.md#audio-playback) for examples.
+- **PDF viewer** — `.pdf` files get a dedicated `/view/...` page with an embedded browser viewer backed by the `/asset/...` route.
 - **10 built-in themes** — Slate, Teal, Nord, Rosé Pine, Monokai, Solarized, GitHub, Ember, Noir, Indigo (dark + light)
 - **Custom themes** — define your own in the YAML config
 - **YouTube iframe embeds** — sandboxed security via DOMPurify

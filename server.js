@@ -44,6 +44,7 @@ const {
   renderDirectoryPage,
   renderImagePage,
   renderAudioPage,
+  renderPdfPage,
   renderEditPage,
   renderPreviewHtml,
   setThemeList,
@@ -69,9 +70,14 @@ const AUDIO_MIME_TYPES = {
   '.aac': 'audio/aac',
 };
 
-const ASSET_MIME_TYPES = { ...IMAGE_MIME_TYPES, ...AUDIO_MIME_TYPES };
+const PDF_MIME_TYPES = {
+  '.pdf': 'application/pdf',
+};
+
+const ASSET_MIME_TYPES = { ...IMAGE_MIME_TYPES, ...AUDIO_MIME_TYPES, ...PDF_MIME_TYPES };
 const IMAGE_EXTENSIONS = new Set(Object.keys(IMAGE_MIME_TYPES));
 const AUDIO_EXTENSIONS = new Set(Object.keys(AUDIO_MIME_TYPES));
+const PDF_EXTENSIONS = new Set(Object.keys(PDF_MIME_TYPES));
 const EDITABLE_EXTENSIONS = new Set([
   '.md', '.markdown', '.mdown',
   '.yaml', '.yml',
@@ -112,7 +118,7 @@ function isEditableFile(relativePath) {
     return false;
   }
 
-  if (IMAGE_EXTENSIONS.has(extension) || AUDIO_EXTENSIONS.has(extension)) {
+  if (IMAGE_EXTENSIONS.has(extension) || AUDIO_EXTENSIONS.has(extension) || PDF_EXTENSIONS.has(extension)) {
     return false;
   }
 
@@ -504,6 +510,23 @@ function createApp(options = {}) {
         parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
         audioHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
         mimeType: AUDIO_MIME_TYPES[extension],
+        mtime: formatMTime(stat.mtime),
+        size: formatFileSize(stat.size),
+        customThemeCss,
+        queryToken: accessContext.queryToken,
+      });
+
+      res.status(200).type('html').send(html);
+      return;
+    }
+
+    if (PDF_EXTENSIONS.has(extension)) {
+      const parentRel = parentPath(relativePath);
+      const html = renderPdfPage({
+        repo,
+        relativePath,
+        parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
+        pdfHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
         mtime: formatMTime(stat.mtime),
         size: formatFileSize(stat.size),
         customThemeCss,

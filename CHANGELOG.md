@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-05-14 — Unreleased — PDF Rendering
+
+- Render `.pdf` files at `/view/...pdf` in a dedicated viewer page with an embedded browser PDF frame, Open-in-browser and Download links.
+- Stream PDF bytes from `/asset/...pdf` with `application/pdf` MIME type and `Range` request support.
+- PDFs remain non-editable (treated as binary assets); markdown links resolving to `.pdf` open the same viewer page.
+- Documented in README, `docs/API.md`, `docs/FEATURES.md`. Test coverage in `test/access-control.test.js`.
+
 ## 2026-05-13 — Unreleased — HTML Source Rendering
 
 - Render `.html` and `.htm` files as sanitized HTML documents with a Raw source toggle

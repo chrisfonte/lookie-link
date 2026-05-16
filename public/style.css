@@ -642,9 +642,28 @@ tbody tr:last-child td {
   padding: 2rem 1rem;
 }
 
+.content.pdf-view {
+  padding: 1rem;
+}
+
 .content.audio-view audio {
   width: 100%;
   max-width: 640px;
+}
+
+.pdf-frame {
+  display: block;
+  width: 100%;
+  min-height: 72vh;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.pdf-actions {
+  margin-top: 1rem;
+  text-align: center;
+  font-size: 0.95rem;
 }
 
 .audio-download {

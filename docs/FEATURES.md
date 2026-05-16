@@ -65,6 +65,19 @@ Notes:
 - Audio links inside fenced ` ``` ` code blocks are left as code, not rewritten to a player.
 - The image lightbox does not apply to `<audio>` (it's a separate, non-binary widget).
 
+## PDF Rendering
+
+Browsing a PDF directly at `/view/<repo>/<path>.pdf` renders a dedicated viewer page with:
+
+- An embedded browser PDF frame backed by `/asset/<repo>/<path>.pdf`
+- An **Open in browser** link for native PDF controls
+- A **Download** link and the usual file metadata
+
+Notes:
+
+- PDFs are treated as binary assets, so they are **not** editable in editable mode.
+- Standard markdown links that resolve to `/view/...pdf` now open the same dedicated viewer page.
+
 ## HTML Rendering
 
 Standalone `.html` and `.htm` files render as sanitized document content instead of raw source by default.
