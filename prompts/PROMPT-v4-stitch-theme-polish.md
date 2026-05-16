@@ -27,7 +27,7 @@ Move Lookie-Link toward a more editorial, trustworthy review surface for agent-w
 ## Primary source inputs
 
 - Stitch File Index screen concept
-- Translation brief: `/Users/chrisfonte/operations-incubator/specs/lookie-link-theme-translation-brief.md`
+- Translation brief: `~/operations-incubator/specs/lookie-link-theme-translation-brief.md`
 
 ## Files to modify
 

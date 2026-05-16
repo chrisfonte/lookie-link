@@ -1,6 +1,6 @@
 # PROMPT-v3 — Lookie-Link Editable Mode (Direct Codex Run)
 
-Repo: `/Users/chrisfonte/projects/lookie-link`
+Repo: `~/projects/lookie-link`
 Branch: `main` (direct-to-main allowed for this task)
 Related GitHub issues:
 - #29 feat: make direct image links open actual image views
@@ -9,8 +9,8 @@ Related GitHub issues:
 - #32 docs: update README and validation coverage for editable mode
 
 Read first:
-- `/Users/chrisfonte/operations-incubator/specs/lookie-link-editor/SPEC.md`
-- `/Users/chrisfonte/operations-incubator/specs/lookie-link-editor/CODEX-PROMPT.md`
+- `~/operations-incubator/specs/lookie-link-editor/SPEC.md`
+- `~/operations-incubator/specs/lookie-link-editor/CODEX-PROMPT.md`
 
 Implement this in **4 staged phases** on `main`:
 1. direct local image-link viewing
