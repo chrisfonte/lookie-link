@@ -6,6 +6,7 @@
 **Companions**:
 - [`competitors/here-now-vs-lookie-link-2026-05-16.md`](../competitors/here-now-vs-lookie-link-2026-05-16.md) — establishes the feature delta this doc commercializes.
 - [`self-hosted-here-now-alternative-2026-05-16.md`](./self-hosted-here-now-alternative-2026-05-16.md) — focused analysis of the specific "be the open-source alternative to `here.now`" positioning, treated as its own thing rather than as one row in this doc's four-path matrix. **Recommended read after this one.**
+- [`lookie-link-as-agent-native-wiki-2026-05-16.md`](./lookie-link-as-agent-native-wiki-2026-05-16.md) — a different and larger framing: position Lookie-Link as an agent-native self-hosted alternative to Notion / Outline / Confluence / Wiki.js. Subsumes the publish-and-share primitive but is a 6–9 month v0 / 12–24 month full-claim build rather than a 1–3 month one.
 
 ## TL;DR
 

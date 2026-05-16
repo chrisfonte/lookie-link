@@ -6,6 +6,7 @@
 **Companions**:
 - [`competitors/here-now-vs-lookie-link-2026-05-16.md`](../competitors/here-now-vs-lookie-link-2026-05-16.md) — feature-level comparison; concluded "stay in lane, add bounded public-share." This doc revisits that recommendation against a different framing question.
 - [`lookie-link-public-saas-options-2026-05-16.md`](./lookie-link-public-saas-options-2026-05-16.md) — four-path SaaS options analysis. This doc is effectively a fifth path that the previous doc folded into Path 1 ("skip — stay OSS-only") but which deserves separate treatment.
+- [`lookie-link-as-agent-native-wiki-2026-05-16.md`](./lookie-link-as-agent-native-wiki-2026-05-16.md) — alternative positioning that treats Lookie-Link as an agent-native self-hosted wiki rather than a publish-and-share service. Larger TAM, longer engineering commitment, partially compatible with the `here.now`-alternative play as a sequential layering.
 
 ## TL;DR
 
