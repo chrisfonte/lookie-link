@@ -5,6 +5,10 @@
 **Purpose**: Decide where Lookie-Link should and should not try to match the agent-facing static-hosting service `here.now`, with the option of extending Lookie-Link to cover the same primitive (and more) on top of its existing file-viewer foundation.
 **Source Type**: Hands-on understanding of Lookie-Link, plus the external research at [`here-now-instant-web-hosting-for-agents-2026-05-16`](https://github.com/chrisfonte/operations-research/blob/main/ai-tools/here-now/here-now-instant-web-hosting-for-agents-2026-05-16.md) (this is the public canonical doc; the lookie-link doc you are reading right now is the project-side companion focused on roadmap implications).
 
+**Companion analyses** (commercialization angle):
+- [`../commercialization/lookie-link-public-saas-options-2026-05-16.md`](../commercialization/lookie-link-public-saas-options-2026-05-16.md) — four-path SaaS options analysis.
+- [`../commercialization/self-hosted-here-now-alternative-2026-05-16.md`](../commercialization/self-hosted-here-now-alternative-2026-05-16.md) — positioning analysis specifically for the "be the open-source alternative to `here.now`" play, distinct from the four SaaS paths.
+
 > **Reading order.** The public canonical describes `here.now` end-to-end; this doc assumes you have skimmed it and asks the only question that matters for Lookie-Link itself: *should Lookie-Link try to be a here.now-shaped service, and if so, how?*
 
 ## TL;DR

@@ -22,3 +22,4 @@ Those belong in private operator-side companion docs, not in this public repo.
 ## Current docs
 
 - [`lookie-link-public-saas-options-2026-05-16.md`](lookie-link-public-saas-options-2026-05-16.md) — What it would take to run a public hosted version of Lookie-Link as a paid SaaS, keeping the OSS core intact. Engineering scope, auth/multi-tenancy, abuse model, open-core split, pricing positioning vs. `here.now`, and a four-path decision framework.
+- [`self-hosted-here-now-alternative-2026-05-16.md`](self-hosted-here-now-alternative-2026-05-16.md) — Positioning analysis for the specific "be the open-source alternative to `here.now`" play, in the lineage of Plausible/Mattermost/Sentry/Coolify. Treats it as its own option distinct from the four SaaS paths above, with a category survey, feature-gap reality check, and recommended sequencing.

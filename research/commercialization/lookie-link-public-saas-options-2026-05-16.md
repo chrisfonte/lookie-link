@@ -3,7 +3,9 @@
 **Created**: 2026-05-16
 **Status**: Active — options analysis, not committed strategy
 **Purpose**: Explore what it would take to run a public, paid hosted version of Lookie-Link as a commercial service while keeping the MIT open-source core intact. Identify the engineering scope beyond the current OSS surface, the auth / multi-tenancy / abuse-control requirements, the open-core split, pricing positioning relative to `here.now` and adjacent products, and the conditions under which building this is worth doing.
-**Companion**: [`competitors/here-now-vs-lookie-link-2026-05-16.md`](../competitors/here-now-vs-lookie-link-2026-05-16.md) — establishes the feature delta this doc commercializes.
+**Companions**:
+- [`competitors/here-now-vs-lookie-link-2026-05-16.md`](../competitors/here-now-vs-lookie-link-2026-05-16.md) — establishes the feature delta this doc commercializes.
+- [`self-hosted-here-now-alternative-2026-05-16.md`](./self-hosted-here-now-alternative-2026-05-16.md) — focused analysis of the specific "be the open-source alternative to `here.now`" positioning, treated as its own thing rather than as one row in this doc's four-path matrix. **Recommended read after this one.**
 
 ## TL;DR
 
