@@ -1,5 +1,29 @@
 # Features
 
+## Markdown Link Rendering
+
+Three forms of markdown link all render as clickable `<a>` tags:
+
+1. **Explicit link** — `[ITFlow homepage](https://itflow.org)`
+2. **Autolink** — `<https://itflow.org>`
+3. **Bare URL** — `https://itflow.org` (auto-detected by markdown-it's `linkify`)
+
+The third form means a `## Sources` bullet list of plain URLs renders fully clickable without any special syntax:
+
+```markdown
+## Sources
+- https://itflow.org
+- https://github.com/itflow-org/itflow
+```
+
+Notes:
+
+- URLs inside fenced code blocks and inline `` `code` `` are left literal — not linkified.
+- URLs inside HTML attribute values (e.g. `<iframe src="...">`) are not touched, so embedded YouTube iframes continue to work.
+- Email addresses and `www.`-prefixed hosts are also auto-linkified.
+
+For new research documentation, the preferred bibliography form is still `[label](url)` because it gives you control over the link text and is portable across every CommonMark renderer (not all of which enable bare-URL linkify). See the standards doc cross-linking section for full guidance.
+
 ## Cross-Link Rendering
 
 Lookie-Link rewrites hybrid cross-link patterns in rendered markdown:

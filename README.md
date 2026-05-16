@@ -23,6 +23,7 @@ Lookie-Link solves this by giving every file a URL. The agent modifies a documen
 - **Image lightbox** — click any inline image for a full-screen view
 - **Audio playback** — `.m4a`, `.mp3`, `.wav`, `.ogg`, `.opus`, `.flac`, `.aac` get an inline `<audio>` player when linked in markdown (relative path, `~/repo` path, or fully-qualified `/view/...` URL), plus a dedicated player page when browsed directly. See [FEATURES.md](docs/FEATURES.md#audio-playback) for examples.
 - **PDF viewer** — `.pdf` files get a dedicated `/view/...` page with an embedded browser viewer backed by the `/asset/...` route.
+- **Auto-linkified URLs** — bare URLs (`https://example.com`) in markdown text render as clickable links without needing `[label](url)` syntax. Useful for `## Sources` bullet lists. URLs inside code blocks stay literal. See [FEATURES.md](docs/FEATURES.md#markdown-link-rendering).
 - **10 built-in themes** — Slate, Teal, Nord, Rosé Pine, Monokai, Solarized, GitHub, Ember, Noir, Indigo (dark + light)
 - **Custom themes** — define your own in the YAML config
 - **YouTube iframe embeds** — sandboxed security via DOMPurify

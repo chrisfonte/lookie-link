@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-05-16 — Unreleased — Linkify Bare URLs
+
+- Enabled `linkify: true` in markdown-it so bare URLs (e.g. `https://itflow.org` in a `## Sources` bullet list) render as clickable links. Verified YouTube iframe + sandbox flow still works and that URLs inside fenced/inline code remain literal.
+- Documented behavior in README feature list, `docs/FEATURES.md#markdown-link-rendering`, and as an informational comment in `lookie-link.yaml.example`.
+- Closes FON-7049
+
 ## 2026-05-14 — Unreleased — PDF Rendering
 
 - Render `.pdf` files at `/view/...pdf` in a dedicated viewer page with an embedded browser PDF frame, Open-in-browser and Download links.

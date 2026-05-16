@@ -3,6 +3,14 @@
 # Copy this to ~/.config/lookie-link/lookie-link.yaml and customize for your setup.
 # After editing, restart the server for changes to take effect.
 
+# Markdown rendering behavior (informational — not configurable):
+# - Bare URLs in markdown text (e.g. `https://example.com` in a `## Sources`
+#   bullet) auto-render as clickable links via markdown-it's `linkify` option.
+# - URLs inside fenced code blocks and inline `code` stay literal.
+# - URLs inside HTML attribute values (e.g. `<iframe src="...">`) are not
+#   touched, so embedded YouTube iframes continue to work.
+# See docs/FEATURES.md#markdown-link-rendering for full details.
+
 # Server settings
 server:
   port: 9876
