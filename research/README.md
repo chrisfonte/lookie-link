@@ -5,6 +5,7 @@ Background research that informs Lookie-Link's design decisions. Lives alongside
 ## Layout
 
 - **`competitors/`** — Adjacent products in the agent-output-publishing and file-viewing space. Each doc is a deep look at one competitor or one comparable open-source project, with a final section that maps the comparison back onto Lookie-Link's roadmap.
+- **`commercialization/`** — Options analyses for how (or whether) to layer a hosted commercial service on top of Lookie-Link without compromising the open-source core. Open-core strategy, pricing, build scope, decision frameworks.
 - (Future) **`patterns/`** — Cross-cutting design patterns (e.g. agent-facing OpenAPI surfaces, presigned-URL upload flows) that may apply across multiple competitors.
 - (Future) **`history/`** — Decisions that were considered and rejected, with the reasoning preserved so we don't re-debate them.
 
