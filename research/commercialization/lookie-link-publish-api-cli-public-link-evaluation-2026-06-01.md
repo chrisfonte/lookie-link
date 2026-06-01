@@ -17,6 +17,7 @@
 > **Addendum d** evaluates whether managed repos should optionally back to a real GitHub remote with full bidirectional git-sync (`pull AND push`) and a configurable sync scheduler. Designs the feature with per-repo `syncMode` choice (`bidirectional` default + `canonical` opt-in) and per-repo `scheduling` choice (`built-in` default + `external` + `both`). Proposes a phase 1.5 slot between phase 1 and phase 2 if Chris wants to lock it in. Phase 1's content does not change either way. *Note: the initial draft of this addendum framed the design as canonical-only sync; corrected after Chris clarified that multi-writer is the general case and a SaaS-product default.*
 > **Addendum e** answers four questions Chris raised after addendum d: (1) cloud agents (OpenAI / cloud Claude / OpenClaw cloud) using the Lookie-Link API — reinforces existing design; flags FON-7058 as the transport that makes it reachable. (2) "Lookie-Link becomes the canonical location" — refactors the conceptual framing to "Lookie-Link as canonical content store with sync-to-other-systems as configurable plugins." (3) File versioning à la Syncthing for rollback, separate from git history — designs an optional `.versions/` sidecar layer per managed repo. (4) Database question and "are we over-complicating?" — direct answer: yes, SQLite (embedded, file-backed, no separate service), and no, this is the minimum for a serious product, not over-engineering.
 > **Addendum f** addresses backup: (1) SaaS backup model — S3 / S3-compatible client-side-encrypted, per-tenant prefix, owned by the SaaS operator. (2) OSS backup — same mechanism exposed as operator-configurable: S3-compatible target (any vendor), local-rsync fallback for homelab. (3) "Is backup the versioning?" — partial yes, recommended design is complementary layers with unified API surface. (4) Phase slotting — proposes phase 1.7 (between phase 1.5 GitHub-backing and phase 2 CLI) for ~2–3 weeks of work, or defer to phase 4 if the operational stopgap (filesystem-level backup of the Lookie-Link host) is acceptable for the first months.
+> **Addendum g** responds to Chris's "maybe we use Syncthing FOR the backup since it has the versioning anyway?" Genuine insight. Promotes the Syncthing-peer sync plugin from "future" (Addendum e) to a first-class phase 1.7 target type alongside S3. Honest about the split: Syncthing is excellent for self-hosted operators (peer-to-peer, built-in versioning, free, mature) but doesn't fit the SaaS-hosted-by-us pattern where the operator manages backup centrally — so phase 1.7 ships both target types from one abstraction. Also addresses whether the `.versions/` sidecar is still needed (yes — default-on for operators without Syncthing or with snapshot-granularity backup).
 > The body of this document below is the original evaluation; the addenda are the current recommendation.
 
 ## TL;DR
@@ -1590,3 +1591,191 @@ Four independent lock-in / defer decisions, each of which phase 1 ships unchange
 | **Phase 1.7 backup (this addendum)** | **Defer to phase 4** | **Lock in (Option A)** |
 
 If all three lock-ins land (1.5 + 1B-versioning + 1.7), the prototype-with-shares timeline becomes ~13–16 weeks. The product that ships is a serious canonical content store with durable backing, versioning, GitHub sync, identity, search, publish, CLI, and three share modes. That is the build worth doing for the operator's own use, the open-source distribution, and a future SaaS — all on the same code base.
+
+---
+
+## Addendum 2026-06-01g — Syncthing as a backup target (and Chris was right)
+
+This addendum responds to Chris's seventh comment: *"Maybe we use Syncthing FOR the backup since it has the versioning anyway???"*
+
+**Short answer**: yes, for self-hosted operators — Syncthing is an excellent backup mechanism that solves backup + versioning + cross-machine replication in one tool that already exists. **But**: SaaS deployments where Lookie-Link Inc. hosts customer data don't fit the Syncthing peer-to-peer model and still need S3-backed backup. Phase 1.7's right design is **both target types from one abstraction**, not "Syncthing replaces S3."
+
+This sharpens Addendum f's design rather than replacing it.
+
+### Why Syncthing is genuinely good for backup-as-versioning
+
+Syncthing already has, mature and battle-tested, every property Addendum f's custom backup design was reaching for:
+
+| Backup concern | Custom S3 design (Addendum f) | Syncthing |
+|---|---|---|
+| Continuous replication | Custom: every-write async upload | **Built-in**: continuous file sync between peers |
+| Periodic snapshots | Custom: 15-min snapshots, tiered retention | **Built-in**: versioning policies (simple / staggered / trash-can / external) |
+| Encryption | Custom: AES-256-GCM client-side | **Built-in**: TLS in transit; encrypted folders for untrusted receivers |
+| Peer discovery + NAT traversal | N/A (S3 endpoint is known) | **Built-in**: discovery, introducer, relay |
+| Cross-region / multi-target | Custom: configure multiple S3 targets | **Built-in**: send to N peers; each peer has its own retention |
+| Conflict handling | Custom: state machine for divergence | **Built-in**: per-file conflict markers + reconciliation |
+| Restore UX | Custom: API + UI for point-in-time | Via Syncthing's `.stversions/` directory (file-system-native) |
+| Cost | S3 storage + egress | **Zero** (just the operator's bandwidth + receiver storage) |
+| Operational complexity | Operator manages S3 credentials + KMS | Operator runs Syncthing as a sidecar (already mature) |
+
+For a self-hosted operator who is comfortable running an extra process, this is **substantially less work** than the custom S3 design — and provides equivalent or better functionality for versioning + replication + backup.
+
+Chris's insight is correct: **backup-as-versioning collapses cleanly when the backup mechanism already has versioning**. Syncthing is the right tool for this collapse in the self-hosted case.
+
+### Why SaaS still needs S3-backed backup
+
+The Syncthing model doesn't fit a SaaS where Lookie-Link Inc. is hosting customer data. Reasons:
+
+1. **SaaS backup is centrally operated by the SaaS provider.** Customers expect "you handle backup, don't make me think about it." Syncthing's peer-to-peer model puts the receivers somewhere — either with the customer (who doesn't want to operate them) or with Lookie-Link Inc. (which is fine but is just "running Syncthing receivers" rather than "running a backup service"). The standard SaaS pattern of "encrypted backup to managed object store" doesn't naturally map onto Syncthing.
+
+2. **Object storage is the SaaS economics.** S3 / R2 / B2 are dirt-cheap per GB for long-retention backup. Syncthing-receiver storage is a VM or a NAS — same cost class as primary compute, much more expensive per GB at retention scales.
+
+3. **Recovery procedures want standard tooling.** When something fails in production, the on-call engineer wants `aws s3 cp` and a familiar restore runbook. Syncthing-based recovery is unfamiliar territory for most SREs.
+
+4. **Compliance posture.** Many compliance regimes (SOC 2, ISO 27001, HIPAA-adjacent) have well-trodden patterns for "encrypted backups to a versioned object store with documented retention." Syncthing-based backup has fewer industry templates.
+
+5. **Cross-region durability.** S3 cross-region replication is a one-config-line setup. Syncthing's equivalent (peers in different regions) works but is more operationally intensive at the SaaS scale.
+
+For self-hosted operators, none of these matter (or matter less). For SaaS, all of them matter.
+
+### Right design: both target types from one abstraction
+
+Phase 1.7 (Addendum f) ships **a backup target abstraction**. Target implementations:
+
+| Target type | What it is | Primary use case |
+|---|---|---|
+| `s3` | Any S3-compatible API with custom scheduler + retention + encryption | SaaS deployments; self-hosted operators with object-storage accounts; operators who want a familiar industry-standard backup path |
+| `syncthing-peer` | **Lookie-Link knows how to coexist with a Syncthing folder watching its content paths**, surfaces Syncthing-side versioning in the unified versions API, and reads Syncthing's `.stversions/` directory for restore | **Self-hosted operators with Syncthing already in their stack (Chris's case)**; homelab operators who want backup + replication + versioning in one free tool |
+| `local-rsync` | rsync to a mounted filesystem | Homelab / NAS deployments without object storage AND without Syncthing |
+| `restic` (future) | restic as the backup engine | Self-hosted operators who want dedupe + encryption + snapshots from a familiar tool |
+
+Operators can configure **multiple targets simultaneously**. A self-hosted operator might use `syncthing-peer` for live replication + recent versioning AND `s3` for long-retention encrypted off-site backup. A SaaS deployment uses `s3` primary + `s3` secondary cross-region.
+
+### Syncthing-peer target — design
+
+Lookie-Link doesn't bundle Syncthing or run it as a subprocess. The integration is **coexistence + introspection**:
+
+1. **Operator configures Syncthing externally** to watch the Lookie-Link data directories (`managed-repos/`, `published/`, optionally `lookie-link.db` — though SQLite-while-open replication has caveats).
+2. **Operator declares the Syncthing folder in Lookie-Link config**, telling Lookie-Link where Syncthing's `.stversions/` directory lives (per-folder by default).
+3. **Lookie-Link reads `.stversions/` on demand** when the unified `GET /api/repos/<repo>/files/<path>/versions` endpoint is queried. Syncthing-managed versions appear in the result alongside `.versions/` sidecar entries (Addendum e) and S3 snapshot entries (Addendum f), each tagged `source: local | backup | syncthing`.
+4. **Restore from a Syncthing version** copies the file from `.stversions/` back to its live path. Same endpoint as other restore sources.
+5. **Lookie-Link does NOT manage Syncthing's lifecycle** — start, stop, peer configuration, version policy all stay in Syncthing's domain. Operator owns Syncthing the same way they'd own any infrastructure component.
+6. **Backup status surface** in Lookie-Link's admin UI reports "Syncthing folder seen, last version: X minutes ago" by inspecting the folder timestamps. This is honest health-reporting without taking ownership of Syncthing.
+
+```yaml
+backup:
+  enabled: true
+  targets:
+    - id: syncthing-primary
+      type: syncthing-peer
+      folderPath: /managed-repos                      # the path Syncthing is watching
+      versionsPath: /managed-repos/.stversions        # Syncthing's versions directory
+      managedExternally: true                          # operator runs Syncthing themselves
+      healthChecks:
+        maxVersionAge: 24h                             # alert if no new versions within this window
+        checkInterval: 5m
+
+    - id: cold-s3
+      type: s3
+      endpoint: https://<accountid>.r2.cloudflarestorage.com
+      bucket: lookie-link-backups
+      prefix: instance-foo/
+      credentialKey: backup-r2-key
+      encryption: { ... }
+      schedule:
+        continuous: false
+        snapshotInterval: 6h
+        snapshotRetention:
+          daily: 30
+          weekly: 12
+          monthly: 24
+```
+
+The example: live versioning + replication via Syncthing (fast, free, frequent), plus a cold-storage S3 backup every 6 hours for long-retention off-site durability. Both targets active simultaneously.
+
+### Implementation cost vs. the pure-S3 design
+
+Phase 1.7 with Syncthing-peer added as a target type:
+
+| Phase 1.7 sub-deliverable | Effort vs. Addendum f |
+|---|---|
+| Backup target abstraction | Unchanged |
+| S3 target implementation | Unchanged (~1 week) |
+| Syncthing-peer target implementation | **+0.5–1 week** (small: read `.stversions/`, surface in unified versions API, restore by copy, health check) |
+| Local-rsync target implementation | Unchanged (~0.5 week) |
+| Scheduler + retention | Unchanged (only applies to S3 + rsync targets) |
+| Restore endpoints + UI | Unchanged |
+| Docs covering Syncthing config recipe | **+0.5 week** (a recipe doc, screenshots, Syncthing version policy recommendations) |
+
+Net phase 1.7 effort: 2.5–3.5 weeks (up from 2–3 weeks). Still small.
+
+The investment is right-sized because Syncthing-peer is genuinely the right backup mechanism for a meaningful operator segment (homelab, single-operator self-hosted, hobbyist) and adds zero ongoing maintenance to Lookie-Link.
+
+### Implication for the `.versions/` sidecar (Addendum e)
+
+Open question: **if Syncthing has versioning, do we still need the `.versions/` sidecar?**
+
+Honest answer: **yes, default-on, for three reasons**:
+
+1. **Per-write granularity.** Syncthing's versioning happens when the file syncs to a peer — typically within seconds, but bounded by sync latency. For "agent overwrote the file 90 seconds ago, restore the version from 95 seconds ago," `.versions/` sidecar is faster and finer-grained.
+
+2. **Available without any backup configured.** A self-hosted operator who hasn't set up Syncthing OR S3 still gets local versioning from `.versions/`. The default UX is "rollback works out of the box."
+
+3. **No external dependency.** `.versions/` is a Lookie-Link feature; Syncthing is an external dependency. Operators who don't want the operational complexity of running Syncthing still get versioning.
+
+For operators who DO run Syncthing, they can disable `.versions/` (`versioning.policy: none`) and rely on Syncthing's `.stversions/` for all versioning. The unified `GET /versions` API serves either source equally well.
+
+The default policy stays `simple` (one prior version per file) — small storage cost, fast rollback, works regardless of backup. Operators who run Syncthing can flip to `none` if they want to avoid double-storage.
+
+### Sync-plugin framing updated
+
+The canonical-store + sync-plugins framing from Addendum e now has explicit positioning for Syncthing:
+
+| Sync plugin | Direction | Phase | Backup-capable? |
+|---|---|---|---|
+| GitHub remote | Bidirectional (or canonical outbound) | 1.5 (Addendum d) | Partial — git history serves as a backup of sorts; not a clean disaster-recovery substitute |
+| S3 backup | Outbound, periodic + continuous | 1.7 (Addendum f) | **Yes, primary SaaS backup mechanism** |
+| **Syncthing peer** | **Bidirectional, real-time** | **1.7 (this addendum)** | **Yes, primary self-hosted backup mechanism** |
+| Local-rsync | Outbound, scheduled | 1.7 (Addendum f) | Yes, homelab fallback |
+| External webhook | Outbound, per-write | Future | No (write-side notification, not backup) |
+
+Operators pick the sync plugins that fit their deployment. The canonical store is the source of truth; sync plugins are how the canonical store talks to the rest of the world.
+
+This is now a complete first-pass sync-plugin landscape. Future plugins (e.g., S3 + restic combined, Tigris, IPFS, Borg) can land as later phases without architectural surgery.
+
+### Updated phase 1.7 lock-in question
+
+The decision Chris was already asked stays the same — lock in phase 1.7 or defer to phase 4 — but the **content** of phase 1.7 is now richer:
+
+| Option | Effort | What it ships |
+|---|---|---|
+| **A. Phase 1.7 with both S3 + Syncthing-peer** (recommended) | 2.5–3.5 weeks; 6 child issues | Backup target abstraction + S3 target + Syncthing-peer target + local-rsync target + unified versions API + restore UI. Operators pick the mix that fits their deployment. SaaS launch unblocked. Self-hosted Syncthing operators (Chris) get optimal experience. |
+| **B. Phase 1.7 with S3 only** (Addendum f's original scope) | 2–3 weeks; 5 child issues | S3-based backup only. Syncthing operators can still run Syncthing externally; Lookie-Link just doesn't integrate with it. Versions API doesn't surface Syncthing's `.stversions/`. |
+| **C. Phase 1.7 with Syncthing-peer only** | 1.5–2 weeks; 4 child issues | Syncthing-peer target only. SaaS launch is blocked on shipping S3 backup later. Self-hosted operators without Syncthing have no first-class backup. |
+| **D. Defer to phase 4** | Phase 1.7 not built. Self-hosted operators use Syncthing externally with no Lookie-Link integration. SaaS launch blocked. |
+
+**Recommendation: Option A.** The additional 0.5–1 week to add the Syncthing-peer target is small relative to the value:
+
+- Self-hosted operators with Syncthing get the optimal experience (Chris's case)
+- Self-hosted operators without Syncthing get S3-based backup
+- SaaS gets the durable S3-based backup it requires
+- The sync-plugin framing is complete and the architecture is honest
+
+### Net effect on the cumulative plan
+
+Phase 1.7 grows from "S3 backup" to "backup with multiple target types including Syncthing-peer." Effort grows from 2–3 weeks to 2.5–3.5 weeks. Total timeline with all lock-ins (1.5 + 1B-versioning + 1.7-with-Syncthing) becomes **~13.5–16.5 weeks** to "prototype with shares." Effectively unchanged from Addendum f's estimate, with substantially better fit for self-hosted operators (especially Chris).
+
+### Updated decision list
+
+The four lock-in decisions remain, with #4's content sharpened:
+
+| Decision | Default if not picked | My recommendation |
+|---|---|---|
+| Phase 1.5 GitHub backing (Addendum d) | Defer to phase 4 | **Lock in** |
+| File versioning placement (Addendum e) | Defer | **Phase 1B (Option A)** |
+| Audit log storage (Addendum e) | JSONL for v1 | JSONL for v1 (low stakes) |
+| **Phase 1.7 backup (Addendum f + g)** | **Defer to phase 4** | **Lock in (Option A — both S3 + Syncthing-peer target types)** |
+
+If you (Chris) lock in all three substantive decisions (1.5 + 1B-versioning + 1.7-with-Syncthing), the prototype that ships in ~13.5–16.5 weeks is a serious canonical content store with: real identity + SSO, managed-repo + search + publish, optional GitHub backing, optional Syncthing-peer or S3 backup, per-write versioning, CLI + agent.json, three public-share modes. That is a product worth being proud of for your own use, the OSS distribution, and a future SaaS — all on the same code base.
+
+Chris's "maybe we use Syncthing for backup" insight gets a clean architectural home: **Syncthing-peer is a first-class backup target type alongside S3.** The architecture supports both; operators pick what fits their deployment.
