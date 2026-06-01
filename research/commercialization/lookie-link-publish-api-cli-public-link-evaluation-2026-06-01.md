@@ -845,14 +845,24 @@ All modes use fast-forward-only push by default. If FF fails (origin moved betwe
 
 #### Fetch semantics
 
-Periodic fetch on `fetchInterval` (default 60s). On fetch:
+The mental model for this feature is **Lookie-Link is canonical, GitHub is the mirror** — not "bidirectional sync between equal peers." When the operator configures a GitHub remote for a managed repo, they are choosing to make the Lookie-Link host the primary git-synced version of that repo. Other machines pull from GitHub (or read from Lookie-Link directly); GitHub-side writes are unusual and should be treated as such.
+
+Two fetch policies, operator-selectable:
+
+| Policy | Behavior | When right |
+|---|---|---|
+| `alert-on-divergence` (default) | Periodic fetch; if origin moved, emit audit-log entry + UI alert; do NOT auto-merge | The canonical case: Lookie-Link is the primary writer; anyone writing to origin around Lookie-Link did something unusual and the operator should see it |
+| `auto-ff-merge` | Periodic fetch; if origin moved cleanly ahead, FF-merge origin → local; on conflict, fall back to alert | The "bidirectional but origin-tolerant" case: useful when occasional GitHub-side commits are expected (e.g., README edits via the GitHub UI) and the operator wants them folded back in |
+
+Periodic fetch runs on `fetchInterval` (default 60s). On fetch:
 
 1. Run `git fetch origin <branch>`
-2. If local is behind: FF merge origin → local; emit audit-log entry for any new commits
-3. If local is ahead: nothing — the next push picks them up
-4. If diverged: audit-log entry, UI alert, repo enters "diverged" state
+2. If local is at-or-ahead of origin: no action
+3. If origin is ahead and policy = `alert-on-divergence`: audit + alert + repo enters `state: origin-ahead`; writes still succeed locally, push paused until operator resolves
+4. If origin is ahead and policy = `auto-ff-merge` and FF is clean: merge; emit audit-log entry for new commits
+5. If origin is ahead and FF would fail: audit + alert + `state: diverged` regardless of policy
 
-Operator can trigger an immediate fetch via `POST /api/repos/<repo>/fetch`.
+Operator can trigger an immediate fetch via `POST /api/repos/<repo>/fetch`. Resolution endpoints from the conflict-handling section apply to both `origin-ahead` and `diverged` states.
 
 #### Initial sync
 
@@ -867,14 +877,16 @@ When operator first configures a managed repo with a remote:
 On conflict (diverged push, diverged fetch, merge conflict):
 
 1. Audit-log entry with full conflict detail (commit hashes, files involved, our SHA, theirs SHA)
-2. Repo enters `state: diverged` and writes to the managed repo are queued but not committed (writes still succeed locally in Lookie-Link's storage — they just don't make it into git)
+2. Repo enters `state: diverged` and writes to the managed repo continue locally (Lookie-Link's storage), but commits are queued and not pushed (writes never lose data; sync just pauses)
 3. UI surfaces an alert
 4. Operator resolves via either:
-   - `POST /api/repos/<repo>/reset --to-origin` (drop local changes; risky)
-   - `POST /api/repos/<repo>/reset --to-local --force-push` (overwrite origin; risky)
+   - `POST /api/repos/<repo>/reset --to-local --force-push` (**recommended default** — overwrite origin with Lookie-Link's history; consistent with the "Lookie-Link is canonical" model)
+   - `POST /api/repos/<repo>/reset --to-origin` (drop local changes; appropriate when the operator deliberately wants GitHub-side changes to win)
    - Manual git resolution in a shell on the Lookie-Link host
 
-No auto-resolution is the right default. Auto-merge of conflicting agent-written content can produce garbage; auto-rebase mangles history. Better to stop and surface clearly.
+The recommended-default flip from "drop local" to "force-push local" is deliberate. In the **canonical Lookie-Link** model, divergence means someone (an operator running `git push` from a non-Lookie-Link machine, a teammate using the GitHub UI) bypassed the canonical write path. The operator's default response should be to reassert Lookie-Link's authority, not to absorb the bypass. The "drop local" option exists for the cases where the bypass was deliberate and intended to win, but those cases are unusual.
+
+No auto-resolution is still the right default for divergence. Auto-merge of conflicting agent-written content can produce garbage; auto-rebase mangles history. Auto-force-push is dangerous if the operator doesn't know it's happening. Better to stop and surface clearly.
 
 #### Failure modes
 
@@ -967,3 +979,28 @@ Phase 1's content is identical to v3. The v3 confirmation (`confirmation:FON-101
 - **Diverged states will happen.** Operators committing via the GitHub UI while agents are also writing will produce conflicts. The clear-conflict-surface design (audit log + UI alert + diverged state + manual resolution) is right, but operators have to be trained on it.
 - **Push batching latency surprises.** A 60-second push interval means GitHub doesn't see new content for up to 60 seconds. For operators who expect immediate GitHub-side visibility, this is a surprise. Documentation has to be clear; `pushOnCommit: immediate` mode is the override.
 - **GitHub rate limits.** A noisy managed repo with `pushOnCommit: immediate` can hit GitHub's per-installation rate limits. Batched mode is the default for this reason; phase 1.5 should monitor rate-limit headers and back off cleanly.
+
+### Relation to FON-10193 (Syncthing + GitHub authority model)
+
+This addendum is the **mechanism** for the policy decision being made in [FON-10193](/FON/issues/FON-10193) ("Decide Syncthing + GitHub authority model for git-backed repos"). FON-10193's current hypothesis is:
+
+> for Lookie-served repos, the Lookie host should ideally be the same machine that acts as the authoritative git publisher or guaranteed up-to-date mirror
+
+That hypothesis IS the design framing of phase 1.5: the Lookie-Link host is the canonical write path, GitHub is the mirror, other machines pull from GitHub on their own schedule. The fetch-policy and conflict-resolution defaults in this addendum are tuned for that framing — `alert-on-divergence` rather than `auto-ff-merge`, `--to-local --force-push` recommended over `--to-origin` for divergence resolution.
+
+**The two issues should resolve together.** Three possible outcomes:
+
+| FON-10193 outcome | Implication for FON-10180 phase 1.5 |
+|---|---|
+| **"Lookie-Link host is the authority for repos it serves"** | Phase 1.5 becomes **load-bearing** — it implements the policy for managed repos. Strong lock-in. The phase-1.5 design as written is correct without modification. |
+| **"Multiple machines remain independent git authors; merge on pull"** | Phase 1.5 stays **optional convenience** — useful for operators who want GitHub durability without complex sync, but not the systemic answer to multi-machine pain. Lock-in is judgment-call rather than required. Fetch policy default may want to flip to `auto-ff-merge` to tolerate independent peers. |
+| **"Syncthing distributes among peers; one machine talks to GitHub"** | Phase 1.5 is **the right mechanism for the GitHub-talking machine** specifically. If that machine is the Lookie-Link host (likely under this hypothesis), the design as written applies cleanly. Other Lookie-Link instances (if any) on Syncthing-receiver machines would use managed repos without GitHub backing. |
+
+In all three outcomes, phase 1.5's design is essentially right. What changes is **how strongly to lock it in** and **what the default policies should be**.
+
+**Recommended sequencing**:
+
+1. **Resolve [FON-10193](/FON/issues/FON-10193) first** — the policy question. It is in `in_review` as of this addendum and is a small focused decision.
+2. **Then decide FON-10180 phase 1.5 lock-in** based on the FON-10193 outcome. If FON-10193 picks "Lookie-Link host is authority," lock in phase 1.5 unambiguously. If it picks something else, the phase 1.5 lock-in becomes a judgment call (still likely yes, but less obvious).
+
+If Chris wants to make both decisions together right now, the v3 confirmation for phase 1 of FON-10180 stays alive in any case (phase 1's content is independent of both decisions). A v4 plan revision that locks in phase 1.5 can land alongside the FON-10193 resolution if they're decided together.
