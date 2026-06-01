@@ -11,6 +11,8 @@
 - [`./lookie-link-as-agent-native-wiki-2026-05-16.md`](./lookie-link-as-agent-native-wiki-2026-05-16.md) — agent-native wiki positioning. Treats the same publish/CLI/public-share items as v0 bricks for a larger wiki play.
 - [`../competitors/here-now-vs-lookie-link-2026-05-16.md`](../competitors/here-now-vs-lookie-link-2026-05-16.md) — `here.now` feature comparison; identifies the same five candidate roadmap items.
 
+> **2026-06-01 addendum** appended at the bottom of this document expands the storage model to include a **multi-agent shared "managed repo"** primitive alongside the slug-addressed publish primitive, and elevates **search API + CLI** from a deferred concern to a load-bearing phase 1 item. The phased plan and child-issue list at the end of the document have been revised to match. The body of this document below is the original evaluation; the addendum is the current recommendation.
+
 ## TL;DR
 
 **Yes — this belongs in the Lookie-Link roadmap, and the right next step is a limited prototype, not more research or open-ended architecture work.** The strategic analysis was completed across three commercialization docs and a competitor doc in May 2026; all four converge on the same five-item roadmap (publish primitive, CLI, `agent.json` + OpenAPI, read/write token split, bounded public-share). FON-10180 supplies the concrete forcing function that elevates these items from "strategically endorsed" to "ship this": the machine-locality pain point ("research doc existed on one machine but Lookie-Link on another couldn't see it until git sync caught up") is exactly the failure mode a publish API to a single canonical Lookie-Link instance would eliminate.
@@ -283,3 +285,180 @@ These child issues are sized so each is mergeable independently in days, not wee
 - Companion analyses: the three commercialization docs and the competitor doc named at the top of this file.
 - Source issue: [FON-10180](/FON/issues/FON-10180).
 - Prior tickets cited inline: [FON-7057](/FON/issues/FON-7057), [FON-7058](/FON/issues/FON-7058), [FON-3671](/FON/issues/FON-3671).
+
+---
+
+## Addendum 2026-06-01b — Multi-agent shared workspace ("managed repos") + search API
+
+This addendum was added after Chris's first read of the original evaluation. He raised two load-bearing additions that the original analysis underweighted:
+
+1. **Multi-agent shared "repo" storage.** A Lookie-Link-hosted, mutable, file-tree-shaped storage area that **multiple agents read and write to as their canonical shared workspace**. Not the same as the slug-addressed publish primitive, which produces immutable artifacts. The shared workspace is **the better answer to the original FON-10180 machine-locality pain point** — instead of every agent publishing a new slug per doc, agents accumulate work into a known shared tree that lives in one place and is the canonical view from any machine.
+2. **Search API as a phase-1 must-have.** Agents need to search **before writing** to find what already exists, decide where to put new content, and read related context for their current task. Without search, the multi-agent shared workspace breaks: agent N+1 can't reliably find what agent N wrote, so the workspace devolves into duplicate copies of the same finding.
+
+Both additions are consistent with the original "stay in lane, don't become a multi-tenant SaaS" framing. They expand what a single-operator self-hosted instance can do for its own agents — not what it does for the public internet.
+
+### What changes vs. the original document
+
+The original document framed Lookie-Link's write surface as a single primitive: slug-addressed publish artifacts. The revised model has **two write primitives** and **one read-augmentation primitive**, all sharing infrastructure (file-backed storage, the token model from [FON-3671](/FON/issues/FON-3671), the audit log, the existing edit pipeline):
+
+| Primitive | Shape | Lifetime | Addressing | Use case |
+|---|---|---|---|---|
+| **Managed repo** (new) | Mutable tree | Long-lived | Path-based (`/<repo>/<path>`) | Multi-agent shared workspace — agents accumulate research, look up prior work, collaborate on a knowledge base |
+| **Publish artifact** (original) | Immutable-ish bundle | Slug-lifetime | Slug-based (`/published/<slug>/`) | Finished artifact handed to a reviewer, optionally public-shared |
+| **Search** (new) | Read augmentation | Real-time | Query-based | Find what exists before writing; find context to read; list what changed recently |
+
+### Multi-agent shared workspace ("managed repo") primitive
+
+#### Shape
+
+A **managed repo** is a configured directory on the Lookie-Link host (separate from both the existing mounted-local-checkout repos and the publish area) where agents read and write via HTTP. The operator decides which managed repos exist; agents do not create managed repos via the API.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/repos/<repo>/files/<path>` | Read raw file content (different from `/view/...` which renders) |
+| `PUT /api/repos/<repo>/files/<path>` | Create or update a file; honors `expectedMtimeMs` for 409 stale-write detection |
+| `DELETE /api/repos/<repo>/files/<path>` | Delete (soft via rename to `.trash/`; hard via `?hard=1` and elevated permission) |
+| `POST /api/repos/<repo>/files/<path>/move` | Rename / move a file with body `{ "to": "<new-path>", "expectedMtimeMs": ... }` |
+| `GET /api/repos/<repo>/list` | List with filters: `path=`, `modifiedAfter=`, `glob=`, `limit=`, `offset=` |
+| `GET /api/repos/<repo>/tree` | Recursive directory tree for navigation (cap at configurable depth) |
+| `GET /api/repos/<repo>/changes?since=<timestamp>` | What changed in the repo since a given timestamp (read-after-write for agents) |
+
+#### Storage and versioning
+
+- **File-backed**, same as the rest of Lookie-Link. Managed repos live under a configured `managed-repos/<repo-id>/` directory on the host.
+- **Optional git backing**: each managed repo can be configured (`managedRepos.<repo-id>.git: true`) to auto-commit on every write. Commits attribute the author from the calling grant / token. This makes the managed repo simultaneously a git repo — diffable, restorable, exportable.
+- **Atomicity**: temp-file + rename, same as the existing edit pipeline.
+- **Concurrency**: `expectedMtimeMs` / 409 Conflict, same as the existing edit pipeline.
+- **Audit**: every write logged with caller identity, path, operation, size.
+
+#### Auth
+
+A new permission on the token / grant model: `write` on a path scope inside a managed repo (different from the existing `edit` permission, which applies to mounted local-checkout repos). Operators allow `write` only on the managed repos / paths they explicitly want exposed.
+
+#### Why this is the better solution to the FON-10180 pain point
+
+The original machine-locality pain: *"research doc existed on one machine but Lookie-Link on another machine could not see it until repo synchronization caught up."* With slug-publish, the answer was: agents publish each doc as a new slug, the slug lives on the canonical Lookie-Link instance, every machine sees it. That works, but it converts a continuous workflow (research accumulates into folders over time) into a discrete one (each doc is a new published bundle).
+
+With a managed repo, the answer is cleaner: the canonical Lookie-Link instance hosts a managed repo named e.g. `agent-research/`, every agent writes into it via the API, every machine reads through the same Lookie-Link instance. The folder structure that agents already use locally maps 1:1 to the managed repo. No new addressing scheme to learn. The publish primitive remains useful for the immutable-bundle case (a finished deliverable, a screenshot set, a public-share-target), but the everyday agent-research-writing loop runs through the managed repo.
+
+#### What it is not
+
+- **Not a replacement for git repos with code in them.** Source code stays in real git repos with real PRs and real review. Managed repos are for content that benefits from agents writing into a shared mutable tree — research notes, accumulated findings, working documents, deliverables-in-progress.
+- **Not a multi-tenant primitive.** Each Lookie-Link instance has its own managed repos; there is no cross-instance sync, no managed-repo-as-a-service offering. The single-operator model from the original analysis is preserved.
+- **Not a content-delivery network.** Managed repos serve their operator's agents and humans; they are not optimized for serving anonymous public readers at scale.
+
+### Search API
+
+#### Shape
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/search?q=<query>&scope=<repo-list>&type=<content-type>&limit=&offset=` | Full-text + path + frontmatter search across allowed scopes |
+| `GET /api/search/suggest?q=<prefix>&scope=<repo-list>&limit=` | Autocomplete for filename / path prefixes (cheap; no full-text) |
+| `POST /api/search/reindex?scope=<repo>` | Operator-only; force a reindex of a scope (after large bulk imports) |
+
+#### What it indexes
+
+Phase-1 search covers three dimensions:
+
+1. **Full-text content** — markdown body, code text, YAML values, sanitized HTML body. Indexed via sqlite-fts5 (no external dependency) or ripgrep-on-demand (no index, slower for large corpora). Pick during implementation; sqlite-fts5 is the recommended default.
+2. **Path / filename** — substring + glob match. Cheap, separate index.
+3. **YAML frontmatter and YAML file keys** — structured field match (e.g., `?type=research-doc&status=draft`). Reuses the existing YAML anchor extraction.
+
+What it does **not** cover in phase 1: semantic / embedding search. That is a phase-N upgrade per the wiki doc's roadmap, deferred until there is observed demand and a clear embedding backend choice.
+
+#### What the agent gets back
+
+Each result includes:
+- `repo`, `path`, `score`
+- `snippet` — surrounding text around the match (configurable length)
+- `lastModified`
+- `frontmatter` if present
+- `viewUrl` (the `/view/...` URL) and `rawUrl` (the `/api/repos/.../files/...` URL)
+
+Limit / offset pagination, default `limit=20`, max `limit=100`.
+
+#### Auth
+
+Search results are **scoped by the caller's permissions**. A token that only has `view` on managed-repo `agent-research/` cannot see results from any other repo. The search index is per-repo so this enforcement is cheap.
+
+#### Why search is load-bearing for phase 1, not phase 2
+
+Without search:
+- The agent writing a new finding cannot know whether a similar finding already exists. Duplicates accumulate.
+- The agent picking up a task cannot find the prior research that informs the task. Context gets lost.
+- The human reviewing a managed repo has no way to find what the agents wrote about topic X without browsing a tree by hand.
+
+These are not nice-to-haves — they break the multi-agent shared-workspace value proposition. Search has to ship alongside the managed-repo primitive.
+
+### Revised auth model
+
+Three new permissions on the grant / token model, joining the existing `view` / `edit`:
+
+| Permission | Applies to | Grants |
+|---|---|---|
+| `write` | Managed-repo path scope | `PUT`/`DELETE`/`POST move` on `/api/repos/<repo>/files/<path>/*` |
+| `publish` | Publish-area scope | `POST /api/publish` and `POST /api/publish/<slug>` |
+| `share` | Slug or path scope | `POST /api/publish/<slug>/share` or `POST /api/repos/<repo>/files/<path>/share` |
+
+Search (`GET /api/search`) is gated by `view` (same surface as `/view/...`). No new permission needed.
+
+The existing `edit` permission stays scoped to mounted-local-checkout repos and does not extend to managed repos. This keeps the two storage models cleanly separated and prevents accidental cross-grants.
+
+### Revised phased plan
+
+The original three-phase plan grows to **four phases**, and phase 1 expands to include managed repos + search alongside the publish primitive:
+
+| Phase | Scope | Effort | Gate |
+|---|---|---|---|
+| **1** | Managed-repo primitive (read/write/list/tree/changes), search API (`/api/search` + suggest), publish primitive (`POST /api/publish` + update), new token permissions (`write` / `publish`), audit + docs + validation | **4–5 weeks** | This confirmation |
+| **2** | `/.well-known/agent.json` + `/openapi.json` + `lookie-link-cli` npm package (`lookie write/read/list/search/publish`) + skill packages for Claude Code / Cursor / Codex | 1–2 weeks | Phase 1 lands cleanly |
+| **3** | Bounded public-share with expiry / password / rate limiting / audit, applied to both managed-repo paths and published slugs, `share` permission | 2 weeks | Real public-share demand AND/OR [FON-7058](/FON/issues/FON-7058) lands |
+| **4 (optional, deferred)** | Semantic / embedding search; managed-repo collaboration ergonomics (comments, locks, change subscriptions); migration importers | TBD | Observed demand |
+
+Phase 1 grew from 2–3 weeks to 4–5 weeks because managed-repo + search are real additions, not nice-to-haves. The trade-off is honest: a smaller phase 1 ships a less useful product. The managed-repo + search combination is what makes the publish surface load-bearing for actual multi-agent workflows.
+
+### Revised child-issue list
+
+Phase 1 grows from 5 issues to 9 issues:
+
+| Issue | Phase | Scope | Blocks |
+|---|---|---|---|
+| Managed repo: read endpoints (`GET /api/repos/<repo>/files/...`, `list`, `tree`, `changes`) | 1 | route handlers, managed-repo mount, audit log | foundation |
+| Managed repo: write endpoints (`PUT` / `DELETE` / `POST move`) with `expectedMtimeMs` 409 guard and atomic write | 1 | extends managed-repo primitive | managed-repo reads |
+| Managed repo: optional auto-commit-to-git on write (config-flag) | 1 | git integration | managed-repo writes |
+| Token model: `write` permission on managed-repo scopes | 1 | extend AGENT-ACCESS-CONTROL.md | managed-repo writes |
+| Search API: `GET /api/search` with sqlite-fts5 + path index + frontmatter index | 1 | new index + route | managed-repo reads (so search indexes them) |
+| Search API: `GET /api/search/suggest` autocomplete | 1 | cheap prefix index | search base |
+| Publish API: `POST /api/publish` + `POST /api/publish/<slug>` update + `expectedRevision` 409 guard | 1 | route handler, publish-area mount, audit log | foundation (independent of managed-repo) |
+| Token model: `publish` permission on managed grants + static tokens | 1 | extend AGENT-ACCESS-CONTROL.md model | publish API base |
+| Docs: `docs/MANAGED-REPOS.md`, `docs/PUBLISHING.md`, `docs/SEARCH.md`, plus `docs/API.md` expansion | 1 | documentation | all phase-1 endpoints |
+| Validation: managed-repo + search + publish scenarios in `scripts/validate-editable-mode.js` (or new validator) | 1 | extends existing validator | all phase-1 endpoints |
+| `/.well-known/agent.json` + `/openapi.json` advertisement | 2 | discovery surface | phase 1 (so capabilities are accurate) |
+| `lookie-link-cli` package with `write` / `read` / `list` / `search` / `publish` / `revoke` | 2 | new package, thin HTTP wrapper | phase 1, agent.json |
+| Skill packages for Claude Code / Cursor / Codex marketplaces | 2 | distribution artifacts | CLI |
+| Public-share: `POST /api/publish/<slug>/share` + `POST /api/repos/<repo>/files/<path>/share` + `GET /share/...` | 3 | new route group, expiry, password gate | phase 1 |
+| Public-share: token model `share` permission | 3 | extends token model | phase 1, public-share routes |
+| Public-share: rate limiting + audit events | 3 | hardening | public-share routes |
+| Docs: `docs/PUBLIC-SHARES.md` + security model | 3 | documentation | public-share routes |
+
+### Revised answers to the FON-10180 questions
+
+The two additions also sharpen the answers to questions 1 and 4 in the original body of this document. The revised answers:
+
+- **Question 1 (publish API for file/document creation and update?)** Yes, with **two write surfaces**: the slug-addressed publish primitive (immutable artifacts) and the managed-repo primitive (mutable shared workspace). Both are file-backed; both share the token / audit infrastructure.
+- **Question 4 (storage / control plane for some classes of files?)** Yes, expanded: Lookie-Link owns storage for (a) transient slug-addressed artifacts via the publish primitive, **and (b) long-lived multi-agent shared content via managed repos**. The original answer of "transient outputs + reviewable bundles" was correct but incomplete — the managed-repo case is the more strategically important one and was underweighted in the original analysis. Source code and per-project git-tracked content still stay in real git repos.
+
+### Risks specific to the additions
+
+- **Managed repos blur the line with real git repos.** Operators might be tempted to put source code into a managed repo for the convenience of API-driven writes. They shouldn't. The docs should explicitly call out the storage class taxonomy (the table in question 4 of the original document) and steer operators to real git repos for code.
+- **Search index size.** A large managed repo with thousands of files indexed via sqlite-fts5 produces a real index file. Phase 1 should include index-size monitoring and a clear path to rebuild / shrink. Operators with huge corpora may need to fall back to ripgrep-on-demand search.
+- **Read-after-write consistency.** Multiple agents writing concurrently into the same managed repo need to see each other's writes promptly. The `expectedMtimeMs` model handles overwrites; the `GET /api/repos/<repo>/changes?since=` endpoint handles "what did other agents write while I was working." Phase 1 design should validate both flows end-to-end.
+- **Managed-repo deletion footgun.** A `DELETE` permission is dangerous in a multi-agent setting. Phase 1 should default to soft-delete (rename to `.trash/`), with hard-delete requiring an elevated permission and an explicit `?hard=1` flag. Operators can audit / restore from `.trash/` for as long as they choose.
+- **Search auth surface.** A search result with a snippet might leak content from a path the caller cannot directly fetch if the per-result auth check is wrong. Phase 1 must enforce auth **per result** (not just per query scope), so an unauthorized path never appears in search output regardless of how broad the query is.
+
+### What this means for the recommendation
+
+The recommendation is the same as the original: **approve phase 1 and start the prototype**. The expansion does not change the verdict — it makes phase 1 more useful, somewhat larger (2–3 weeks → 4–5 weeks), and more aligned with the multi-agent workflows the source issue actually described. Phases 2 and 3 remain mechanical follow-ons; phase 4 (semantic search, collaboration ergonomics) is deferred.
+
+The fresh `request_confirmation` interaction created after this addendum targets the revised plan. The original confirmation (`confirmation:FON-10180:plan:cad6a3ed-29bc-4d9a-83d9-5e6e5ca78f85`) is superseded.
