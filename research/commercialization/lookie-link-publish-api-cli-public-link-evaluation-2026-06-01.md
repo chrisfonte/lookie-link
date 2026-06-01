@@ -14,6 +14,7 @@
 > **2026-06-01 addenda** appended at the bottom of this document.
 > **Addendum b** expands the storage model to include a multi-agent shared "managed repo" primitive alongside the slug-addressed publish primitive, and elevates search API + CLI to a load-bearing phase 1 item.
 > **Addendum c** expands the identity and auth model: first-class user identity (sessions, SSO via WorkOS) distinct from agent API keys, plus three public-share modes (anonymous / magic-link-lightweight / fully credentialed). Also records the commitment signal from Chris ("building this whether it becomes a public sellable thing or not") that removes commercialization as a gate on the build.
+> **Addendum d** evaluates whether managed repos should optionally back to a real GitHub remote with `push-to-origin` and `fetch-from-origin` semantics. Designs the feature, proposes a phase 1.5 slot between phase 1 and phase 2 if Chris wants to lock it in. Phase 1's content does not change either way.
 > The body of this document below is the original evaluation; the addenda are the current recommendation.
 
 ## TL;DR
@@ -734,3 +735,235 @@ Chris said: "this is something I want to build WHETHER it becomes a public sella
 Same verdict, larger scope: **approve phase 1 (v3) and start the prototype**. The expansion is right-sized to Chris's commitment: build identity-and-auth as a real foundation (because it has to be right eventually, and refactoring auth later is painful), build the storage / search / publish surface alongside it, and ship them together. Phase 2 (discovery + CLI) and phase 3 (three share modes) follow.
 
 The fresh `request_confirmation` interaction created after this addendum targets the v3 plan revision. The v2 confirmation (`confirmation:FON-10180:plan:f4bee764-11ba-4657-8b9b-dd41ee291877`) is superseded.
+
+---
+
+## Addendum 2026-06-01d — GitHub push-to-origin for managed repos (optional phase 1.5)
+
+This addendum responds to Chris's third comment: *"one more thing we MIGHT want to include is a 'push to origin' GitHub config and workflow from Lookie-Link itself."*
+
+The framing is tentative — Chris is asking whether this belongs in scope, not committing to it. This addendum does the design carefully, proposes where it would slot if locked in, and surfaces the decision cleanly. **Phase 1's content does not change either way.**
+
+### What the feature is
+
+A managed repo's optional **GitHub remote backing**: in addition to the existing auto-commit-to-git-on-write design from Addendum b, the managed repo can be configured with a GitHub remote URL. Writes flow:
+
+```
+agent → POST/PUT /api/repos/<repo>/files/<path>
+      → Lookie-Link writes file
+      → auto-commits to managed repo's local git
+      → push queue picks it up
+      → fast-forward push to GitHub remote (dedicated branch by default)
+```
+
+And the inverse:
+
+```
+periodic fetch (configurable; default 60s)
+  → if origin has new commits on the tracked branch
+  → fast-forward merge into the managed repo's local git
+  → on conflict: surface in audit log + UI, do not auto-resolve
+```
+
+Net effect: the managed repo on the Lookie-Link instance and the GitHub repo stay in sync, with Lookie-Link as the canonical write path and GitHub as the durable backup + collaborator-access surface.
+
+This closes the loop on the original FON-10180 machine-locality pain point cleanly:
+
+- Agent writes via Lookie-Link API → file is immediately visible from every machine through Lookie-Link.
+- Lookie-Link pushes to GitHub on its own schedule → other machines that prefer the local-checkout pattern can still `git pull` from GitHub on their own schedule.
+- Other-machine writes to GitHub (via the web UI, via a CLI on a different machine) flow back into Lookie-Link via the fetch loop.
+
+### Why this is interesting on top of the existing managed-repo design
+
+Without push-to-origin, managed repos are **Lookie-Link-local storage**. They live only on the Lookie-Link host. If that host disappears, the data disappears. The operator's mitigations are filesystem-level (backups, snapshots) — same as any self-hosted file storage.
+
+With push-to-origin, managed repos are **Lookie-Link-fronted GitHub repos**. GitHub provides durability, branch protection, code review (if the operator wants it on the dedicated branch), and the entire familiar collaboration surface for the humans on the team. The Lookie-Link host can disappear and the data is safe.
+
+This is a meaningful operational upgrade for any managed repo whose content the operator cares about long-term.
+
+### Design
+
+#### Configuration
+
+Per managed repo, optional config block:
+
+```yaml
+managedRepos:
+  agent-research:
+    path: ./managed-repos/agent-research
+    git:
+      enabled: true                       # auto-commit on write (Addendum b)
+      autoCommitGrace: 5s                  # batch writes within this window into one commit
+    remote:
+      url: git@github.com:chrisfonte/agent-research-storage.git
+      branch: lookie-link/main             # tracked branch on origin
+      pushOnCommit: batched                # batched | immediate | manual
+      pushBatchInterval: 60s
+      pushBatchSize: 25                    # whichever comes first
+      fetchInterval: 60s
+      fastForwardOnly: true                # refuse non-FF pushes / merges
+      authMode: deploy_key                 # deploy_key | pat | github_app
+      credentialKey: agent-research-deploy-key  # references a stored credential
+```
+
+#### Authentication
+
+Three auth modes, supported in this order:
+
+1. **Deploy key (default for v1).** Lookie-Link generates an SSH key per managed repo on operator request; operator pastes the public half into the GitHub repo's deploy-keys settings with write access. Lookie-Link stores the private key encrypted at rest. Scope: one repo per key. Revocation: operator removes the deploy key from GitHub.
+
+2. **Personal access token (PAT).** Operator brings a fine-grained PAT scoped to the specific GitHub repo with content read/write. Lookie-Link stores encrypted. Scope: whatever the PAT covers; the operator owns scoping. Revocation: operator revokes the PAT in GitHub settings.
+
+3. **GitHub App (v2+ — deferred).** Lookie-Link is registered as a GitHub App; operator installs it on the specific repos. Cleaner permissions and revocation, but real engineering work to register and host the App. Defer until asked.
+
+Phase 1.5 ships with deploy-key + PAT. GitHub App in phase 4 if demand.
+
+#### Branch model
+
+Default: **push to a dedicated branch**, not `main`. Two reasons:
+
+1. **Safety**: the operator gets a sanity check on `lookie-link/main` before merging into `main`. Bad-data flush from a runaway agent doesn't directly poison the canonical history.
+2. **Reviewability**: operators can enable branch protection / required reviews on `main`, and merge from `lookie-link/main` via a PR with the agent-committed changes visible as one batch.
+
+Operator can override and push directly to `main` via config (`remote.branch: main`) if they accept the trade-off.
+
+#### Push semantics
+
+| Mode | Behavior |
+|---|---|
+| `batched` (default) | Push after `pushBatchInterval` seconds OR `pushBatchSize` commits, whichever comes first |
+| `immediate` | Push after every commit (noisy; useful for low-traffic repos) |
+| `manual` | Don't push automatically; operator triggers via `POST /api/repos/<repo>/push` |
+
+All modes use fast-forward-only push by default. If FF fails (origin moved between our last fetch and our push), the push queue:
+
+1. Pauses pushes for this repo
+2. Triggers an immediate fetch
+3. Attempts FF merge of origin → local
+4. On clean FF: resumes pushing
+5. On conflict: audit-log entry, UI alert, repo enters "diverged" state until operator resolves
+
+#### Fetch semantics
+
+Periodic fetch on `fetchInterval` (default 60s). On fetch:
+
+1. Run `git fetch origin <branch>`
+2. If local is behind: FF merge origin → local; emit audit-log entry for any new commits
+3. If local is ahead: nothing — the next push picks them up
+4. If diverged: audit-log entry, UI alert, repo enters "diverged" state
+
+Operator can trigger an immediate fetch via `POST /api/repos/<repo>/fetch`.
+
+#### Initial sync
+
+When operator first configures a managed repo with a remote:
+
+1. Lookie-Link `git clone`s the remote into the managed-repo path (if the path is empty)
+2. If the path is non-empty, Lookie-Link refuses and asks the operator to either point at an empty path or do a manual `git init` + `git remote add` first
+3. Once cloned, the periodic fetch / push loops are scheduled
+
+#### Conflict handling
+
+On conflict (diverged push, diverged fetch, merge conflict):
+
+1. Audit-log entry with full conflict detail (commit hashes, files involved, our SHA, theirs SHA)
+2. Repo enters `state: diverged` and writes to the managed repo are queued but not committed (writes still succeed locally in Lookie-Link's storage — they just don't make it into git)
+3. UI surfaces an alert
+4. Operator resolves via either:
+   - `POST /api/repos/<repo>/reset --to-origin` (drop local changes; risky)
+   - `POST /api/repos/<repo>/reset --to-local --force-push` (overwrite origin; risky)
+   - Manual git resolution in a shell on the Lookie-Link host
+
+No auto-resolution is the right default. Auto-merge of conflicting agent-written content can produce garbage; auto-rebase mangles history. Better to stop and surface clearly.
+
+#### Failure modes
+
+- **Network down**: pushes queue locally; writes still succeed; push queue drains when reconnect.
+- **Auth expired (PAT rotation, deploy-key removed)**: push fails → audit-log entry + UI alert + operator-action-required state. Writes still succeed locally.
+- **Origin disappears (repo deleted on GitHub)**: same as auth-expired.
+- **Lookie-Link restart**: the push queue persists across restarts (sqlite-backed); pending pushes resume.
+
+### Auth implications (interaction with Addendum c)
+
+The push-to-origin feature introduces a new credential type — **GitHub deploy keys / PATs stored as managed-repo secrets**. These are not user credentials and not agent API keys; they are operator-configured infrastructure credentials.
+
+The audit log gets one new actor type:
+
+| Actor shape | When emitted |
+|---|---|
+| `{ "type": "git-sync", "repoId": "...", "direction": "push" | "fetch" }` | Background push or fetch operation |
+
+This is distinct from agent / user actions — the git-sync is initiated by Lookie-Link itself, not by a specific identity. The commits being pushed retain their original committer (the agent or user who wrote the file).
+
+The permission model adds one new permission:
+
+| Permission | Granted to | Allows |
+|---|---|---|
+| `manage_repo_sync` | Operator role only by default | Configure remote URL, push/fetch settings, manage stored credentials, trigger manual push/fetch, resolve diverged states |
+
+Agents do **not** get `manage_repo_sync`. Their writes flow through the managed-repo write surface; the sync is an operator-controlled infrastructure layer.
+
+### Storage class taxonomy revisited
+
+The taxonomy table from the original document's Question 4 now has another column:
+
+| Class | Lookie-Link primitive | GitHub backing |
+|---|---|---|
+| Source-of-truth code / docs | Mounted local-checkout repo (existing) | The local checkout is already a real git repo on GitHub |
+| Long-lived research artifacts that belong with a project | Mounted local-checkout repo (existing) | Same |
+| Transient agent outputs needing a URL now | Publish area (Addendum b) | Not applicable; ephemeral by design |
+| Reviewable immutable bundles | Publish area (Addendum b) | Not applicable; immutability is the point |
+| **Long-lived multi-agent shared content** | **Managed repo (Addendum b)** | **Optional GitHub backing via push-to-origin (this addendum)** |
+| Public-share content | Publish area or managed-repo paths (Addendum b + c) | Not applicable; the share is the surface |
+| Multi-GB binary blobs | None — use object storage | None |
+
+The new column resolves a sharp design question: when does a managed repo benefit from GitHub backing? Answer: **when its content is long-lived enough to be worth durably backing up.** Operator-judged per repo.
+
+### Where this slots — phase 1.5 or phase 4
+
+Two options for sequencing:
+
+**Option A — Phase 1.5 (recommended if Chris wants this near-term).** Inserts between phase 1 and phase 2:
+
+| Phase | Scope | Effort |
+|---|---|---|
+| 1A + 1B | (unchanged from v3) | 5–6 weeks parallel |
+| **1.5 — GitHub remote backing** | Deploy-key + PAT auth, push queue with batching + FF-only, periodic fetch, conflict surface, operator UI for stored credentials + sync state | **1–2 weeks** |
+| 2 | (unchanged from v3) | 1–2 weeks |
+| 3 | (unchanged from v3) | 3 weeks |
+
+Total phase 1.5 child issues (4):
+
+1. Git-sync engine: clone on configure, push queue, fetch scheduler, FF-only enforcement, conflict-state machine
+2. Credential storage: encrypted deploy-key + PAT storage, mint deploy-key endpoint, rotate-credential endpoint
+3. Operator endpoints + UI: `POST /api/repos/<repo>/push`, `POST /api/repos/<repo>/fetch`, `POST /api/repos/<repo>/reset`, sync-state surface
+4. Docs: `docs/MANAGED-REPOS.md` GitHub section + `docs/GIT-SYNC.md` (auth modes, branch model, conflict resolution)
+
+**Option B — Phase 4 (deferred until asked).** Park the design here; revisit when phase 1 + 2 + 3 are landed and operational experience tells the operator whether they want GitHub backing.
+
+### Recommendation
+
+**Option A — lock in phase 1.5** if Chris's "MIGHT" hardens into "yes" on first read of this addendum. The reasoning:
+
+- The feature closes the loop on the original FON-10180 machine-locality pain point. Without it, managed repos are Lookie-Link-local; the GitHub backing is what makes them durably canonical.
+- 1–2 weeks is a small phase by current standards. It does not push phase 2 out meaningfully.
+- The design is straightforward — well-known git operations + a credential store + a queue + a conflict-state machine. No experimental tech.
+- Operators who don't want GitHub backing simply don't configure it; the feature is opt-in per repo. No tax on the no-backing path.
+
+The argument for **Option B (defer)** is honest but weaker:
+
+- Phase 1 is already 5–6 weeks. Adding 1.5 makes the road to "prototype with shares" longer (10–11 weeks → 12–13 weeks).
+- Operators who don't need GitHub backing get phase 2 + 3 sooner if 1.5 is deferred.
+
+The deciding question: **does Chris want managed repos to be durably backed by GitHub from day one, or is "Lookie-Link-local with filesystem-level backups" good enough for the first 2–3 months?** If the former, lock in phase 1.5. If the latter, leave it as phase 4 and revisit.
+
+### What this addendum does not change
+
+Phase 1's content is identical to v3. The v3 confirmation (`confirmation:FON-10180:plan:f1db5aff-7ced-4784-b834-790917773971`) remains alive and is the active approval path for phase 1. This addendum surfaces the phase-1.5 design and the decision; locking in phase 1.5 would require a separate plan update (v4) and a separate confirmation, both of which can wait until after phase 1 approval lands.
+
+### Risks specific to this feature
+
+- **Credential storage is the highest-risk component.** A leak of a deploy-key or PAT gives an attacker write access to the operator's GitHub repo. Encrypted-at-rest with a key derived from operator-configured material (env var or HSM-backed) is the minimum bar; phase 1.5 documentation should walk operators through the security model.
+- **Diverged states will happen.** Operators committing via the GitHub UI while agents are also writing will produce conflicts. The clear-conflict-surface design (audit log + UI alert + diverged state + manual resolution) is right, but operators have to be trained on it.
+- **Push batching latency surprises.** A 60-second push interval means GitHub doesn't see new content for up to 60 seconds. For operators who expect immediate GitHub-side visibility, this is a surprise. Documentation has to be clear; `pushOnCommit: immediate` mode is the override.
+- **GitHub rate limits.** A noisy managed repo with `pushOnCommit: immediate` can hit GitHub's per-installation rate limits. Batched mode is the default for this reason; phase 1.5 should monitor rate-limit headers and back off cleanly.
