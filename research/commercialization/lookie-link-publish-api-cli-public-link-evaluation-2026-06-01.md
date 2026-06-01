@@ -14,7 +14,7 @@
 > **2026-06-01 addenda** appended at the bottom of this document.
 > **Addendum b** expands the storage model to include a multi-agent shared "managed repo" primitive alongside the slug-addressed publish primitive, and elevates search API + CLI to a load-bearing phase 1 item.
 > **Addendum c** expands the identity and auth model: first-class user identity (sessions, SSO via WorkOS) distinct from agent API keys, plus three public-share modes (anonymous / magic-link-lightweight / fully credentialed). Also records the commitment signal from Chris ("building this whether it becomes a public sellable thing or not") that removes commercialization as a gate on the build.
-> **Addendum d** evaluates whether managed repos should optionally back to a real GitHub remote with `push-to-origin` and `fetch-from-origin` semantics. Designs the feature, proposes a phase 1.5 slot between phase 1 and phase 2 if Chris wants to lock it in. Phase 1's content does not change either way.
+> **Addendum d** evaluates whether managed repos should optionally back to a real GitHub remote with full bidirectional git-sync (`pull AND push`) and a configurable sync scheduler. Designs the feature with per-repo `syncMode` choice (`bidirectional` default + `canonical` opt-in) and per-repo `scheduling` choice (`built-in` default + `external` + `both`). Proposes a phase 1.5 slot between phase 1 and phase 2 if Chris wants to lock it in. Phase 1's content does not change either way. *Note: the initial draft of this addendum framed the design as canonical-only sync; corrected after Chris clarified that multi-writer is the general case and a SaaS-product default.*
 > The body of this document below is the original evaluation; the addenda are the current recommendation.
 
 ## TL;DR
@@ -744,6 +744,12 @@ This addendum responds to Chris's third comment: *"one more thing we MIGHT want 
 
 The framing is tentative — Chris is asking whether this belongs in scope, not committing to it. This addendum does the design carefully, proposes where it would slot if locked in, and surfaces the decision cleanly. **Phase 1's content does not change either way.**
 
+### Revision history of this addendum
+
+- **Initial draft (2026-06-01 afternoon)**: framed as "Lookie-Link is canonical, GitHub is mirror" with `alert-on-divergence` as the default fetch policy and `--to-local --force-push` as the recommended divergence resolution. Assumed single-writer model (one Lookie-Link instance = the only thing writing to a given GitHub repo).
+- **Corrected (2026-06-01 evening)**: after Chris clarified — "*Just because I am using Syncthing, not everyone would be. So some machines may be pushing to the same repo*" — the canonical-only framing was too narrow. The current design is **proper bidirectional git-sync** with the canonical-only mode as an explicit opt-in policy (`syncMode: canonical`). The default mode is `bidirectional` with `auto-rebase` pull semantics, which is what real multi-writer git workflows look like. This is also the correct shape for a public SaaS product where operators have multiple machines independently pushing to the same repo without Syncthing replication.
+- Also added: a **sync scheduling architecture** section addressing Chris's question about whether the sync cron belongs inside Lookie-Link or as a separate system. Short answer: hybrid — built-in scheduler by default with manual-trigger endpoints always available for external orchestration.
+
 ### What the feature is
 
 A managed repo's optional **GitHub remote backing**: in addition to the existing auto-commit-to-git-on-write design from Addendum b, the managed repo can be configured with a GitHub remote URL. Writes flow:
@@ -765,7 +771,7 @@ periodic fetch (configurable; default 60s)
   → on conflict: surface in audit log + UI, do not auto-resolve
 ```
 
-Net effect: the managed repo on the Lookie-Link instance and the GitHub repo stay in sync, with Lookie-Link as the canonical write path and GitHub as the durable backup + collaborator-access surface.
+Net effect: the managed repo on the Lookie-Link instance and the GitHub repo stay in sync via real bidirectional git semantics. Other machines can also push to the same GitHub repo (this is the multi-writer general case); Lookie-Link's sync engine reconciles by fetching + rebasing/merging according to the operator's chosen sync mode.
 
 This closes the loop on the original FON-10180 machine-locality pain point cleanly:
 
@@ -796,15 +802,36 @@ managedRepos:
       autoCommitGrace: 5s                  # batch writes within this window into one commit
     remote:
       url: git@github.com:chrisfonte/agent-research-storage.git
-      branch: lookie-link/main             # tracked branch on origin
+      branch: main                         # tracked branch on origin
+
+      # Sync mode — the load-bearing policy choice
+      syncMode: bidirectional              # bidirectional (default) | canonical
+
+      # Push side
       pushOnCommit: batched                # batched | immediate | manual
       pushBatchInterval: 60s
       pushBatchSize: 25                    # whichever comes first
-      fetchInterval: 60s
-      fastForwardOnly: true                # refuse non-FF pushes / merges
+
+      # Pull side
+      pullPolicy: auto-rebase              # auto-rebase | auto-merge | alert-on-divergence
+      pullInterval: 60s
+
+      # Scheduler (see "Sync scheduling architecture" below)
+      scheduling: built-in                 # built-in (default) | external | both
+
+      # Auth
       authMode: deploy_key                 # deploy_key | pat | github_app
-      credentialKey: agent-research-deploy-key  # references a stored credential
+      credentialKey: agent-research-deploy-key
 ```
+
+#### Sync mode: bidirectional vs canonical
+
+| Mode | What it means | When to pick it |
+|---|---|---|
+| `bidirectional` (default) | Lookie-Link is one git peer among potentially many. Other machines may also push to the same GitHub repo independently. Lookie-Link fetches + rebases (or merges, depending on `pullPolicy`) and pushes on its own cadence. Standard multi-writer git workflow. | The general case. The right default for a public SaaS product. The right answer for any operator who has multiple machines (their laptop, a CI runner, a teammate's machine) independently writing to the same GitHub repo. |
+| `canonical` | The operator declares the Lookie-Link host as the sole writer for this repo. Anything that shows up on origin without going through Lookie-Link is treated as an exception. Default `pullPolicy` flips to `alert-on-divergence`; default conflict-resolution recommendation flips to `--to-local --force-push`. | Single-writer deployments where the operator has designated this Lookie-Link host as the only writer. Chris's Syncthing-replicated setup is the canonical example: Syncthing distributes state, only one machine talks to GitHub. Also the right pick for operators following the [FON-10193](/FON/issues/FON-10193) "Lookie-Link host is the authority" policy for a specific repo. |
+
+The sync mode is **per-repo**, not per-instance. A single Lookie-Link instance can have some repos in `bidirectional` mode (shared with other writers) and other repos in `canonical` mode (this instance is sole writer).
 
 #### Authentication
 
@@ -820,12 +847,12 @@ Phase 1.5 ships with deploy-key + PAT. GitHub App in phase 4 if demand.
 
 #### Branch model
 
-Default: **push to a dedicated branch**, not `main`. Two reasons:
+The branch to push to is operator-configurable per repo:
 
-1. **Safety**: the operator gets a sanity check on `lookie-link/main` before merging into `main`. Bad-data flush from a runaway agent doesn't directly poison the canonical history.
-2. **Reviewability**: operators can enable branch protection / required reviews on `main`, and merge from `lookie-link/main` via a PR with the agent-committed changes visible as one batch.
+- **In `bidirectional` mode**: default to `main` (or whatever the operator's existing primary branch is). The repo is genuinely multi-writer; agents writing through Lookie-Link share a branch with humans writing through other tools. Branch protection on the upstream side (required reviews, status checks) applies the same as for any other writer.
+- **In `canonical` mode**: default to a dedicated branch (e.g., `lookie-link/main`). The operator gets a sanity check before merging Lookie-Link-side commits into `main`. Bad-data flush from a runaway agent doesn't directly poison the canonical history.
 
-Operator can override and push directly to `main` via config (`remote.branch: main`) if they accept the trade-off.
+Operators can override either default in config (`remote.branch: <branch-name>`). The defaults are sane starting points, not hard constraints.
 
 #### Push semantics
 
@@ -843,26 +870,24 @@ All modes use fast-forward-only push by default. If FF fails (origin moved betwe
 4. On clean FF: resumes pushing
 5. On conflict: audit-log entry, UI alert, repo enters "diverged" state until operator resolves
 
-#### Fetch semantics
+#### Pull / fetch semantics
 
-The mental model for this feature is **Lookie-Link is canonical, GitHub is the mirror** — not "bidirectional sync between equal peers." When the operator configures a GitHub remote for a managed repo, they are choosing to make the Lookie-Link host the primary git-synced version of that repo. Other machines pull from GitHub (or read from Lookie-Link directly); GitHub-side writes are unusual and should be treated as such.
+Three pull policies, operator-selectable per repo. The right default depends on `syncMode`:
 
-Two fetch policies, operator-selectable:
-
-| Policy | Behavior | When right |
+| Policy | Behavior | Default for |
 |---|---|---|
-| `alert-on-divergence` (default) | Periodic fetch; if origin moved, emit audit-log entry + UI alert; do NOT auto-merge | The canonical case: Lookie-Link is the primary writer; anyone writing to origin around Lookie-Link did something unusual and the operator should see it |
-| `auto-ff-merge` | Periodic fetch; if origin moved cleanly ahead, FF-merge origin → local; on conflict, fall back to alert | The "bidirectional but origin-tolerant" case: useful when occasional GitHub-side commits are expected (e.g., README edits via the GitHub UI) and the operator wants them folded back in |
+| `auto-rebase` | On periodic fetch: if origin has new commits, rebase Lookie-Link's pending commits onto origin's head and continue. Produces linear history. Standard `git pull --rebase` semantics. If rebase has a content conflict, fall back to `alert-on-divergence` for that incident. | `bidirectional` mode (the product default) |
+| `auto-merge` | On periodic fetch: if origin has new commits, create a merge commit. Preserves history of both sides as it was. Standard `git pull` (no rebase) semantics. If merge has a content conflict, fall back to `alert-on-divergence`. | Operators who prefer merge commits over rebased linear history |
+| `alert-on-divergence` | On periodic fetch: if origin has new commits, do nothing automatically. Emit audit-log entry + UI alert. Operator resolves. | `canonical` mode (Chris's Syncthing setup; explicit single-writer operators) |
 
-Periodic fetch runs on `fetchInterval` (default 60s). On fetch:
+Periodic fetch runs on `pullInterval` (default 60s). On fetch:
 
 1. Run `git fetch origin <branch>`
 2. If local is at-or-ahead of origin: no action
-3. If origin is ahead and policy = `alert-on-divergence`: audit + alert + repo enters `state: origin-ahead`; writes still succeed locally, push paused until operator resolves
-4. If origin is ahead and policy = `auto-ff-merge` and FF is clean: merge; emit audit-log entry for new commits
-5. If origin is ahead and FF would fail: audit + alert + `state: diverged` regardless of policy
+3. If origin is ahead and clean reconciliation is possible per the policy: reconcile; emit audit-log entry recording the merge/rebase
+4. If reconciliation requires content-conflict resolution OR policy is `alert-on-divergence`: enter `state: origin-ahead`; push pauses until operator resolves; writes to the managed repo continue to succeed locally
 
-Operator can trigger an immediate fetch via `POST /api/repos/<repo>/fetch`. Resolution endpoints from the conflict-handling section apply to both `origin-ahead` and `diverged` states.
+Operator can trigger an immediate fetch via `POST /api/repos/<repo>/fetch` (or the combined `POST /api/repos/<repo>/sync` which does both fetch + push). Resolution endpoints from the conflict-handling section apply.
 
 #### Initial sync
 
@@ -874,19 +899,22 @@ When operator first configures a managed repo with a remote:
 
 #### Conflict handling
 
-On conflict (diverged push, diverged fetch, merge conflict):
+On conflict (auto-rebase / auto-merge produced a content collision, or policy is `alert-on-divergence` and origin moved):
 
-1. Audit-log entry with full conflict detail (commit hashes, files involved, our SHA, theirs SHA)
-2. Repo enters `state: diverged` and writes to the managed repo continue locally (Lookie-Link's storage), but commits are queued and not pushed (writes never lose data; sync just pauses)
+1. Audit-log entry with full conflict detail (commit hashes, files involved, our SHA, theirs SHA, conflict markers if available)
+2. Repo enters `state: origin-ahead` (or `state: diverged` for true divergence) and writes to the managed repo continue locally (Lookie-Link's storage), but commits are queued and not pushed (writes never lose data; sync just pauses until resolved)
 3. UI surfaces an alert
-4. Operator resolves via either:
-   - `POST /api/repos/<repo>/reset --to-local --force-push` (**recommended default** — overwrite origin with Lookie-Link's history; consistent with the "Lookie-Link is canonical" model)
-   - `POST /api/repos/<repo>/reset --to-origin` (drop local changes; appropriate when the operator deliberately wants GitHub-side changes to win)
-   - Manual git resolution in a shell on the Lookie-Link host
+4. Operator resolves via:
+   - `POST /api/repos/<repo>/reset --to-origin` (drop pending local commits; accept origin's state)
+   - `POST /api/repos/<repo>/reset --to-local --force-push` (overwrite origin with Lookie-Link's history)
+   - `POST /api/repos/<repo>/reset --rebase-onto-origin` (try the rebase again after the operator has manually resolved the conflict files via the Lookie-Link UI or a shell)
+   - Manual git resolution in a shell on the Lookie-Link host followed by `POST /api/repos/<repo>/sync --resume`
 
-The recommended-default flip from "drop local" to "force-push local" is deliberate. In the **canonical Lookie-Link** model, divergence means someone (an operator running `git push` from a non-Lookie-Link machine, a teammate using the GitHub UI) bypassed the canonical write path. The operator's default response should be to reassert Lookie-Link's authority, not to absorb the bypass. The "drop local" option exists for the cases where the bypass was deliberate and intended to win, but those cases are unusual.
+**No recommended-default resolution.** The right choice depends on what diverged and why — that's a judgment call the operator has to make. The previous version of this addendum recommended `--to-local --force-push` as the default; that was correct under the canonical-only mental model but wrong under the bidirectional default. Under bidirectional sync, divergence is a normal multi-writer event and force-pushing your version over a teammate's commits is a real footgun.
 
-No auto-resolution is still the right default for divergence. Auto-merge of conflicting agent-written content can produce garbage; auto-rebase mangles history. Auto-force-push is dangerous if the operator doesn't know it's happening. Better to stop and surface clearly.
+In `canonical` mode, an operator can configure a `defaultResolution: force-push-local` flag that surfaces that recommendation in the UI when divergence happens (still requires the operator to actually click; never silent). In `bidirectional` mode, no recommendation is surfaced — the UI shows the conflict and the three options with equal weight.
+
+Auto-resolution is still off the table. Auto-merge of conflicting agent-written content can produce garbage; auto-rebase past a content conflict mangles history; auto-force-push is dangerous if the operator doesn't know it's happening. Stop and surface clearly.
 
 #### Failure modes
 
@@ -894,6 +922,64 @@ No auto-resolution is still the right default for divergence. Auto-merge of conf
 - **Auth expired (PAT rotation, deploy-key removed)**: push fails → audit-log entry + UI alert + operator-action-required state. Writes still succeed locally.
 - **Origin disappears (repo deleted on GitHub)**: same as auth-expired.
 - **Lookie-Link restart**: the push queue persists across restarts (sqlite-backed); pending pushes resume.
+
+#### Sync scheduling architecture
+
+Chris's question: *"MAYBE a sync cron could be part of the configuration? Or should that be separate? In some other system? In a public SAS product, therefor in this architecture?"*
+
+Right answer: **hybrid** — Lookie-Link ships with a built-in scheduler that runs by default, and exposes manual-trigger endpoints that external orchestration can use instead of or in addition to it. Operators can disable the built-in scheduler if they want external-only control.
+
+Three scheduling modes, operator-selectable per repo:
+
+| Mode | Behavior | Right for |
+|---|---|---|
+| `built-in` (default) | Lookie-Link's own process owns the schedule. Runs fetch on `pullInterval` and push on `pushBatchInterval` / `pushBatchSize`. Handles back-off + retry on failure. | The default. Works out-of-the-box without external dependencies. The only correct answer for a public SaaS deployment, where operators don't have access to the hosting infrastructure. |
+| `external` | Disable the built-in scheduler entirely. Sync only happens when an external trigger hits the manual-trigger endpoints. | Self-hosted operators with their own centralized sync orchestration (CI, k8s CronJob, system cron, a dedicated sync service). Lookie-Link becomes one of several systems on a shared schedule. |
+| `both` | Built-in scheduler runs at its configured interval. External triggers can still drive immediate sync on demand (useful for "sync now" UX). | Self-hosted operators who want a steady-state background cadence plus the ability to force-sync from external systems (e.g., "after deploy, push the latest agent-generated docs immediately"). |
+
+Manual-trigger endpoints (always available regardless of `scheduling` mode):
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/repos/<repo>/sync` | Fetch + reconcile (per `pullPolicy`) + push (per `pushOnCommit`). The "do everything now" trigger. |
+| `POST /api/repos/<repo>/fetch` | Fetch + reconcile only. |
+| `POST /api/repos/<repo>/push` | Push pending local commits only. |
+| `POST /api/repos/<repo>/sync --resume` | Resume sync after a conflict was manually resolved. |
+
+The cron schedule **is** the configuration: `pullInterval` and `pushBatchInterval` are the periods. In `built-in` mode, those configure the in-process scheduler. In `external` mode, those values still appear (as advice / documentation) but are not acted on by Lookie-Link itself; the external scheduler reads them or ignores them as it chooses.
+
+Why this design fits both worlds:
+
+- **Public SaaS product**: operators get sync that "just works" out-of-the-box (`built-in`, default settings). They don't need to set up infrastructure. They can still hit the manual-trigger endpoints from their own tools when they want to (`both`).
+- **Chris's self-hosted setup**: he gets the same out-of-the-box experience. If he later decides he wants Syncthing to drive sync timing (replicate then push from the one machine that has GitHub auth), he flips `scheduling: external` and writes whatever trigger logic he wants. Lookie-Link cooperates either way.
+- **Larger self-hosted operators**: they can keep their existing sync orchestration in place. Lookie-Link doesn't fight them.
+
+The sync scheduling architecture lives **inside Lookie-Link** as a first-class part of the managed-repo + remote config — not in some other system. The reason: the schedule has to coordinate with Lookie-Link's own write queue (don't push mid-batch-commit), its fetch state (don't double-fetch), and its conflict state (don't push from origin-ahead state). External-only scheduling can paper over that by always going through the manual endpoints, but the coordination logic still has to live in Lookie-Link.
+
+#### Combined sync endpoint
+
+`POST /api/repos/<repo>/sync` returns a structured result describing what happened:
+
+```json
+{
+  "fetched": { "newCommits": 3, "from": "abc123", "to": "def456" },
+  "reconciled": { "strategy": "rebase", "localCommitsRebased": 2, "conflicts": 0 },
+  "pushed": { "commits": 5, "from": "def456", "to": "ghi789" },
+  "state": "in-sync"
+}
+```
+
+Or on failure:
+
+```json
+{
+  "fetched": { "newCommits": 3 },
+  "reconciled": { "strategy": "rebase", "localCommitsRebased": 0, "conflicts": 2 },
+  "pushed": null,
+  "state": "origin-ahead",
+  "alert": "Content conflicts in files: [a.md, b.md]. Operator action required."
+}
+```
 
 ### Auth implications (interaction with Addendum c)
 
@@ -982,25 +1068,32 @@ Phase 1's content is identical to v3. The v3 confirmation (`confirmation:FON-101
 
 ### Relation to FON-10193 (Syncthing + GitHub authority model)
 
-This addendum is the **mechanism** for the policy decision being made in [FON-10193](/FON/issues/FON-10193) ("Decide Syncthing + GitHub authority model for git-backed repos"). FON-10193's current hypothesis is:
+This addendum is the **product-side mechanism** that supports any of the policy outcomes being decided in [FON-10193](/FON/issues/FON-10193) ("Decide Syncthing + GitHub authority model for git-backed repos"). The phase 1.5 design as currently written supports the full range of multi-machine sync architectures via the `syncMode` config (`bidirectional` vs `canonical`) and the `scheduling` config (`built-in` / `external` / `both`).
+
+FON-10193's current hypothesis is:
 
 > for Lookie-served repos, the Lookie host should ideally be the same machine that acts as the authoritative git publisher or guaranteed up-to-date mirror
 
-That hypothesis IS the design framing of phase 1.5: the Lookie-Link host is the canonical write path, GitHub is the mirror, other machines pull from GitHub on their own schedule. The fetch-policy and conflict-resolution defaults in this addendum are tuned for that framing — `alert-on-divergence` rather than `auto-ff-merge`, `--to-local --force-push` recommended over `--to-origin` for divergence resolution.
+The previous version of this addendum read that as "Lookie-Link is canonical, full stop" and tuned the defaults accordingly. That was wrong — Chris clarified in his follow-up comment that the canonical-only model is correct for **his** setup (because Syncthing handles state replication and only one machine talks to GitHub) but is **not** the right default for the product, where many operators will have multiple machines pushing to the same GitHub repo independently.
 
-**The two issues should resolve together.** Three possible outcomes:
+**Updated mapping of FON-10193 outcomes to FON-10180 phase 1.5**:
 
-| FON-10193 outcome | Implication for FON-10180 phase 1.5 |
-|---|---|
-| **"Lookie-Link host is the authority for repos it serves"** | Phase 1.5 becomes **load-bearing** — it implements the policy for managed repos. Strong lock-in. The phase-1.5 design as written is correct without modification. |
-| **"Multiple machines remain independent git authors; merge on pull"** | Phase 1.5 stays **optional convenience** — useful for operators who want GitHub durability without complex sync, but not the systemic answer to multi-machine pain. Lock-in is judgment-call rather than required. Fetch policy default may want to flip to `auto-ff-merge` to tolerate independent peers. |
-| **"Syncthing distributes among peers; one machine talks to GitHub"** | Phase 1.5 is **the right mechanism for the GitHub-talking machine** specifically. If that machine is the Lookie-Link host (likely under this hypothesis), the design as written applies cleanly. Other Lookie-Link instances (if any) on Syncthing-receiver machines would use managed repos without GitHub backing. |
+| FON-10193 outcome | Recommended `syncMode` for Lookie-served repos | What changes in phase 1.5 |
+|---|---|---|
+| **"Lookie-Link host is the authority for repos it serves (and other machines replicate via Syncthing or read-only)"** | `canonical` per repo where Lookie-Link is sole writer | Phase 1.5 ships unchanged; operators using this policy set `syncMode: canonical` and get the alert-on-divergence + force-push-reassert defaults. |
+| **"Multiple machines remain independent git authors"** | `bidirectional` per repo | Phase 1.5 ships unchanged; operators using this policy keep the product default (`bidirectional` + `auto-rebase`). |
+| **"Syncthing distributes among peers; one machine (the authority) talks to GitHub"** | `canonical` on the authority machine; managed repos without GitHub backing on the others | Phase 1.5 ships unchanged; same as the first outcome for the authority machine. |
+| **"Hybrid by repo class — some repos are canonical-only, others are multi-writer"** | Per-repo `syncMode` choice | Phase 1.5 already supports this — `syncMode` is per-repo, not per-instance. |
 
-In all three outcomes, phase 1.5's design is essentially right. What changes is **how strongly to lock it in** and **what the default policies should be**.
+In all four outcomes, phase 1.5's design is correct without modification. The policy choice in FON-10193 determines **which `syncMode` operators configure for which repos** — not whether the product supports either mode.
 
 **Recommended sequencing**:
 
-1. **Resolve [FON-10193](/FON/issues/FON-10193) first** — the policy question. It is in `in_review` as of this addendum and is a small focused decision.
-2. **Then decide FON-10180 phase 1.5 lock-in** based on the FON-10193 outcome. If FON-10193 picks "Lookie-Link host is authority," lock in phase 1.5 unambiguously. If it picks something else, the phase 1.5 lock-in becomes a judgment call (still likely yes, but less obvious).
+1. **Resolve [FON-10193](/FON/issues/FON-10193)** — the policy question. It is in `in_review` and is a small focused decision. The policy outcome determines how operators (including Chris) will configure their own repos; it does not change what phase 1.5 of FON-10180 builds.
+2. **Decide FON-10180 phase 1.5 lock-in** — independent of FON-10193's outcome. Phase 1.5 either lands now (in which case operators get `syncMode` as a configurable choice) or it's deferred to phase 4 (in which case managed repos stay Lookie-Link-local with no GitHub backing).
 
-If Chris wants to make both decisions together right now, the v3 confirmation for phase 1 of FON-10180 stays alive in any case (phase 1's content is independent of both decisions). A v4 plan revision that locks in phase 1.5 can land alongside the FON-10193 resolution if they're decided together.
+The two decisions are **no longer coupled in design**. They are still useful to make together because they answer related operator questions, but FON-10193's outcome no longer dictates phase 1.5's design.
+
+The phase 1.5 lock-in / defer decision is now standalone:
+- **Lock in**: get durable GitHub backing for managed repos in ~1–2 weeks, with operator-selectable sync mode per repo. Total timeline: phase 1 (5–6 wks) → 1.5 (1–2 wks) → 2 (1–2 wks) → 3 (3 wks) = ~10–13 weeks.
+- **Defer**: ship phase 1 → 2 → 3 first (~10–11 weeks), revisit GitHub backing in phase 4 once operational experience tells you whether the durability gap matters.
