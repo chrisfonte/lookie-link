@@ -16,6 +16,7 @@
 > **Addendum c** expands the identity and auth model: first-class user identity (sessions, SSO via WorkOS) distinct from agent API keys, plus three public-share modes (anonymous / magic-link-lightweight / fully credentialed). Also records the commitment signal from Chris ("building this whether it becomes a public sellable thing or not") that removes commercialization as a gate on the build.
 > **Addendum d** evaluates whether managed repos should optionally back to a real GitHub remote with full bidirectional git-sync (`pull AND push`) and a configurable sync scheduler. Designs the feature with per-repo `syncMode` choice (`bidirectional` default + `canonical` opt-in) and per-repo `scheduling` choice (`built-in` default + `external` + `both`). Proposes a phase 1.5 slot between phase 1 and phase 2 if Chris wants to lock it in. Phase 1's content does not change either way. *Note: the initial draft of this addendum framed the design as canonical-only sync; corrected after Chris clarified that multi-writer is the general case and a SaaS-product default.*
 > **Addendum e** answers four questions Chris raised after addendum d: (1) cloud agents (OpenAI / cloud Claude / OpenClaw cloud) using the Lookie-Link API — reinforces existing design; flags FON-7058 as the transport that makes it reachable. (2) "Lookie-Link becomes the canonical location" — refactors the conceptual framing to "Lookie-Link as canonical content store with sync-to-other-systems as configurable plugins." (3) File versioning à la Syncthing for rollback, separate from git history — designs an optional `.versions/` sidecar layer per managed repo. (4) Database question and "are we over-complicating?" — direct answer: yes, SQLite (embedded, file-backed, no separate service), and no, this is the minimum for a serious product, not over-engineering.
+> **Addendum f** addresses backup: (1) SaaS backup model — S3 / S3-compatible client-side-encrypted, per-tenant prefix, owned by the SaaS operator. (2) OSS backup — same mechanism exposed as operator-configurable: S3-compatible target (any vendor), local-rsync fallback for homelab. (3) "Is backup the versioning?" — partial yes, recommended design is complementary layers with unified API surface. (4) Phase slotting — proposes phase 1.7 (between phase 1.5 GitHub-backing and phase 2 CLI) for ~2–3 weeks of work, or defer to phase 4 if the operational stopgap (filesystem-level backup of the Lookie-Link host) is acceptable for the first months.
 > The body of this document below is the original evaluation; the addenda are the current recommendation.
 
 ## TL;DR
@@ -1318,3 +1319,274 @@ What's deliberately NOT in scope and would be over-complicating:
 - Notification systems, ChatOps integrations, custom dashboards (defer indefinitely).
 
 The total phase-1 commit (5–6 weeks → 6–7 weeks with file versioning) is meaningful but is the right size for the build Chris committed to. The product that results IS a serious agent-native canonical content store. The alternative — a minimum-viable read where every piece gets cut — produces something that has to be rebuilt within a year. That would be the actual over-complication, paid in refactor cost rather than upfront cost.
+
+---
+
+## Addendum 2026-06-01f — Backup model (SaaS + OSS); is backup the versioning?
+
+This addendum responds to Chris's sixth comment: *"AND as a SaaS, a backup model??? To S3, however I'd do it on the SaaS host? Worth building this method into the open source model too most likely? Maybe the backup IS the versioning somehow?"*
+
+Three questions, each answered below.
+
+### 1. SaaS backup model — yes, load-bearing
+
+If Lookie-Link runs as a SaaS hosting customer data (managed-repo content, publish artifacts, SQLite state), **backup is non-negotiable**. The customer is paying for durability they don't have to think about; losing their content because the host disappeared is a contract-ending failure.
+
+The right SaaS backup model:
+
+- **Target**: S3 (or any S3-compatible object store the SaaS operator chooses — AWS S3 for AWS-hosted deployments, R2 for Cloudflare, B2 for Backblaze, etc.).
+- **Encryption**: client-side, before upload. The backup target operator (Amazon, Cloudflare, Backblaze) never sees plaintext. Per-tenant encryption keys, managed by the SaaS operator (Lookie-Link Inc). Customer never sees the keys; the SaaS operator's recovery procedures handle key access.
+- **Schedule**: continuous incremental (every write triggers an async upload of the changed object, encrypted) + periodic snapshots (e.g., every 15 minutes, retained per a tiered policy: 24 hourly, 30 daily, 12 weekly, 24 monthly).
+- **Cross-region**: at least one secondary target in a different region for disaster recovery. The SaaS operator chooses the regions.
+- **Restore**: customer-facing UI for self-serve restore of any file to any prior point-in-time snapshot, with reasonable retention limits. SaaS operator runs the disaster-recovery muscle (full-instance restore from secondary region) without customer involvement.
+- **Customer-facing surface**: a dashboard showing last backup time, retention coverage, and a one-click restore. Customer never sees the bucket; the backup is invisible infrastructure.
+
+This is the operational discipline a paying customer expects. It is not a feature — it is the durability promise.
+
+### 2. OSS backup — yes, same mechanism exposed as operator-configurable
+
+Building the backup mechanism for the SaaS and not exposing it to OSS operators would be a missed product opportunity. Self-hosted operators want backup that "just works" — they don't want to roll their own with cron + rsync + GPG + retention scripts. Pattern-matching the OSS-alternative comparables surveyed in the companion docs: Plausible, Mattermost, Sentry, Outline all ship first-class backup in their OSS distributions.
+
+OSS backup design:
+
+- **Operator configures targets via YAML**: any S3-compatible endpoint (AWS, R2, B2, Wasabi, MinIO, Garage, etc.); local rsync to a mounted filesystem for homelab / NAS deployments; or both for belt-and-suspenders durability.
+- **Operator owns encryption key**: argon2id-derived from operator-configured passphrase or env-var-injected raw key. SaaS operator's key-management story is not the OSS operator's story; OSS keeps it simple.
+- **Operator picks schedule and retention** via YAML config.
+- **Restore via the same UI surface** as SaaS — operators get the self-serve point-in-time restore experience.
+- **No telemetry, no phone-home**: backup runs entirely within the operator's environment. The OSS distribution never knows whether backup is configured.
+
+The mechanism is identical between SaaS and OSS at the code level. SaaS just configures it with the SaaS operator's defaults and key-management; OSS exposes the config knobs to the operator. **Single implementation, two configurations.**
+
+### 3. "Maybe the backup IS the versioning somehow?" — partial yes, but the honest answer is complementary layers
+
+Useful intuition. Let me unpack it carefully.
+
+**Where the intuition is right**: a backup at time T contains the state of every file at time T. If you have backup checkpoints every 15 minutes for the last 30 days, you implicitly have 30 days of file history at 15-minute granularity. Asking "what was file X like 3 days ago?" is the same operation as "fetch the file from the 3-day-old backup checkpoint." If the backup is content-addressed (each unique file blob stored once by hash, à la restic / borg / kopia / git's object store), the storage cost is also minimized through dedupe.
+
+**Where the intuition is incomplete**:
+
+- **Granularity**: backup checkpoints run on a schedule (every 15 minutes is the SaaS sweet spot). An agent that writes to a file 10 times between checkpoints leaves only one prior version recoverable (the state at the last checkpoint). Per-write granularity matters for "the agent just made a mistake; restore the version from 90 seconds ago."
+- **Restore latency**: `.versions/` sidecar is a local filesystem read (milliseconds). Backup restore is a remote S3 fetch (seconds to tens of seconds for a single file, minutes for an instance restore). The rollback UX wants the fast path; disaster recovery wants the durable path.
+- **Availability without backup configured**: a self-hosted operator who hasn't configured a backup target has no versioning if the only mechanism is backup. The `.versions/` sidecar layer (Addendum e) works regardless of backup configuration.
+
+**Recommended architecture: complementary layers with a unified API surface.**
+
+| Layer | What it gives you | When it kicks in |
+|---|---|---|
+| **`.versions/` sidecar** (Addendum e, phase 1B) | Per-write granularity. Fast local rollback. Works without any backup target. Recent-history window bounded by retention policy. | Every overwrite produces a sidecar version. Cleanup runs per the policy. |
+| **Backup to object store** (this addendum, phase 1.7) | Periodic snapshot granularity. Slower restore. Requires backup target configured. Long-history window (months/years), durable across host loss. | Every snapshot interval, plus continuous incremental for the SaaS model. |
+| **Unified API surface** | The agent / user doesn't care which layer holds a given prior version | `GET /api/repos/<repo>/files/<path>/versions` returns both sources merged + ranked by recency, with origin tag (`source: local | backup`). Restore from either is one endpoint. |
+
+This is more robust than either layer alone. The recent-history fast-path is local; the long-history durable-path is in the backup target; the API hides the distinction.
+
+A future architecture (phase 4+) could refactor managed-repo storage to be content-addressed (each blob keyed by hash; current state is a path-to-hash pointer table). In that world, backup and versioning collapse architecturally — the backup IS the content-addressed store, and `.versions/` becomes redundant. But this is a real rearchitecture, not a phase-1 thing. The complementary-layers approach gets there incrementally without prematurely committing to the more complex storage model.
+
+### Design
+
+#### Targets
+
+```yaml
+backup:
+  enabled: true
+  
+  targets:
+    - id: primary-r2
+      type: s3
+      endpoint: https://<accountid>.r2.cloudflarestorage.com
+      bucket: lookie-link-backups
+      prefix: instance-foo/
+      region: auto
+      credentialKey: backup-r2-key       # references credential in encrypted store
+      encryption:
+        algorithm: aes-256-gcm
+        keySource: env:BACKUP_ENCRYPTION_KEY  # or vault:... / file:... / passphrase:...
+    
+    - id: secondary-b2
+      type: s3
+      endpoint: https://s3.us-west-001.backblazeb2.com
+      bucket: lookie-link-backups
+      prefix: instance-foo/
+      credentialKey: backup-b2-key
+      encryption: { ... }
+    
+    - id: local-nas
+      type: local-rsync
+      path: /mnt/nas/lookie-link-backups
+      encryption: { ... }                # still encrypt local backups for at-rest protection
+```
+
+Three target types in v1:
+
+| Type | What it is | When to use |
+|---|---|---|
+| `s3` | Any S3-compatible API (AWS S3, R2, B2, Wasabi, MinIO, Garage, ...) | The recommended default. Works for SaaS, works for self-hosted operators with cloud accounts. |
+| `local-rsync` | rsync to a mounted filesystem | Homelab / NAS deployments without object storage. Cheap, reliable, but doesn't protect against host-site disaster. |
+| `restic` (future) | Use restic as the backup engine | Deferred — restic is a separate binary dependency. Once added, gets dedupe + encryption + snapshots out of the box. |
+
+Multiple targets can be configured simultaneously (primary + secondary, cloud + local, etc.). Backup runs in parallel against each target; success is reported per target.
+
+#### Encryption
+
+Client-side, before upload. Algorithm: AES-256-GCM (authenticated encryption). Key source is operator-configurable:
+
+| Source | When right |
+|---|---|
+| `env:` | Operator manages the key as an environment variable (recommended baseline) |
+| `vault:` | Operator uses HashiCorp Vault or equivalent KMS (recommended for production) |
+| `file:` | Operator stores the key in a file on disk (acceptable for homelab) |
+| `passphrase:` | Argon2id-derived from operator-supplied passphrase (acceptable for low-stakes deployments) |
+
+**Lookie-Link never sees the plaintext encryption key in any persistent storage.** The key lives in memory while backup operations run; persistence is via the key source the operator chose.
+
+For SaaS: per-tenant keys, managed by the SaaS operator's KMS. Customer plaintext never touches the backup target.
+
+#### Schedule
+
+```yaml
+backup:
+  schedule:
+    continuous: true                  # async upload on every write (in addition to snapshots)
+    snapshotInterval: 15m             # full-instance snapshot cadence
+    snapshotRetention:
+      hourly: 24
+      daily: 30
+      weekly: 12
+      monthly: 24
+```
+
+**Continuous mode**: every write to a managed repo, the publish area, or SQLite triggers an async encrypted upload of the changed object(s). Recovery point objective (RPO) is bounded by upload latency (typically seconds). Recommended for SaaS.
+
+**Snapshot mode**: at each `snapshotInterval`, Lookie-Link takes a consistent point-in-time snapshot of the entire backed-up state and uploads it under a snapshot identifier. Retention policies prune older snapshots per the tiered schedule.
+
+Both can be enabled together (continuous for low-RPO; snapshots for clean point-in-time recovery markers).
+
+#### What gets backed up
+
+- All managed-repo content paths (live files + `.versions/` sidecars)
+- Publish-area content
+- `lookie-link.db` (SQLite — consistently snapshotted via the SQLite backup API)
+- Operator config files (excluding plaintext secrets, which live in the encrypted credential store separately)
+- Git histories of managed repos with `git.enabled: true` (so restore is a real git history, not just current state)
+
+Explicitly **not** backed up:
+
+- Render output caches (regenerable)
+- Search index (regenerable from content)
+- Build / runtime artifacts (none in current design)
+
+Plaintext credentials are excluded by default. Encrypted credential blobs (from the encrypted credential store) are included so a full restore can resume sync to GitHub / SMTP / SSO providers; the decryption key is restored separately (operator's responsibility under their existing key-management).
+
+#### Restore
+
+API surface:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/backup/snapshots` | List available snapshots across targets with timestamps and target id |
+| `GET /api/backup/snapshots/<id>` | Get a snapshot's metadata (size, contents summary) |
+| `POST /api/backup/restore?snapshotId=<id>&scope=<all|repo:X|path:Y>` | Restore from a snapshot; scope-restricted to avoid full-instance restore by mistake |
+| `POST /api/repos/<repo>/files/<path>/restore?version=<id>` | Restore a single file, version can be a `.versions/` id OR a backup snapshot id (unified per the recommendation above) |
+| `GET /api/backup/status` | Last backup time per target, next scheduled snapshot, current state |
+
+Restore operations are operator-permission-gated (`manage_backup`, new permission, operator-only by default).
+
+#### Sync-plugin framing (continuity with Addendum e)
+
+Backup-to-S3 is **the second sync plugin** under the canonical-store-with-sync-plugins framing introduced in Addendum e. It joins:
+
+| Sync plugin | Direction | Phase |
+|---|---|---|
+| GitHub remote | Bidirectional (or canonical outbound) | 1.5 (Addendum d) |
+| **S3 backup** | **Outbound, periodic + continuous** | **1.7 (this addendum)** |
+| Syncthing peer | Bidirectional, real-time | Future |
+| External webhook | Outbound, per-write | Future |
+
+Each plugin has its own configuration, credentials, scheduling, conflict semantics. They all hang off the same canonical store. Operators mix and match per repo (or globally for backup, which applies instance-wide).
+
+This is conceptually clean: backup is not a special feature; it is one of N sync mechanisms the canonical store supports.
+
+#### Failure modes
+
+- **Backup target unreachable**: continuous uploads queue locally (SQLite-backed); snapshots that fail to upload retry on the next interval. Audit log + UI alert if persistent.
+- **Credentials expired or revoked**: same as auth-expired for GitHub backing. Audit + alert + operator-action-required.
+- **Encryption key unavailable at upload time**: backup pauses, audit + alert. Writes to Lookie-Link still succeed; backup resumes when key is available.
+- **Backup state file corruption**: rebuild from the backup target's manifest; non-fatal.
+- **Restore from a corrupted snapshot**: detected via integrity hashes; snapshot marked corrupt; fall back to a prior snapshot.
+
+#### Auth implications
+
+New permission added to the model from Addendum c:
+
+| Permission | Granted to | Allows |
+|---|---|---|
+| `manage_backup` | Operator role only by default | Configure targets, manage credentials, trigger manual snapshot, perform restore |
+
+Agents do **not** get `manage_backup`. Backup is operator-controlled infrastructure.
+
+New audit actor type:
+
+| Actor shape | When emitted |
+|---|---|
+| `{ "type": "backup", "operation": "snapshot" \| "continuous-upload" \| "restore", "targetId": "..." }` | Backup operations initiated by Lookie-Link itself |
+
+Distinct from agent / user / git-sync actions.
+
+### Phase slotting
+
+Two options:
+
+**Option A — Phase 1.7 (recommended for SaaS commitment).** Lands after phase 1.5 GitHub backing (if locked in) and before phase 2 CLI. 2–3 weeks of focused work, 5 child issues:
+
+1. Backup target abstraction + S3 implementation + credential storage integration
+2. Local-rsync target implementation
+3. Backup scheduler (continuous + snapshot modes, retention policy enforcement)
+4. Restore endpoints + UI (snapshots list, point-in-time restore, scope-restricted restore)
+5. Docs: `docs/BACKUP.md` covering targets, encryption, schedule, restore procedure, OSS vs SaaS configuration differences
+
+Phase 1.7 adds 2–3 weeks to the timeline; total to "prototype with shares" becomes ~13–16 weeks (with phase 1.5 GitHub backing and file versioning in 1B).
+
+**Option B — Defer to phase 4.** Self-hosted operators use filesystem-level backup as a stopgap (rsync the entire Lookie-Link host on a cron, do file-level restore manually). The SaaS launch (if/when it happens) becomes blocked on shipping the backup mechanism before opening to paying customers. Total to "prototype with shares" stays ~10–13 weeks.
+
+**My recommendation: Option A (phase 1.7)** because:
+
+- If Lookie-Link is on a serious-product trajectory (Chris's commitment signal), backup is not optional — it's the durability promise.
+- The mechanism is identical between SaaS and OSS at the implementation level. Building it once during phase 1.7 unlocks both.
+- 2–3 weeks is a small marginal cost relative to phase 1's 5–6 weeks. The total commit becomes ~13–16 weeks for a substantially more durable product.
+- Self-hosted operators get a first-class backup story without waiting for "later." The OSS-alternative comparables (Plausible, Mattermost, Sentry) all shipped first-class backup early; following that pattern is right.
+- Deferring backup means starting to take real content (Chris's research, agent-generated artifacts) before a recovery path exists. That's a reversal cost if the host has a hardware failure or a misconfigured `DELETE` operation in early use.
+
+The argument for Option B is honest: phase 1 + 1.5 + 1.7 + 2 + 3 starts to add up. A stopgap of "back up the host's filesystem with the operator's existing tools" works for the first months. If Chris explicitly wants the shortest path to phase-2 distribution surface and is comfortable with the operational stopgap, defer is reasonable.
+
+### Risks specific to backup
+
+- **Encryption key management is the highest-risk component.** A lost encryption key means the backup is unrecoverable; a leaked key means an attacker who has access to the backup target can decrypt everything. Phase 1.7 documentation should walk operators through the key-management options and recommend `vault:` for production, `env:` with strong rotation discipline as a minimum.
+- **Continuous-upload bandwidth cost.** Operators with constrained upload bandwidth (residential connections, mobile uplinks) will feel continuous mode. Default to snapshots-only for self-hosted with continuous as an opt-in; SaaS deployments get continuous by default.
+- **Restore footgun.** A full-instance restore that's mistakenly aimed at the wrong snapshot can roll back hours of legitimate work. Scope-restricted restore endpoints (single file, single repo) are the default surface; full-instance restore requires explicit `?scope=all` and a confirmation step.
+- **Object-store API cost.** Frequent small uploads to S3 (continuous mode) can produce thousands of PUT requests per day. Per-target cost monitoring is operator-visible; defaults batch small writes to reduce cost.
+- **SQLite consistency.** SQLite backup must use the SQLite backup API or `VACUUM INTO` for consistency, not just a file copy of a database that's open for writes. Phase 1.7 must get this right.
+
+### Net effect on phase planning
+
+| Phase | Without phase 1.7 | With phase 1.7 |
+|---|---|---|
+| 1 (incl. 1A+1B with versioning) | 6–7 weeks | 6–7 weeks (unchanged) |
+| 1.5 (GitHub backing, if locked in) | 1–2 weeks | 1–2 weeks |
+| 1.7 (backup) | — | **2–3 weeks** |
+| 2 (CLI + agent.json) | 1–2 weeks | 1–2 weeks |
+| 3 (three share modes) | 3 weeks | 3 weeks |
+| **Total to "prototype with shares"** | **~11–14 weeks** | **~13–16 weeks** |
+
+The marginal cost of backup is bounded. The marginal value is large: the product becomes a serious canonical store that operators can trust with content, both in self-hosted and SaaS modes.
+
+### Decisions now open for Chris
+
+Four independent lock-in / defer decisions, each of which phase 1 ships unchanged regardless:
+
+| Decision | Default if not picked | My recommendation |
+|---|---|---|
+| Phase 1.5 GitHub backing (Addendum d) | Defer to phase 4 | **Lock in** |
+| File versioning placement (Addendum e) | Defer | **Phase 1B (Option A)** |
+| Audit log storage (Addendum e) | JSONL for v1 | JSONL for v1 (low stakes) |
+| **Phase 1.7 backup (this addendum)** | **Defer to phase 4** | **Lock in (Option A)** |
+
+If all three lock-ins land (1.5 + 1B-versioning + 1.7), the prototype-with-shares timeline becomes ~13–16 weeks. The product that ships is a serious canonical content store with durable backing, versioning, GitHub sync, identity, search, publish, CLI, and three share modes. That is the build worth doing for the operator's own use, the open-source distribution, and a future SaaS — all on the same code base.
