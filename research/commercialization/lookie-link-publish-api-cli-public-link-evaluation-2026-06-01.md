@@ -15,6 +15,7 @@
 > **Addendum b** expands the storage model to include a multi-agent shared "managed repo" primitive alongside the slug-addressed publish primitive, and elevates search API + CLI to a load-bearing phase 1 item.
 > **Addendum c** expands the identity and auth model: first-class user identity (sessions, SSO via WorkOS) distinct from agent API keys, plus three public-share modes (anonymous / magic-link-lightweight / fully credentialed). Also records the commitment signal from Chris ("building this whether it becomes a public sellable thing or not") that removes commercialization as a gate on the build.
 > **Addendum d** evaluates whether managed repos should optionally back to a real GitHub remote with full bidirectional git-sync (`pull AND push`) and a configurable sync scheduler. Designs the feature with per-repo `syncMode` choice (`bidirectional` default + `canonical` opt-in) and per-repo `scheduling` choice (`built-in` default + `external` + `both`). Proposes a phase 1.5 slot between phase 1 and phase 2 if Chris wants to lock it in. Phase 1's content does not change either way. *Note: the initial draft of this addendum framed the design as canonical-only sync; corrected after Chris clarified that multi-writer is the general case and a SaaS-product default.*
+> **Addendum e** answers four questions Chris raised after addendum d: (1) cloud agents (OpenAI / cloud Claude / OpenClaw cloud) using the Lookie-Link API — reinforces existing design; flags FON-7058 as the transport that makes it reachable. (2) "Lookie-Link becomes the canonical location" — refactors the conceptual framing to "Lookie-Link as canonical content store with sync-to-other-systems as configurable plugins." (3) File versioning à la Syncthing for rollback, separate from git history — designs an optional `.versions/` sidecar layer per managed repo. (4) Database question and "are we over-complicating?" — direct answer: yes, SQLite (embedded, file-backed, no separate service), and no, this is the minimum for a serious product, not over-engineering.
 > The body of this document below is the original evaluation; the addenda are the current recommendation.
 
 ## TL;DR
@@ -1097,3 +1098,223 @@ The two decisions are **no longer coupled in design**. They are still useful to 
 The phase 1.5 lock-in / defer decision is now standalone:
 - **Lock in**: get durable GitHub backing for managed repos in ~1–2 weeks, with operator-selectable sync mode per repo. Total timeline: phase 1 (5–6 wks) → 1.5 (1–2 wks) → 2 (1–2 wks) → 3 (3 wks) = ~10–13 weeks.
 - **Defer**: ship phase 1 → 2 → 3 first (~10–11 weeks), revisit GitHub backing in phase 4 once operational experience tells you whether the durability gap matters.
+
+---
+
+## Addendum 2026-06-01e — Cloud agents, canonical-store framing, file versioning, and the database question
+
+This addendum responds to Chris's fifth comment, which surfaces four substantive items:
+
+1. **Cloud-hosted agents using the API.** *"Agentic tools 'in the cloud' could benefit from this, like an OZ [OpenAI?] agent being able to tweak files via API as well, for this whole concept I mean. Whether it's a git repo or not."*
+2. **Lookie-Link as the canonical location.** *"Everything 'stays in sync' with this concept — the whole concept of the lookie-link API — because it then becomes some canonical location."*
+3. **File versioning, Syncthing-style.** *"BUT, would we then want versioning? Like Syncthing, for example, has? To roll back changes? And how would these be stored?"*
+4. **Database vs. over-complicating.** *"ULTIMATELY, do we need a database? Or are we over-complicating?"*
+
+Each answered below.
+
+### 1. Cloud-hosted agents using the API
+
+**The design already supports this. The transport (public reachability) is the gating concern, not the API surface.**
+
+Cloud-hosted agents — OpenAI's hosted code-interpreter agents, ChatGPT custom GPTs with actions, Cursor's cloud workers, OpenClaw cloud instances, Claude API agents calling tools, n8n / Zapier-style automation, the Paperclip cloud control plane — are functionally identical to local-tailnet agents for the purposes of Lookie-Link's write surface. They authenticate with an API key (bearer token), hit the same `/api/repos/<repo>/files/<path>` and `/api/publish` endpoints, get the same audit log entries (`actor.type: agent`), and operate within the same permission model. **Phase 1A's API key model is designed for this exact use case** — that's why API keys are owner-attributed, long-lived, rotatable, and never tied to a browser session.
+
+What does need to be in place for cloud agents to actually reach a Lookie-Link instance:
+
+- **Public HTTPS reachability**. The Lookie-Link instance has to be on a hostname the cloud agent can resolve and reach over the public internet. Tailnet-only deployments don't work for cloud-agent calling. This is the [FON-7058](/FON/issues/FON-7058) Pangolin work (or equivalent — Cloudflare Tunnel, ngrok, a public VPS, etc.).
+- **Valid TLS**. Cloud agent runtimes typically refuse self-signed certs. Let's Encrypt via the reverse proxy is the standard answer.
+- **CORS** if the cloud agent's runtime calls Lookie-Link from a browser-context environment. Phase 1A's session/auth design should set sensible CORS defaults (block by default, allow operator-configured origin allowlist).
+- **Inbound rate limiting** that's strict enough to not become a public DDoS target. Phase 1's existing rate-limiting plans (per IP / per API key / global) cover this.
+- **OpenAPI + agent.json discovery** so cloud agent runtimes that consume those formats (everyone moving in that direction) can self-configure against the instance. Phase 2 ships this.
+
+**No new phase scope is needed for cloud-agent support specifically.** What changes is the **operator's expected deployment topology**: instead of "Lookie-Link on the tailnet only," it's "Lookie-Link on the tailnet for human / local-agent calls, AND publicly reachable for cloud-agent calls." [FON-7058](/FON/issues/FON-7058)'s work is now strictly more strategic, because it's not only "credentialed-share recipients can reach the instance" but also "cloud agents can reach the instance to write."
+
+This further strengthens the prior recommendation to pick up [FON-7058](/FON/issues/FON-7058) in parallel with phase 3 — or even earlier if cloud-agent writes are an immediate need.
+
+### 2. "Lookie-Link as canonical content store, sync-to-other-systems as configurable plugins"
+
+This is a useful **conceptual reframe** of the entire managed-repo + publish + sync design. The current document body and addendum b describe the storage primitives bottom-up (managed-repo is one thing, publish is another, sync is a feature on managed-repo). The cleaner top-down framing:
+
+**Lookie-Link is a canonical content store.** Agents, users, and external systems read and write content via the Lookie-Link API. The instance's storage is the source of truth.
+
+**Synchronization to other systems is a configurable plugin set.** Each managed repo can opt into one or more sync mechanisms:
+
+| Sync plugin | What it does | When operators choose it |
+|---|---|---|
+| **None** (default) | Storage is purely Lookie-Link-local | Transient content; the operator owns filesystem-level backups |
+| **GitHub remote** | Bidirectional / canonical git-sync to a GitHub repo (Addendum d) | Long-lived content; want durable backup + collaborator access via GitHub UI |
+| **Syncthing peer** (future) | Lookie-Link acts as a Syncthing endpoint; other machines replicate via the Syncthing protocol | Multi-machine deployments where Syncthing is the team's existing replication choice |
+| **S3 / object store mirror** (future) | Periodic snapshot to an S3 bucket | Operators wanting cheap durable backup without GitHub semantics |
+| **External webhook** (future) | Lookie-Link calls an operator-configured webhook on every write, with the file payload | Operators wanting to wire content writes into custom downstream pipelines (search indexes, knowledge bases, etc.) |
+
+In this framing:
+
+- The **canonical content store** is what Lookie-Link IS. Not a viewer-with-write-mode; a content store with a render-friendly surface.
+- The **sync plugins** are how the canonical store talks to other systems. Each plugin is independent. Operators mix and match per repo.
+- The **rendering pipeline** (markdown, code, YAML, audio, etc.) operates on the canonical store. Render works regardless of which sync plugins are active.
+- The **public-share modes** (Addendum c) and **search API** (Addendum b) also operate on the canonical store. They are surfaces, not storage.
+
+This framing doesn't change phase 1's content. It does sharpen the marketing and product positioning. The README opener (which Addendum c recommended updating) should lead with "canonical content store for multi-agent + multi-machine workflows," not "private-network file viewer." Phase 1 of the implementation is what makes the new framing honest.
+
+Phase 1.5 (Addendum d) is **the first sync plugin** under this framing. Subsequent sync plugins (Syncthing peer, S3 mirror, external webhook) can land as later phases without architectural surgery — they all conform to the same plugin contract: read from the canonical store, write to it when the remote source moves, emit audit events for both directions.
+
+### 3. File versioning à la Syncthing — should we?
+
+**Yes. As an opt-in per managed repo. Without requiring git backing.**
+
+Currently the design provides versioning in two ways:
+
+| Mechanism | Where | What it gives you |
+|---|---|---|
+| Optional git backing (Addendum b) | Per managed repo with `git.enabled: true` | Full git history, branch / diff / blame, restore any historical version |
+| Append-only publish revisions | Publish-area slugs | Each `POST /api/publish/<slug>` update is a numbered revision; old revisions remain reachable via `?version=<n>` |
+| `expectedMtimeMs` stale-write detection | All writes | Concurrency control, not versioning — protects against accidental overwrite of newer content, doesn't give you history |
+
+**The gap**: managed repos without `git.enabled` have no versioning at all. Just current state. An agent that mistakenly overwrites a file has destroyed the prior content. That's a real product hole if Lookie-Link is the canonical store.
+
+Syncthing's approach is the right model — it's been operationally proven in this exact class of system (multi-machine sync with rollback). Their options are: `none`, `simple` (one prior version per file), `staggered` (decreasing density of versions over time), `trash can` (only deleted files preserved), `external` (custom command).
+
+Proposed design — **`.versions/` sidecar layer per managed repo, opt-in**:
+
+```yaml
+managedRepos:
+  agent-research:
+    versioning:
+      policy: staggered          # none (default) | simple | staggered | trash-can | external
+      maxAge: 90d                # for staggered; how far back to keep versions
+      maxCount: 50               # per-file cap regardless of age
+      storagePath: .versions/    # relative to repo root; hidden from /view/ rendering
+      excludeGlob: ["*.lock", "*.tmp"]   # don't version these
+```
+
+Storage shape — for managed repo `agent-research` at path `/managed-repos/agent-research/`:
+
+- File `docs/research.md` is currently version 7
+- On overwrite, the prior version is copied to `/managed-repos/agent-research/.versions/docs/research.md/2026-06-01T20:42:33.123Z.md` (timestamp + original extension)
+- Periodic cleanup runs per the policy
+
+API surface — added to managed-repo endpoints:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/repos/<repo>/files/<path>/versions` | List versions: timestamp, size, hash, who wrote it (from audit log lineage) |
+| `GET /api/repos/<repo>/files/<path>/versions/<id>` | Get a specific historical version's content |
+| `POST /api/repos/<repo>/files/<path>/restore?version=<id>` | Restore a historical version as the current file (creates a new version for the current state first) |
+| `DELETE /api/repos/<repo>/files/<path>/versions/<id>` | Manually purge a version (operator only) |
+
+Versioning operates independently of git backing. Operators can enable both:
+
+- Git backing gives full commit history with diff/blame at the repo level
+- File versioning gives simple per-file rollback without git semantics
+
+Both are useful in different contexts:
+
+- An agent overwrites a file by mistake → use file versioning to restore the most recent prior version (one click, no git knowledge)
+- A teammate wants to see how a doc evolved over a quarter → use git history (diff between commits)
+
+Implementation is **small**: write a copy on overwrite to a sidecar dir, schedule cleanup. ~2-3 days of implementation including the API endpoints. ~1 week including docs + tests.
+
+**Storage cost**: this is the honest trade-off. For a managed repo with frequent agent writes to large files, version history can balloon. Operators tune `maxCount` and `maxAge` per repo. Default policy choices:
+
+- `none` (default) — no versioning; minimum storage
+- `simple` (recommended starter) — one prior version per file; bounded storage
+- `staggered` (Syncthing's smart default) — full recent history, sparse older history
+- `trash can` — only versions deleted files (still useful for accidental deletes; cheaper than file versioning)
+
+**Where it slots**: I recommend adding it to phase 1B's managed-repo write endpoints as a sub-feature. It's tightly coupled to writes (every write becomes "write current to versions, then write new") and there's no clean separation. Adding it later is possible but means refactoring the write endpoints.
+
+| Option | Effort | Trade-off |
+|---|---|---|
+| **A. Phase 1B addition** | +1 week to phase 1B (now 5–6 weeks instead of 4–5) | Phase 1 grows to 6–7 weeks calendar time, bounded by 1B. Ships as part of the prototype. |
+| **B. Phase 1.6 (alongside or after 1.5)** | 1 week as a standalone phase | Phase 1 ships at 5–6 weeks unchanged; versioning lands shortly after. Refactor cost is small if the write endpoints are designed with the future in mind. |
+| **C. Defer to phase 4** | Park the design | Managed repos without git backing have no rollback for the first several months. Bad UX hole. Recommended against if the canonical-store framing is the headline. |
+
+**My recommendation**: **Option A — add it to phase 1B.** The canonical-store positioning (point 2 above) doesn't hold up if "agent overwrites a file by accident" is unrecoverable. Phase 1B going from 4–5 to 5–6 weeks is a small price for closing that hole. Phase 1's calendar time goes from 5–6 to 6–7 weeks, bounded by the longer 1B track.
+
+### 4. "Do we need a database? Or are we over-complicating?"
+
+Honest answer: **yes, SQLite. No, this isn't over-complicating — it's the minimum for a serious product.**
+
+Let me itemize what state the design needs to track and where it should live:
+
+| State | Right home | Why |
+|---|---|---|
+| **Managed-repo content files** | Filesystem | The files ARE the content. Storing them in a database makes no sense. |
+| **Git history (`.git/` per managed repo)** | Filesystem | Same — git owns its own storage. |
+| **File version sidecars (`.versions/`)** | Filesystem | Versions are also content; storing in filesystem is the right answer for the same reason as the live files. |
+| **Publish-area content** | Filesystem | Same as managed-repo content. |
+| **Audit log** | Filesystem (JSONL, append-only) OR SQLite | Either works. SQLite gets you queryability (e.g., "all writes by agent X this week") that JSONL doesn't. JSONL is simpler to operate. Recommendation: JSONL for v1, migrate to SQLite if queryability is needed. |
+| **Search index** | SQLite (fts5) | Already chosen in Addendum b. |
+| **Users + sessions + SSO records** | SQLite | Multi-row relational data with queries (lookups, joins, indexes). The only sane choice. |
+| **API keys (metadata; hashed secrets only)** | SQLite | Same. Owner attribution, rotation history, last-used tracking. |
+| **Share tokens + share records** | SQLite | Same. Expiry queries, audit lookup, revocation. |
+| **Magic-link tokens** | SQLite or signed JWTs | Both work. SQLite means the token state is server-controllable (instant revoke); JWTs mean stateless but you can't instantly revoke. SQLite is the recommendation. |
+| **Push queue (persistent across restarts)** | SQLite | Operations queue with ordering, retry counts, transitions. Database-shaped. |
+| **Managed-repo sync state (conflict state, fetch cursor)** | SQLite | Multi-row state per repo; SQLite is the right answer. |
+| **Managed-grant records (existing from FON-3671)** | Currently file-backed (`access.grants.storePath`); can migrate to SQLite | Phase 1A is the right window to migrate this if migration is wanted; not required. |
+| **Operator-facing configuration** | YAML config files (existing) | Config is human-edited; stays in YAML. |
+| **Render output cache (if added)** | Filesystem or SQLite | Either works; phase 4 concern. |
+
+**SQLite specifically** (not Postgres, not MySQL, not anything else):
+
+- **Single-process embedded.** No separate database service to run. Critical for both self-hosted operators (don't make them install Postgres) and SaaS deployment (don't run a separate DB tier).
+- **File-backed.** A `lookie-link.db` file. Backups are file copies. Fits the project's existing "files on disk" mental model.
+- **Battle-tested.** Powers iMessage, Firefox, Android, every embedded system worth naming. Reliability is not in question.
+- **Node ecosystem ready.** `better-sqlite3` is the standard, synchronous, fast, fits Express's middleware patterns.
+- **fts5 included.** The search index from Addendum b uses the same database, no extra moving parts.
+- **No operational complexity.** Single file. No replication, no clustering, no high-availability story (the operator's filesystem backup IS the HA story).
+
+**Why this isn't over-complicating:**
+
+The alternative is "everything in JSON files." That works at very small scale (where Lookie-Link is today). But at the scope under discussion — users / sessions / API keys / share tokens / push queue / sync state / search index — JSON files become brittle. Concurrent writes need locking. Queries are linear scans. Transactional consistency is manual. Operational tooling (backup, restore, migrate) is custom. You eventually rebuild SQLite, poorly.
+
+The alternative on the other end is "Postgres / MySQL / a real database service." That IS over-complicating for this product class. Operators have to run a separate DB tier, manage credentials, handle network access. SaaS deployment costs balloon. The benefits (replication, sharding) are for a class of system Lookie-Link explicitly is not.
+
+SQLite sits exactly in the right spot for this product's scale and operational model. **One file. Zero operational tax. Everything queryable, transactional, recoverable.** That's the right minimum.
+
+**What this means for phase 1A**: phase 1A's effort estimate (2–3 weeks) already assumed sqlite for sessions / users / API keys (couldn't reasonably be anything else). This addendum just makes that explicit. No phase 1A scope change.
+
+**What this means for phase 1B**: search index was already sqlite-fts5. Push queue + sync state move to the same database. No phase 1B scope change beyond the file-versioning addition discussed in point 3.
+
+**What this does NOT mean**: a separate "database choice / setup" child issue. SQLite is the implementation choice within the existing phase 1A and 1B issues. It does mean a single new doc item — `docs/DATABASE.md` covering the schema, migration policy, backup recommendation, and the JSONL-vs-SQLite audit log choice. That can be a small addition to phase 1A's docs item or its own tiny issue.
+
+### Net effect on phase 1
+
+Summary of what this addendum changes in phase 1:
+
+| Item | Change |
+|---|---|
+| Phase 1A scope | No change — SQLite was already implicit |
+| Phase 1B scope | **+1 week** if file versioning is locked in here; phase 1B becomes 5–6 weeks; phase 1 calendar time becomes 6–7 weeks |
+| Database choice | Explicit: SQLite, file-backed, embedded. Docs item to capture. |
+| Cloud-agent transport | No phase change; reinforces FON-7058's strategic weight |
+| Conceptual framing | "Canonical content store with sync plugins" becomes the headline framing; README opener (in Addendum c's plan) should reflect this |
+
+Two new decisions for Chris (independent of the phase 1.5 GitHub-backing decision still open):
+
+1. **File versioning**: lock into phase 1B (Option A — phase 1 grows 1 week) / split as phase 1.6 (Option B — phase 1 unchanged, versioning ships after) / defer to phase 4 (Option C — leave the rollback hole open for several months).
+2. **Audit log storage**: JSONL files (simpler) or SQLite tables (queryable). Recommendation: JSONL for v1, migrate to SQLite if querying becomes needed. Low-stakes; can default to JSONL and not bother Chris.
+
+### "Are we over-complicating?" — direct answer
+
+No. Each piece earns its place:
+
+- **Identity + SSO + API keys** (phase 1A) — the build is "good not minimum" per the commitment signal. You can't refactor auth in retrospect without pain.
+- **Managed repos + search + publish** (phase 1B) — solves the original FON-10180 pain point and powers the multi-agent canonical-store positioning.
+- **GitHub backing** (phase 1.5, lock-in pending) — durability for content the operator cares about long-term.
+- **File versioning** (this addendum, lock-in pending) — closes the "agent overwrite is unrecoverable" hole that the canonical-store framing exposes.
+- **SQLite** — the right minimum for a real product. Not over-engineering.
+- **Three public-share modes** (phase 3) — answers the actual range of operator share scenarios (anonymous quick-share, audited external collaborator, full team member access).
+- **CLI + agent.json** (phase 2) — distribution surface; without it the API is invisible to agent runtimes.
+
+What's deliberately NOT in scope and would be over-complicating:
+
+- Multi-tenant SaaS infrastructure (rejected since v1).
+- Embedding / semantic search (deferred to phase 4).
+- Real-time collaborative editing (Notion-style; deferred indefinitely).
+- Plugin system for custom renderers (could be tempting; deferred — current renderer covers the cases).
+- Multi-IdP SSO beyond WorkOS (deferred — WorkOS itself supports SAML / OIDC / multi-IdP via one integration).
+- GitHub App as auth mode (deferred to phase 4; deploy keys + PAT cover the case).
+- The Syncthing peer / S3 mirror / webhook sync plugins (later phases under the new framing).
+- Notification systems, ChatOps integrations, custom dashboards (defer indefinitely).
+
+The total phase-1 commit (5–6 weeks → 6–7 weeks with file versioning) is meaningful but is the right size for the build Chris committed to. The product that results IS a serious agent-native canonical content store. The alternative — a minimum-viable read where every piece gets cut — produces something that has to be rebuilt within a year. That would be the actual over-complication, paid in refactor cost rather than upfront cost.
