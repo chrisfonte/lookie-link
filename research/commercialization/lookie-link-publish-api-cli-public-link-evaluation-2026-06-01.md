@@ -11,7 +11,10 @@
 - [`./lookie-link-as-agent-native-wiki-2026-05-16.md`](./lookie-link-as-agent-native-wiki-2026-05-16.md) — agent-native wiki positioning. Treats the same publish/CLI/public-share items as v0 bricks for a larger wiki play.
 - [`../competitors/here-now-vs-lookie-link-2026-05-16.md`](../competitors/here-now-vs-lookie-link-2026-05-16.md) — `here.now` feature comparison; identifies the same five candidate roadmap items.
 
-> **2026-06-01 addendum** appended at the bottom of this document expands the storage model to include a **multi-agent shared "managed repo"** primitive alongside the slug-addressed publish primitive, and elevates **search API + CLI** from a deferred concern to a load-bearing phase 1 item. The phased plan and child-issue list at the end of the document have been revised to match. The body of this document below is the original evaluation; the addendum is the current recommendation.
+> **2026-06-01 addenda** appended at the bottom of this document.
+> **Addendum b** expands the storage model to include a multi-agent shared "managed repo" primitive alongside the slug-addressed publish primitive, and elevates search API + CLI to a load-bearing phase 1 item.
+> **Addendum c** expands the identity and auth model: first-class user identity (sessions, SSO via WorkOS) distinct from agent API keys, plus three public-share modes (anonymous / magic-link-lightweight / fully credentialed). Also records the commitment signal from Chris ("building this whether it becomes a public sellable thing or not") that removes commercialization as a gate on the build.
+> The body of this document below is the original evaluation; the addenda are the current recommendation.
 
 ## TL;DR
 
@@ -462,3 +465,272 @@ The two additions also sharpen the answers to questions 1 and 4 in the original 
 The recommendation is the same as the original: **approve phase 1 and start the prototype**. The expansion does not change the verdict — it makes phase 1 more useful, somewhat larger (2–3 weeks → 4–5 weeks), and more aligned with the multi-agent workflows the source issue actually described. Phases 2 and 3 remain mechanical follow-ons; phase 4 (semantic search, collaboration ergonomics) is deferred.
 
 The fresh `request_confirmation` interaction created after this addendum targets the revised plan. The original confirmation (`confirmation:FON-10180:plan:cad6a3ed-29bc-4d9a-83d9-5e6e5ca78f85`) is superseded.
+
+---
+
+## Addendum 2026-06-01c — Identity and auth model + commitment signal
+
+This addendum was added after Chris's second-round comment. He raised two things:
+
+1. **Commitment signal.** "This is something I want to build WHETHER it becomes a public sellable thing or not." This removes commercialization validation as a gate on the build. Phase priority and feature scope should optimize for **build value** (the workflow the operator's own agents and team will use), not for **commercial readiness** (a paying-customer wedge). The three companion commercialization docs remain useful as positioning context for if/when the operator chooses to commercialize, but they are no longer the deciding lens.
+2. **Identity & auth deeper concern.** "We need to consider credentials for agentic and user use AND / vs. public shares (with credentials or not?), maybe a way to do SSO (WorkOS?), API keys for agents." The v1 and v2 plans underspecified user identity — they extended the existing token model with new permissions but treated all callers as "a token." A real product needs a first-class user identity layer, first-class agent API keys distinct from user sessions, an SSO integration for human auth, and a deliberate choice about whether public shares require credentials.
+
+### What changes vs. the prior addenda
+
+The prior auth model (across the original document body and Addendum b) was:
+
+- Existing managed-grant model from [FON-3671](/FON/issues/FON-3671) handles tokens.
+- New permissions `write` / `publish` / `share` extend the existing permissions array.
+- Public shares are anonymous + URL + optional password.
+- No user identity layer. No SSO. No differentiation between agent and user actions in the audit log.
+
+The revised model adds three new layers:
+
+1. **First-class user identity.** A users table, browser sessions, authentication via SSO or local password. Distinct from agents.
+2. **First-class agent API keys.** Promote the existing token concept to a first-class "API key" resource with labels, rotation, scoped permissions, owner identity, and audit lineage. Agents can never log into the browser UI; users can never use an API key as a session.
+3. **Three public-share modes** instead of one. Anonymous + URL + password (the original spec); magic-link-lightweight identity (recipient verifies an email); fully credentialed (recipient must log into a real user account).
+
+Below: the full identity model, the credential model, the public-share modes, the SSO integration, and the revised phasing.
+
+### Identity types
+
+| Identity | Who | How they authenticate | Session model |
+|---|---|---|---|
+| **Operator** | The human running the Lookie-Link instance | Configured root credentials at install (env var or first-run setup), or escalated from a user with the `operator` role | Browser session with elevated audit log entries; cannot be impersonated by a magic-link user |
+| **User** (internal) | A human member of the operator's team | SSO (WorkOS) or local username/password | Browser session, cookie-based, configurable timeout, MFA optional in phase 1 |
+| **Agent** | A Paperclip / OpenClaw / Claude-Code agent | API key (bearer token) — never a session | No session. Every request is stateless and authenticated with the key. |
+| **Anonymous share recipient** | An external party who has a public-share URL | URL only (optionally + password) | No session. Each access is independent. |
+| **Magic-link share recipient** | An external party invited to view a share with email verification | Magic link → short-lived recipient session | Lightweight session: email-only identity, limited to the share scope, expires with the share |
+| **Credentialed share recipient** | A named external user invited to view a share | SSO or local account login | Full user session, same as an internal user, scoped to the share |
+
+The operator distinguishes between **internal users** (people on their team — paid seats if commercialized) and **external share recipients** (people they're sharing one artifact with). Internal users see the full workspace; share recipients see only the specific share they were granted access to.
+
+### Credential types
+
+| Credential | Used by | Lifetime | Revocable | Audited |
+|---|---|---|---|---|
+| **Session cookie** | Operator + users + credentialed share recipients | Configurable (default 24h, sliding) | Yes (server-side session store) | Yes — all actions tagged with `user.id` and `session.id` |
+| **API key** | Agents | Long-lived; rotatable; no automatic expiry by default | Yes (revoke by id) | Yes — all actions tagged with `agent.id` and `key.id` |
+| **Managed grant token** | Cross-company Paperclip agents (existing model from [FON-3671](/FON/issues/FON-3671)) | Bounded expiry, renewable | Yes (revoke by id) | Yes — already audited via the existing grant audit log |
+| **Share token** | Embedded in the public-share URL | Bounded expiry (matches share expiry); max 90 days | Yes (revoke by id, or auto-expire) | Yes — share access events |
+| **Magic-link token** | Single-use, email-issued, for verifying lightweight share recipients | Short (15 min default, configurable) | Single-use → consumed on first use | Yes — tied to the recipient email |
+| **MFA TOTP secret** | Users with MFA enabled (deferred to phase 4 unless asked sooner) | Permanent until rotated | Yes | Audited at MFA setup / change |
+
+### Agent API key model
+
+The single largest auth change is promoting agent tokens to first-class API keys. Endpoints:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/keys` | Mint a new API key (operator-only by default; users with `manage_agent_keys` permission can mint keys for agents they own) |
+| `GET /api/keys` | List keys (returns metadata only; never the secret) |
+| `GET /api/keys/<id>` | Get a single key's metadata + audit summary |
+| `POST /api/keys/<id>/rotate` | Mint a replacement secret; old secret remains valid for a configurable grace window |
+| `DELETE /api/keys/<id>` | Revoke immediately |
+
+Each API key has:
+
+- `label` — human-readable purpose ("research-bot prod", "overnight ingest", "ace1236a backup")
+- `ownerType` + `ownerId` — which agent this key belongs to (so audit log entries can attribute back to a single identity)
+- `permissions` — same shape as the managed-grant permissions array (`view`, `edit`, `write`, `publish`, `share` scoped to repos / paths)
+- `expiresAt` — optional; null means no automatic expiry, but rotation is recommended
+- `lastUsedAt` — surfaced in the UI for the operator to identify dormant keys
+- `createdBy` — user or operator who minted the key
+
+API keys are presented to the operator and to the agent **once at creation**; the server stores only a hash. Rotation gives a new secret without losing the audit lineage of the key id.
+
+#### Why not just use the existing token system?
+
+The existing static-config-tokens model from [FON-3671](/FON/issues/FON-3671) is a valid v0; the new model is a strict superset. Migration:
+
+- Static config tokens continue to work in phase 1 (backwards-compatible).
+- Static tokens are tagged in the audit log as `kind: static-config`.
+- New API keys are tagged as `kind: api-key` with their full owner/label/rotation lineage.
+- Operators can gradually replace static tokens with API keys; static tokens can be deprecated in phase 2 or later.
+
+### User identity model + SSO
+
+A new users table with first-class identity:
+
+| Field | Notes |
+|---|---|
+| `id` | UUID |
+| `email` | Unique, lowercased |
+| `name` | Display name |
+| `role` | One of `operator`, `user`, `external` (for magic-link recipients) |
+| `ssoProvider` | `workos` / `local` / `none` (for magic-link external users) |
+| `ssoSubject` | Provider-issued stable identifier for SSO users |
+| `passwordHash` | argon2id; null for SSO-only or external users |
+| `mfaSecret` | nullable, TOTP — phase 4 unless asked sooner |
+| `createdAt`, `updatedAt`, `lastLoginAt` | standard |
+
+#### WorkOS as the SSO provider
+
+WorkOS is the right phase 1 choice because:
+
+- Single integration covers SAML, OIDC, magic-link, multi-IdP — operators with enterprise IdPs don't need a custom integration per IdP.
+- Their pricing scales with usage and is reasonable for small operators.
+- They handle the parts of SSO that are easy to get wrong (IdP-initiated SAML, group claims, just-in-time provisioning).
+- The hosted login UI (AuthKit) is optional — operators can also embed WorkOS auth into a Lookie-Link-owned login page.
+
+Phase 1 supports WorkOS only. Phase 2+ can add other IdPs (Okta, Google Workspace, Azure AD direct) if operators ask for them. Local username/password remains available as a fallback for non-SSO deployments (homelabbers, small teams without an IdP).
+
+Integration shape:
+
+- `GET /auth/login` — initiate auth (renders local form OR redirects to WorkOS depending on instance config)
+- `GET /auth/sso/callback` — WorkOS OAuth callback; creates session, optionally provisions a user record on first login
+- `POST /auth/logout` — destroy session
+- Just-in-time provisioning: an SSO-authenticated user whose email is not in the users table is created with default `role: user` and the operator can promote them
+- WorkOS configuration stored in instance config: `LOOKIE_LINK_WORKOS_CLIENT_ID`, `LOOKIE_LINK_WORKOS_API_KEY`, `LOOKIE_LINK_WORKOS_CONNECTION_ID` (or `organizationId` for multi-org)
+
+#### Local username/password
+
+For deployments that don't want SSO (homelab, small team, no IdP):
+
+- `POST /auth/login` with email + password
+- argon2id hashing
+- Password reset via email magic-link (reuses the magic-link infrastructure from share recipients)
+- Operator can disable local password auth entirely (SSO-only mode) via config flag
+
+### Public share modes
+
+The bounded public-share feature from the original document spec is one of **three** share modes. Operators choose which modes their instance supports; modes can be enabled / disabled independently.
+
+| Mode | Recipient identity | Authentication | Use case | Audit lineage |
+|---|---|---|---|---|
+| **Anonymous** | None | URL + optional password (argon2id) | Quick share with someone you don't need to identify (the Planet Fitness public-doc case) | IP + referrer + timestamp only |
+| **Magic-link lightweight** | Email-verified only | Recipient enters email → server emails magic-link → recipient clicks → short session | Share with a known external party where you want audit but don't need them to log in | Verified email + IP + timestamp |
+| **Credentialed** | Full user record | SSO or local account login | Share with a named external collaborator where you want a real ongoing relationship + audit | User id + session id + timestamp |
+
+The operator chooses **per-share** which mode applies. Default is "anonymous + URL + password" for backwards compatibility with the original phase 3 spec. A share-creation request body can specify:
+
+```json
+{
+  "expiresAt": "...",
+  "mode": "anonymous" | "magic-link" | "credentialed",
+  "password": "...",                  // anonymous mode
+  "invitedEmails": ["..."],           // magic-link or credentialed mode
+  "allowedReferrers": ["..."],        // any mode, optional
+  "maxAccessCount": 100               // any mode, optional
+}
+```
+
+Magic-link and credentialed modes use the same email-delivery infrastructure (SMTP via the operator's choice of provider; same plumbing as password-reset).
+
+### Audit log differentiation
+
+The audit log gains a first-class `actor` field that records both the identity type and the credential used:
+
+| Actor shape | When emitted |
+|---|---|
+| `{ "type": "operator", "userId": "...", "sessionId": "..." }` | Operator action (browser session, elevated) |
+| `{ "type": "user", "userId": "...", "sessionId": "..." }` | User action (browser session) |
+| `{ "type": "agent", "agentId": "...", "keyId": "...", "keyLabel": "..." }` | Agent action (API key) |
+| `{ "type": "grant", "grantId": "...", "sourceCompanyId": "..." }` | Cross-company Paperclip grant (existing model) |
+| `{ "type": "share-anonymous", "shareToken": "...", "ip": "...", "referrer": "..." }` | Anonymous share access |
+| `{ "type": "share-magic-link", "shareToken": "...", "email": "..." }` | Magic-link share access |
+| `{ "type": "share-credentialed", "shareToken": "...", "userId": "..." }` | Credentialed share access |
+
+This distinction is **load-bearing**: without it, operators cannot answer "did agent X edit this file or did a human edit it" with the same audit query. Phase 1 emits the new actor field on every audit-logged operation; existing static-config-token actions continue to emit the legacy actor shape with a `kind: static-config` flag for backwards compatibility.
+
+### Revised permission model
+
+Phase 1 permissions, with identity-aware naming:
+
+| Permission | Applies to | Granted to | Example |
+|---|---|---|---|
+| `view` | Repo / path scope | Any identity | Read `/api/repos/<repo>/files/...` and `/view/...` |
+| `edit` | Local-checkout repo / path scope | Any identity | Write existing files in mounted-local-checkout repos |
+| `write` | Managed-repo / path scope | Any identity | Create/update/delete files in managed repos |
+| `publish` | Publish area | Any identity | Mint slug-addressed publish artifacts |
+| `share` | Repo / path / slug | Any identity | Mint public-share URLs (any mode) |
+| `manage_users` | Instance-wide | User with `operator` role only | CRUD on users table, SSO config |
+| `manage_agent_keys` | Per-agent scope | User with `operator` role, or users with the permission delegated | Mint / rotate / revoke API keys for an agent |
+| `manage_grants` | Instance-wide | User with `operator` role, or grant-admin token (existing FON-3671 model) | Existing grant lifecycle endpoints |
+| `manage_shares` | Per-scope | Any identity with `share` already | Revoke shares that the identity minted |
+
+The permission model is **uniform across credential types** — an API key with `view + write + share` permissions can do exactly what a user session with the same permissions can do, except the API key cannot access the browser UI's user-management surfaces.
+
+### Revised phasing (v3)
+
+Phase 1 grows to include a parallel auth-foundation track that lands alongside the storage/search/publish work:
+
+| Phase | Scope | Effort | Gate |
+|---|---|---|---|
+| **1A — Identity & auth foundation** | Users table + sessions + WorkOS SSO + local password fallback + first-class agent API key model + audit log actor differentiation + permission model expansion | 2–3 weeks (overlapping with 1B) | This confirmation |
+| **1B — Storage & write surface** | Managed-repo primitive + search API + publish primitive + new permissions consumed by 1A's identity layer | 4–5 weeks (overlapping with 1A) | This confirmation |
+| **2** | `/.well-known/agent.json` + `/openapi.json` + `lookie-link-cli` + skill packages | 1–2 weeks | Phase 1 lands |
+| **3** | Bounded public-share with **three modes**: anonymous (URL + password), magic-link-lightweight (email verification), credentialed (must log in) | 3 weeks (up from 2 in v2) | Phase 1 + phase 2 land, and [FON-7058](/FON/issues/FON-7058) public-internet endpoint exists OR demand is real |
+| **4 (deferred)** | MFA enforcement, multi-IdP SSO beyond WorkOS, semantic search, managed-repo collaboration ergonomics, migration importers | TBD | Observed demand |
+
+Phase 1 total: **5–6 weeks** of focused engineering with two tracks running concurrently. Tracks 1A and 1B land together as one prototype.
+
+### Revised child-issue list
+
+Phase 1 grows from 10 issues (v2) to **15 issues** (v3) with the auth-foundation track added. Phase 3 grows from 4 to 6 with the three share modes:
+
+**Phase 1A — Identity & auth foundation (5 issues):**
+
+1. Users table + session model + browser cookie auth (operator + user roles, local password via argon2id)
+2. WorkOS SSO integration (`/auth/login`, `/auth/sso/callback`, just-in-time provisioning, instance config)
+3. First-class agent API key model (`POST/GET/DELETE /api/keys`, `POST /api/keys/<id>/rotate`, owner attribution, label, rotation grace window)
+4. Audit log actor field differentiation (new actor shape for all credential types, backwards-compatible)
+5. Permission model expansion (`manage_users`, `manage_agent_keys`, `manage_shares` added; existing `view` / `edit` / `write` / `publish` / `share` aligned with the new identity model)
+
+**Phase 1B — Storage & write surface (10 issues, same as v2):**
+
+6. Managed repo: read endpoints (`GET /api/repos/<repo>/files/...`, `list`, `tree`, `changes`)
+7. Managed repo: write endpoints (`PUT` / `DELETE` / `POST move`) with `expectedMtimeMs` 409 guard + atomic write
+8. Managed repo: optional auto-commit-to-git on write (per-repo config flag)
+9. Token model: `write` permission on managed-repo scopes (consumes 1A's identity model)
+10. Search API: `GET /api/search` with sqlite-fts5 + path index + frontmatter index
+11. Search API: `GET /api/search/suggest` autocomplete
+12. Publish API: `POST /api/publish` + `POST /api/publish/<slug>` update + `expectedRevision` 409 guard
+13. Token model: `publish` permission on managed grants + static tokens + API keys
+14. Docs: `docs/MANAGED-REPOS.md`, `docs/PUBLISHING.md`, `docs/SEARCH.md`, `docs/AUTH.md`, plus `docs/API.md` expansion
+15. Validation: managed-repo + search + publish + auth scenarios in `scripts/validate-editable-mode.js` (or new validator)
+
+**Phase 2 (3 issues, unchanged from v2):**
+
+16. `/.well-known/agent.json` + `/openapi.json` advertisement
+17. `lookie-link-cli` package with `write` / `read` / `list` / `search` / `publish` / `revoke`
+18. Skill packages for Claude Code / Cursor / Codex marketplaces
+
+**Phase 3 (6 issues, up from 4 in v2):**
+
+19. Public-share base: `POST /api/publish/<slug>/share` + `POST /api/repos/<repo>/files/<path>/share` + `GET /share/...`
+20. Public-share mode: anonymous (URL + password + expiry + rate limit)
+21. Public-share mode: magic-link-lightweight (email verification, recipient session)
+22. Public-share mode: credentialed (must log in, scoped session)
+23. Public-share audit log: share-anonymous / share-magic-link / share-credentialed actor types
+24. Docs: `docs/PUBLIC-SHARES.md` + security model + mode comparison
+
+**Phase 4 (deferred — not in this confirmation request).**
+
+### Revised connections to prior tickets
+
+- [FON-3671](/FON/issues/FON-3671) **done** → token-scoped grant foundation; phase 1A promotes the concept to a first-class API key model with backwards-compatible coexistence. Existing managed grants continue to work; new API keys are the recommended path forward.
+- [FON-7057](/FON/issues/FON-7057) **backlog** → orthogonal; no change.
+- [FON-7058](/FON/issues/FON-7058) **backlog** → with Chris's commitment signal removing commercialization as a gate, the case for picking this up alongside phase 3 strengthens. The public-internet endpoint is the transport that makes credentialed shares with external collaborators actually reachable beyond the tailnet. Recommend explicitly: pick up FON-7058 in parallel with phase 3 (no longer "consider," now "do this").
+
+### What the commitment signal changes
+
+Chris said: "this is something I want to build WHETHER it becomes a public sellable thing or not." This shifts three things:
+
+1. **Phase 3's gate.** Was "real public-share demand AND/OR FON-7058 lands." Becomes "phase 2 lands cleanly." Build for the operator's own needs; commercialization is downstream.
+2. **The commercialization companion docs become optional reading.** They remain useful for the commercialization decision if and when Chris pursues it, but they no longer gate any phase.
+3. **The bias toward "minimum viable everything."** Builds for personal/team use get to be **good** — not minimum-viable. The phase 1 expansion to include first-class identity, real SSO, and three share modes is the build that supports a serious internal product; the v1 plan was the minimum-viable read on a commercialization-conditional build.
+
+### Risks specific to the identity additions
+
+- **WorkOS lock-in.** Phase 1 makes WorkOS the only SSO provider. If WorkOS pricing changes or the service degrades, swapping providers is a real lift. Mitigation: the integration is small (under 500 LOC) and isolated; the rest of the auth model (sessions, users, permissions) is provider-agnostic. Swap cost is bounded.
+- **Magic-link delivery dependence.** Magic-link share mode and password reset both need SMTP. Operators have to configure an SMTP provider (Resend / SES / SendGrid / Postmark are all fine). Phase 1 documentation should walk through the choice clearly.
+- **Audit-log schema migration.** Adding the `actor` field to all audit events is a schema change. Phase 1A includes a migration script that backfills existing audit records with a synthetic `{type: "legacy"}` actor; no data is lost.
+- **API key UI surface area.** First-class API keys means a real UI for minting / listing / revoking keys, with the once-shown secret pattern. Done badly, operators leak keys. Phase 1A docs should cover the operational practices (rotate quarterly, label clearly, use the lowest-permissions scope possible).
+- **Phase 1 weeks vs. delivery anxiety.** Phase 1 is now 5–6 weeks not 2–3. That is a real commitment. Mitigation: tracks 1A and 1B are deliberately parallel so the calendar time is bounded by the longer track (1B), not their sum. With two engineers (or one engineer + Claude / Codex assistance), 1A and 1B finish around the same time.
+
+### What this means for the recommendation
+
+Same verdict, larger scope: **approve phase 1 (v3) and start the prototype**. The expansion is right-sized to Chris's commitment: build identity-and-auth as a real foundation (because it has to be right eventually, and refactoring auth later is painful), build the storage / search / publish surface alongside it, and ship them together. Phase 2 (discovery + CLI) and phase 3 (three share modes) follow.
+
+The fresh `request_confirmation` interaction created after this addendum targets the v3 plan revision. The v2 confirmation (`confirmation:FON-10180:plan:f4bee764-11ba-4657-8b9b-dd41ee291877`) is superseded.
