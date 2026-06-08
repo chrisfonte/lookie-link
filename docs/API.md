@@ -4,6 +4,7 @@
 |-------|-------------|
 | `GET /` | Repository index |
 | `GET /healthz` | Health check (returns `{"status":"ok","editingEnabled":bool}`) |
+| `GET /api/repos` | Discover served repos as JSON (filtered by grant scope when a token is presented) |
 | `GET /view/<repo>/<path>` | Rendered file or directory listing |
 | `GET /asset/<repo>/<path>` | Asset serving for inline images, audio, and PDFs. Supports `Range` requests so `<audio>` can seek, and also backs the embedded PDF viewer page. MIME type derived from extension (`.png`/`.jpg`/`.gif`/`.webp`/`.svg`/`.jpeg` for images; `.m4a`/`.mp3`/`.wav`/`.ogg`/`.oga`/`.opus`/`.flac`/`.aac` for audio; `.pdf` for PDFs). |
 | `GET /edit/<repo>/<path>` | Edit page (only when editing enabled) |
@@ -33,6 +34,28 @@ Route enforcement in phase 1:
 - `/api/preview/*` requires `view` and still respects global editing mode
 
 Invalid tokens return `403`. Missing tokens return `401` when unauthenticated human access is restricted.
+
+## Repo Discovery Endpoint
+
+`GET /api/repos`
+
+Lets agents discover served repos at runtime without parsing the HTML index or reading the host's YAML config. Response shape:
+
+```json
+{
+  "repos": [
+    {
+      "repo": "operations",
+      "rootPath": "/Users/chrisfonte/operations",
+      "viewUrl": "/view/operations/",
+      "assetUrl": "/asset/operations/"
+    }
+  ],
+  "count": 1
+}
+```
+
+The list is filtered to the repos the caller can `view`: with a scoped token the response only contains repos that token can reach; unauthenticated callers see all mappings when `access.humanDefault` allows it and otherwise receive `401`. `viewUrl` and `assetUrl` are repo-rooted paths — append your own `?token=...` if you authenticate via query string.
 
 ## Save Endpoint
 

@@ -128,6 +128,117 @@ test('query token scopes repo listings and preserves tokenized navigation', asyn
   }
 });
 
+test('GET /api/repos returns repo discovery payload for unrestricted humans', async () => {
+  const fixture = await makeFixture();
+  const server = await startTestServer({
+    mappings: fixture.mappings,
+    editingEnabled: true,
+  });
+
+  try {
+    const response = await server.request('/api/repos');
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') || '', /application\/json/);
+
+    const payload = await response.json();
+    assert.ok(Array.isArray(payload.repos));
+    assert.equal(payload.count, payload.repos.length);
+    assert.equal(payload.count, 2);
+
+    const reposByName = new Map(payload.repos.map((entry) => [entry.repo, entry]));
+    assert.ok(reposByName.has('alpha'));
+    assert.ok(reposByName.has('beta'));
+
+    const alphaEntry = reposByName.get('alpha');
+    assert.equal(alphaEntry.rootPath, fixture.mappings.alpha);
+    assert.equal(alphaEntry.viewUrl, '/view/alpha/');
+    assert.equal(alphaEntry.assetUrl, '/asset/alpha/');
+    for (const entry of payload.repos) {
+      assert.equal(typeof entry.repo, 'string');
+      assert.equal(typeof entry.rootPath, 'string');
+      assert.equal(typeof entry.viewUrl, 'string');
+      assert.equal(typeof entry.assetUrl, 'string');
+    }
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('GET /api/repos filters by grant scope and rejects unauthenticated/invalid tokens', async () => {
+  const fixture = await makeFixture();
+  const server = await startTestServer({
+    mappings: fixture.mappings,
+    editingEnabled: true,
+    accessConfig: {
+      humanDefault: 'restricted',
+      tokens: {
+        viewer: {
+          secret: 'viewer-token',
+          repos: {
+            alpha: { paths: ['docs/', 'README.md'] },
+          },
+          permissions: {
+            view: true,
+            edit: false,
+          },
+        },
+      },
+    },
+  });
+
+  try {
+    const unauthenticated = await server.request('/api/repos');
+    assert.equal(unauthenticated.status, 401);
+
+    const invalid = await server.request('/api/repos?token=wrong-token');
+    assert.equal(invalid.status, 403);
+
+    const scoped = await server.request('/api/repos?token=viewer-token');
+    assert.equal(scoped.status, 200);
+    const scopedPayload = await scoped.json();
+    assert.equal(scopedPayload.count, 1);
+    assert.equal(scopedPayload.repos.length, 1);
+    assert.equal(scopedPayload.repos[0].repo, 'alpha');
+    assert.equal(scopedPayload.repos[0].rootPath, fixture.mappings.alpha);
+    assert.equal(scopedPayload.repos[0].viewUrl, '/view/alpha/');
+    assert.equal(scopedPayload.repos[0].assetUrl, '/asset/alpha/');
+    assert.ok(!scopedPayload.repos.some((entry) => entry.repo === 'beta'));
+
+    const bearer = await server.request('/api/repos', {
+      headers: { Authorization: 'Bearer viewer-token' },
+    });
+    assert.equal(bearer.status, 200);
+    const bearerPayload = await bearer.json();
+    assert.equal(bearerPayload.count, 1);
+    assert.equal(bearerPayload.repos[0].repo, 'alpha');
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('home page (/) still renders the repo index for unrestricted humans', async () => {
+  const fixture = await makeFixture();
+  const server = await startTestServer({
+    mappings: fixture.mappings,
+    editingEnabled: true,
+  });
+
+  try {
+    const response = await server.request('/');
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') || '', /text\/html/);
+    const body = await response.text();
+    assert.match(body, /Available Repositories/);
+    assert.match(body, /\/view\/alpha/);
+    assert.match(body, /\/view\/beta/);
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test('edit-scoped token can save while restricted humans and invalid tokens are denied', async () => {
   const fixture = await makeFixture();
   const targetFile = path.join(fixture.mappings.alpha, 'docs', 'guide.md');
