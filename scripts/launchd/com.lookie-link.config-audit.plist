@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Weekly Lookie-Link config audit.
+
+  Install:
+    cp scripts/launchd/com.lookie-link.config-audit.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.lookie-link.config-audit.plist
+    launchctl enable gui/$UID/com.lookie-link.config-audit
+    launchctl kickstart gui/$UID/com.lookie-link.config-audit   # run once to verify
+
+  Schedule: Mondays at 09:00 local time.
+  Logs to: ~/Library/Logs/lookie-link-config-audit.log
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.lookie-link.config-audit</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>$HOME/projects/lookie-link/scripts/lookie-link-config-audit-cron.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>1</integer>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/tmp/com.lookie-link.config-audit.out</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/com.lookie-link.config-audit.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
