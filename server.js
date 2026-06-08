@@ -74,7 +74,56 @@ const PDF_MIME_TYPES = {
   '.pdf': 'application/pdf',
 };
 
-const ASSET_MIME_TYPES = { ...IMAGE_MIME_TYPES, ...AUDIO_MIME_TYPES, ...PDF_MIME_TYPES };
+// Text/source asset mime allowlist. Served as raw bytes via /asset/ so agents
+// (and curl) can fetch markdown, code, and config sources without scraping HTML.
+// HTML-ish extensions are intentionally returned as text/plain to prevent the
+// raw page from being auto-rendered by a browser hitting /asset/ directly.
+const TEXT_PLAIN = 'text/plain; charset=utf-8';
+const TEXT_MIME_TYPES = {
+  '.md': 'text/markdown; charset=utf-8',
+  '.markdown': 'text/markdown; charset=utf-8',
+  '.mdown': 'text/markdown; charset=utf-8',
+  '.yaml': 'text/yaml; charset=utf-8',
+  '.yml': 'text/yaml; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.txt': TEXT_PLAIN,
+  '.toml': TEXT_PLAIN,
+  '.ini': TEXT_PLAIN,
+  '.conf': TEXT_PLAIN,
+  '.env': TEXT_PLAIN,
+  '.sh': TEXT_PLAIN,
+  '.bash': TEXT_PLAIN,
+  '.zsh': TEXT_PLAIN,
+  '.py': TEXT_PLAIN,
+  '.js': TEXT_PLAIN,
+  '.mjs': TEXT_PLAIN,
+  '.cjs': TEXT_PLAIN,
+  '.ts': TEXT_PLAIN,
+  '.tsx': TEXT_PLAIN,
+  '.jsx': TEXT_PLAIN,
+  '.css': TEXT_PLAIN,
+  '.scss': TEXT_PLAIN,
+  '.html': TEXT_PLAIN,
+  '.htm': TEXT_PLAIN,
+  '.sql': TEXT_PLAIN,
+  '.go': TEXT_PLAIN,
+  '.rs': TEXT_PLAIN,
+  '.java': TEXT_PLAIN,
+  '.c': TEXT_PLAIN,
+  '.h': TEXT_PLAIN,
+  '.cpp': TEXT_PLAIN,
+  '.swift': TEXT_PLAIN,
+  '.rb': TEXT_PLAIN,
+  '.php': TEXT_PLAIN,
+};
+
+const ASSET_MIME_TYPES = {
+  ...IMAGE_MIME_TYPES,
+  ...AUDIO_MIME_TYPES,
+  ...PDF_MIME_TYPES,
+  ...TEXT_MIME_TYPES,
+};
 const IMAGE_EXTENSIONS = new Set(Object.keys(IMAGE_MIME_TYPES));
 const AUDIO_EXTENSIONS = new Set(Object.keys(AUDIO_MIME_TYPES));
 const PDF_EXTENSIONS = new Set(Object.keys(PDF_MIME_TYPES));

@@ -3,6 +3,9 @@
   "version": "2.1.0",
   "description": "Lightweight web file viewer for local directories \u2014 look at things, via links",
   "main": "server.js",
+  "bin": {
+    "lookie-read": "./bin/lookie-read.js"
+  },
   "scripts": {
     "test": "node --test",
     "start": "node server.js",

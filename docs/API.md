@@ -6,7 +6,7 @@
 | `GET /healthz` | Health check (returns `{"status":"ok","editingEnabled":bool}`) |
 | `GET /api/repos` | Discover served repos as JSON (filtered by grant scope when a token is presented) |
 | `GET /view/<repo>/<path>` | Rendered file or directory listing |
-| `GET /asset/<repo>/<path>` | Asset serving for inline images, audio, and PDFs. Supports `Range` requests so `<audio>` can seek, and also backs the embedded PDF viewer page. MIME type derived from extension (`.png`/`.jpg`/`.gif`/`.webp`/`.svg`/`.jpeg` for images; `.m4a`/`.mp3`/`.wav`/`.ogg`/`.oga`/`.opus`/`.flac`/`.aac` for audio; `.pdf` for PDFs). |
+| `GET /asset/<repo>/<path>` | Raw asset serving. Supports `Range` requests so `<audio>` can seek, backs the embedded PDF viewer page, and is the agent-facing read path for text/source files (see `lookie-read` CLI in the repo `bin/`). MIME types: images (`.png`/`.jpg`/`.gif`/`.webp`/`.svg`/`.jpeg`), audio (`.m4a`/`.mp3`/`.wav`/`.ogg`/`.oga`/`.opus`/`.flac`/`.aac`), PDF (`.pdf`), markdown (`.md`/`.markdown`/`.mdown` → `text/markdown`), YAML (`.yaml`/`.yml` → `text/yaml`), JSON (`.json`), XML (`.xml`), and the editable text/source set (shell, Python, JS/TS, Go, Rust, C/C++, etc.) returned as `text/plain; charset=utf-8`. Anything else returns `415 Unsupported asset type`. |
 | `GET /edit/<repo>/<path>` | Edit page (only when editing enabled) |
 | `POST /api/save/<repo>/<path>` | Save updated file content (JSON body) |
 | `POST /api/preview/<repo>/<path>` | Render preview HTML from draft content (JSON body) |

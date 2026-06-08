@@ -78,6 +78,26 @@ npm start
 
 Open `http://localhost:9876` in your browser.
 
+## Agent read-side shim (`lookie-read`)
+
+`bin/lookie-read.js` is a small CLI shim for agents (Claude Code, Codex, OpenClaw, etc.) that need to fetch files from a Lookie-Link host without writing their own `/api/repos` + `/asset/` plumbing.
+
+```bash
+# install the shim on PATH
+npm install -g .
+
+# stream a file to stdout (uses local fs if the file is on this host, otherwise /asset/)
+lookie-read operations/README.md
+
+# byte-range fetch over HTTP
+lookie-read --range 0-99 operations/README.md
+
+# what does this host serve?
+lookie-read --list-repos
+```
+
+It caches `/api/repos` at `~/.cache/lookie-link/repos.json` (5-min TTL), prefers a local OS read when the resolved root is on the same host, forwards `LOOKIE_LINK_TOKEN` as `Authorization: Bearer <token>` for FON-3671 grants, and exits non-zero on usage / not-found / forbidden / transport errors. See [`docs/API.md`](docs/API.md) for the underlying endpoints and `~/operations/docs/meta/lookie-link-for-agents/lookie-link-for-agents-best-practices.md` for the agent-side contract.
+
 ## Network Model
 
 Lookie-Link is designed for private networks — specifically [Tailscale](https://tailscale.com) or similar mesh VPNs. It runs on a machine with access to your repos and serves files to any device on your tailnet.
