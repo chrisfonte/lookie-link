@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-08 — Unreleased — Agent-Facing Read/Write Standard (FON-11515)
+
+- Added `GET /api/repos` JSON discovery endpoint so agents can enumerate served repos at runtime (`{repo, rootPath, viewUrl, assetUrl}`). Filtered by the same access-control logic as the home page. Closes FON-11515.
+- Added `bin/lookie-read.js` CLI shim (`lookie-read <repo>/<path>`) declared in `package.json#bin`. Encapsulates discovery, local-fallback, HTTP fetch with Range, and `LOOKIE_LINK_TOKEN` auth. Closes FON-11519.
+- Extended `/asset/<repo>/<path>` mime allowlist to cover text/source extensions (markdown, yaml, json, sh/py/js/ts/go/rs/c/cpp/etc.) so the read shim can fetch source files. Source-code and HTML extensions are served as `text/plain; charset=utf-8` to prevent browser auto-rendering. Unknown extensions still return `415`.
+- Added `scripts/lookie-link-config-audit.sh` + `scripts/lookie-link-config-audit-cron.sh` and `scripts/launchd/com.lookie-link.config-audit.plist` to enumerate `~/operations-*` directories, classify them (served / worktree-skip / placeholder-skip / missing), and post deltas to Paperclip. Closes FON-11521.
+- Added test coverage for `/api/repos` in `scripts/validate-editable-mode.js`. Closes FON-11518.
+- Documented the convention upstream at `~/operations/docs/meta/lookie-link-for-agents/lookie-link-for-agents-best-practices.md` and `~/operations/ai-tools/knowledge/universal-methods.yaml#lookie-link-for-file-references`.
+
 ## 2026-05-16 — Unreleased — Linkify Bare URLs
 
 - Enabled `linkify: true` in markdown-it so bare URLs (e.g. `https://itflow.org` in a `## Sources` bullet list) render as clickable links. Verified YouTube iframe + sandbox flow still works and that URLs inside fenced/inline code remain literal.

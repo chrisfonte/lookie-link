@@ -1,1 +1,6 @@
 node_modules/
+
+# Runtime / local-only artifacts
+.cache/
+*.log
+/tmp-audit-*/
