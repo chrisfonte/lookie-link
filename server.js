@@ -383,6 +383,23 @@ function createApp(options = {}) {
     res.status(200).json({ status: 'ok', editingEnabled });
   });
 
+  app.get('/api/repos', (req, res) => {
+    const accessContext = resolveAccessContext(req);
+    if (accessContext.mode === 'denied') {
+      sendAccessError(res, accessContext);
+      return;
+    }
+    const repos = Object.entries(mappings)
+      .filter(([repo]) => canAccessPath(accessContext, 'view', repo, '', 'directory'))
+      .map(([repo, rootPath]) => ({
+        repo,
+        rootPath,
+        viewUrl: `/view/${encodeURIComponent(repo)}/`,
+        assetUrl: `/asset/${encodeURIComponent(repo)}/`,
+      }));
+    res.status(200).json({ repos, count: repos.length });
+  });
+
   app.get('/view/*', async (req, res) => {
     const accessContext = resolveAccessContext(req);
     let resolvedInput;
