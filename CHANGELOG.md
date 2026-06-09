@@ -2,6 +2,7 @@
 
 ## 2026-06-09 — Unreleased — Annotations & Agent-Feedback Loop Spec
 
+- FON-11762 — Nested YAML key anchors. Anchor IDs now use full-path slugs like `database-connection-host`, with deterministic `-2`, `-3` suffixes for collisions. Existing top-level vs nested TOC styling is preserved; nested keys get their own anchor-link buttons. Adds an HTTP regression test through `/view` for nested YAML coverage.
 - Added `docs/ANNOTATIONS-SPEC.md` — draft planning doc for a structured annotation layer (sidecar by default, inline opt-in) and a flat-file pickup contract for agents. Lays out a verdict table, sidecar JSON schema, click-to-annotate UX on existing heading/YAML-key anchors, line-range fallback, a `bin/lookie-annotations.js` CLI shim, and a phase split. Establishes nested YAML key anchors as a phase-1 prerequisite. No code changes yet; basis for follow-up implementation issues.
 
 ## 2026-06-08 — Unreleased — Agent-Facing Read/Write Standard (FON-11515)
