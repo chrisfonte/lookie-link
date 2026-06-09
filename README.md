@@ -112,6 +112,7 @@ This is **not** a public-facing web server. By default, human access still comes
 - [Paperclip Grant Workflow](docs/PAPERCLIP-GRANT-WORKFLOW.md) — managed cross-company access contract
 - [Features](docs/FEATURES.md) — cross-links, anchors, images, themes, YouTube embeds
 - [API](docs/API.md) — endpoint reference
+- [NotebookLM Artifact Coverage](docs/NOTEBOOKLM-ARTIFACT-COVERAGE.md) — audit of markdown / m4a / pdf / png / csv / json review paths, paired with the [Artifact Display Manifest](docs/NOTEBOOKLM-ARTIFACT-MANIFEST.md)
 - [Contributing](docs/CONTRIBUTING.md) — renderer pipeline, validation, design history
 
 ## Inspiration
