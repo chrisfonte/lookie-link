@@ -24,6 +24,18 @@ async function makeFixture() {
   await fs.writeFile(path.join(alphaRoot, 'README.md'), '# Alpha\n');
   await fs.writeFile(path.join(alphaRoot, 'docs', 'guide.md'), '# Guide\n![Diagram](diagram.png)\n');
   await fs.writeFile(path.join(alphaRoot, 'docs', 'landing.htm'), htmlFixture);
+  await fs.writeFile(
+    path.join(alphaRoot, 'docs', 'settings.yaml'),
+    [
+      'database:',
+      '  connection:',
+      '    host: localhost',
+      '    port: 5432',
+      'features:',
+      '  dark_mode: true',
+      '',
+    ].join('\n')
+  );
   await fs.writeFile(path.join(alphaRoot, 'docs', 'manual.pdf'), '%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n');
   await fs.writeFile(path.join(alphaRoot, 'docs', 'diagram.png'), 'png-bytes');
   await fs.writeFile(path.join(alphaRoot, 'secret', 'hidden.md'), '# Hidden\n');
@@ -315,6 +327,27 @@ test('html and htm files render as sanitized documents with raw toggle and edit 
     assert.equal(editResponse.status, 200);
     const editHtml = await editResponse.text();
     assert.match(editHtml, /Edit landing\.htm/);
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('yaml files render nested key anchors with full-path slugs', async () => {
+  const fixture = await makeFixture();
+  const server = await startTestServer({
+    mappings: fixture.mappings,
+    editingEnabled: true,
+  });
+
+  try {
+    const viewResponse = await server.request('/view/alpha/docs/settings.yaml');
+    assert.equal(viewResponse.status, 200);
+    const viewHtml = await viewResponse.text();
+    assert.match(viewHtml, /<span id="database" class="yaml-anchor-wrap">/);
+    assert.match(viewHtml, /<span id="database-connection" class="yaml-anchor-wrap yaml-anchor-l2">/);
+    assert.match(viewHtml, /<span id="database-connection-host" class="yaml-anchor-wrap yaml-anchor-l2">/);
+    assert.match(viewHtml, /data-anchor-id="database-connection-host"/);
   } finally {
     await server.close();
     await fs.rm(fixture.root, { recursive: true, force: true });

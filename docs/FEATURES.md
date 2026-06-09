@@ -45,10 +45,11 @@ Rules:
 
 ## Anchor Linking
 
-Every markdown heading and YAML top-level key gets an anchor ID and a copy-link button that copies the full URL (with `#fragment`) to clipboard.
+Every markdown heading and YAML key path gets an anchor ID and a copy-link button that copies the full URL (with `#fragment`) to clipboard.
 
 - `## Core Truths` → `#core-truths`
 - `learned_patterns:` (YAML) → `#learned_patterns`
+- `database.connection.host:` (YAML) → `#database-connection-host`
 
 Append anchors to any URL: `/view/docs/guide.md#core-truths`
 
