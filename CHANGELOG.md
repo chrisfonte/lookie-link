@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-09 — Unreleased — Annotations & Agent-Feedback Loop Spec
+
+- Added `docs/ANNOTATIONS-SPEC.md` — draft planning doc for a structured annotation layer (sidecar by default, inline opt-in) and a flat-file pickup contract for agents. Lays out a verdict table, sidecar JSON schema, click-to-annotate UX on existing heading/YAML-key anchors, line-range fallback, a `bin/lookie-annotations.js` CLI shim, and a phase split. Establishes nested YAML key anchors as a phase-1 prerequisite. No code changes yet; basis for follow-up implementation issues.
+
 ## 2026-06-08 — Unreleased — Agent-Facing Read/Write Standard (FON-11515)
 
 - Added `GET /api/repos` JSON discovery endpoint so agents can enumerate served repos at runtime (`{repo, rootPath, viewUrl, assetUrl}`). Filtered by the same access-control logic as the home page. Closes FON-11515.
