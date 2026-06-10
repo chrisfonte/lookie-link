@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-10 — Unreleased — Annotations Viewer UX (FON-11764)
+
+- When `server.enableAnnotations: true`, the document viewer now renders a 💬 button next to every anchored heading and YAML key path. Clicking it opens an inline form whose submission writes through `POST /api/annotations/<repo>/<path>`.
+- Stored annotations render inline next to their anchor as a card with author, body, state badge, claim metadata, replies, and per-state actions (Claim, Resolve, Reopen, Reply). Each action calls the API and refreshes inline; stale-mtime conflicts surface in an alert.
+- Added `public/annotations.js` (vanilla JS, ~330 lines) and a styled annotation card / inline-form section in `public/style.css`. Theme variables drive the colors so all built-in palettes look right.
+- The bootstrap (`__lookieLinkAnnotations` with `repo`, `relativePath`, `queryToken`) and the `<script src="/public/annotations.js" defer>` tag are only emitted when `annotationsEnabled` is true for the request. Validator covers both presence (enabled) and absence (disabled).
+- Author name is remembered in `localStorage` so repeat annotations don't re-prompt.
+- No source file mutation; sidecar is still the only on-disk surface. No new auth surface — the script uses the same `view` permission and query-token plumbing as the rest of the viewer.
+
 ## 2026-06-09 — Unreleased — Annotations Sidecar Transport (FON-11763)
 
 - Added sidecar-backed annotation storage at `<repoRoot>/.lookie-link/annotations/<repo>/<relative-path>.json` with atomic temp+rename writes, per-day annotation IDs, and stale-write protection via `expectedMtimeMs` on PATCH.

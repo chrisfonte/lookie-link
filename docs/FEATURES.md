@@ -125,6 +125,18 @@ Behavior:
 - Local `<img src="./file.png">` references are rewritten through `/asset/<repo>/<path>` so images still load from the repo
 - Heading anchors and TOC generation apply to rendered HTML headings the same way they do for markdown
 
+## Annotations
+
+When `server.enableAnnotations: true`, the document viewer adds an inline annotation layer to every rendered file.
+
+- A small 💬 button appears next to every anchored heading (markdown) and YAML key path. Clicking it opens an inline form to attach an annotation to that anchor.
+- Stored annotations render inline next to their anchor as a styled card, showing author, body, state (`open` / `claimed` / `resolved`), claim metadata, and replies.
+- State controls: **Claim**, **Resolve**, **Reopen**, **Reply**. Each action calls the `/api/annotations/<repo>/<path>` API and refreshes inline.
+- Annotation data lives at `<repoRoot>/.lookie-link/annotations/<repo>/<relative-path>.json` (sidecar). Source files are never mutated.
+- The flag is independent of `enableEditing` — annotations are available on the default safe configuration.
+
+See `docs/ANNOTATIONS-SPEC.md` for the full sidecar schema, phase split, and the agent-feedback loop the API enables. The HTTP transport landed in FON-11763; the viewer UX in FON-11764.
+
 ## Themes
 
 10 built-in color themes, each with dark and light variants:
