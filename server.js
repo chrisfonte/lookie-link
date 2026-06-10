@@ -634,6 +634,9 @@ function createApp(options = {}) {
         rawHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
         mtime: formatMTime(stat.mtime),
         size: formatFileSize(stat.size),
+        editHref: editingEnabled && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
+          ? appendAccessToken(buildEditHref(repo, relativePath), accessContext)
+          : null,
         customThemeCss,
         queryToken: accessContext.queryToken,
       });
@@ -676,6 +679,7 @@ function createApp(options = {}) {
         : null,
       customThemeCss,
       queryToken: accessContext.queryToken,
+      annotationsEnabled: annotationsEnabled && canAccessPath(accessContext, 'view', repo, relativePath, 'file'),
     });
 
     res.status(200).type('html').send(html);
