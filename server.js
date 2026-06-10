@@ -47,6 +47,7 @@ const {
   renderAudioPage,
   renderPdfPage,
   renderCsvPage,
+  renderJsonPage,
   renderEditPage,
   renderPreviewHtml,
   setThemeList,
@@ -83,6 +84,7 @@ const PDF_MIME_TYPES = {
 };
 
 const CSV_EXTENSIONS = new Set(['.csv']);
+const JSON_VIEWER_EXTENSIONS = new Set(['.json']);
 
 // Text/source asset mime allowlist. Served as raw bytes via /asset/ so agents
 // (and curl) can fetch markdown, code, and config sources without scraping HTML.
@@ -607,6 +609,36 @@ function createApp(options = {}) {
         pdfHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
         mtime: formatMTime(stat.mtime),
         size: formatFileSize(stat.size),
+        customThemeCss,
+        queryToken: accessContext.queryToken,
+      });
+
+      res.status(200).type('html').send(html);
+      return;
+    }
+
+    if (JSON_VIEWER_EXTENSIONS.has(extension)) {
+      let jsonSource;
+      try {
+        jsonSource = await fs.readFile(resolved, 'utf8');
+      } catch (error) {
+        console.error('Failed to read JSON file', { resolved, error });
+        res.status(500).type('text/plain').send('Failed to read file.');
+        return;
+      }
+
+      const parentRel = parentPath(relativePath);
+      const html = renderJsonPage({
+        repo,
+        relativePath,
+        source: jsonSource,
+        parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
+        rawHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
+        mtime: formatMTime(stat.mtime),
+        size: formatFileSize(stat.size),
+        editHref: editingEnabled && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
+          ? appendAccessToken(buildEditHref(repo, relativePath), accessContext)
+          : null,
         customThemeCss,
         queryToken: accessContext.queryToken,
       });

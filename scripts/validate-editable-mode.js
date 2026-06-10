@@ -100,6 +100,8 @@ async function run() {
   });
 
   const view = getRouteHandler(appEnabled, 'get', '/view/*');
+  const viewWithAnnotations = getRouteHandler(appAnnotationsEnabled, 'get', '/view/*');
+  const viewWithoutAnnotations = getRouteHandler(appAnnotationsDisabled, 'get', '/view/*');
   const edit = getRouteHandler(appEnabled, 'get', '/edit/*');
   const editDisabled = getRouteHandler(appDisabled, 'get', '/edit/*');
   const save = getRouteHandler(appEnabled, 'post', '/api/save/*');
@@ -422,6 +424,23 @@ async function run() {
       headers: { authorization: 'Bearer docs-reader-token' },
     }, res);
     assert.equal(res.statusCode, 403, 'cross-repo annotation write should be denied');
+  }
+
+  {
+    const res = createMockRes();
+    await viewWithAnnotations({ params: { 0: 'docs/doc.md' } }, res);
+    assert.equal(res.statusCode, 200, 'annotations-enabled view failed');
+    assert(typeof res.body === 'string', 'annotations-enabled view body missing');
+    assert(res.body.includes('/public/annotations.js'), 'annotations script not injected when enabled');
+    assert(res.body.includes('lookie-link-annotations-bootstrap'), 'annotations bootstrap script tag missing when enabled');
+  }
+
+  {
+    const res = createMockRes();
+    await viewWithoutAnnotations({ params: { 0: 'docs/doc.md' } }, res);
+    assert.equal(res.statusCode, 200, 'annotations-disabled view failed');
+    assert(!res.body.includes('/public/annotations.js'), 'annotations script leaked into view when disabled');
+    assert(!res.body.includes('lookie-link-annotations-bootstrap'), 'annotations bootstrap leaked into view when disabled');
   }
 
   console.log('editable mode validation passed');
