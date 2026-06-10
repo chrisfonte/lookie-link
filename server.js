@@ -85,6 +85,17 @@ const PDF_MIME_TYPES = {
   '.pdf': 'application/pdf',
 };
 
+
+const SECONDARY_VIEW_EXTENSIONS = new Set(['.example', '.tmpl', '.template', '.dist', '.sample']);
+function effectiveViewExtension(relativePath) {
+  const ext = path.extname(relativePath).toLowerCase();
+  if (!SECONDARY_VIEW_EXTENSIONS.has(ext)) {
+    return ext;
+  }
+  const stripped = relativePath.slice(0, -ext.length);
+  return path.extname(stripped).toLowerCase() || ext;
+}
+
 const CSV_EXTENSIONS = new Set(['.csv']);
 const JSON_VIEWER_EXTENSIONS = new Set(['.json']);
 const HTML_EXTENSIONS = new Set(['.html', '.htm']);
@@ -569,7 +580,7 @@ function createApp(options = {}) {
       return;
     }
 
-    const extension = path.extname(relativePath).toLowerCase();
+    const extension = effectiveViewExtension(relativePath);
     if (IMAGE_EXTENSIONS.has(extension)) {
       const parentRel = parentPath(relativePath);
       const html = renderImagePage({
