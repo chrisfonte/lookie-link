@@ -100,6 +100,8 @@ async function run() {
   });
 
   const view = getRouteHandler(appEnabled, 'get', '/view/*');
+  const viewAnnotationsEnabled = getRouteHandler(appAnnotationsEnabled, 'get', '/view/*');
+  const viewAnnotationsDisabled = getRouteHandler(appAnnotationsDisabled, 'get', '/view/*');
   const edit = getRouteHandler(appEnabled, 'get', '/edit/*');
   const editDisabled = getRouteHandler(appDisabled, 'get', '/edit/*');
   const save = getRouteHandler(appEnabled, 'post', '/api/save/*');
@@ -422,6 +424,80 @@ async function run() {
       headers: { authorization: 'Bearer docs-reader-token' },
     }, res);
     assert.equal(res.statusCode, 403, 'cross-repo annotation write should be denied');
+  }
+
+  // FON-11764 — viewer UX: server-rendered annotation affordances.
+  await fs.writeFile(path.join(repoDir, 'doc.md'), '# Hello\n\nInitial\n', 'utf8');
+  {
+    const sidecarDir = path.join(repoDir, '.lookie-link', 'annotations', 'docs');
+    await fs.mkdir(sidecarDir, { recursive: true });
+    await fs.writeFile(
+      path.join(sidecarDir, 'doc.md.json'),
+      `${JSON.stringify({
+        schema: 1,
+        file: 'docs/doc.md',
+        annotations: [
+          {
+            id: '2026-06-09-001',
+            anchor: '#hello',
+            anchorKind: 'heading',
+            body: 'A live anchor annotation.',
+            author: 'builder',
+            createdAt: '2026-06-09T12:00:00.000Z',
+            state: 'open',
+            claimedBy: null,
+            claimedAt: null,
+            resolvedAt: null,
+            replies: [],
+          },
+          {
+            id: '2026-06-09-002',
+            anchor: '#nonexistent-heading',
+            anchorKind: 'heading',
+            body: 'A stale anchor annotation.',
+            author: 'builder',
+            createdAt: '2026-06-09T12:01:00.000Z',
+            state: 'open',
+            claimedBy: null,
+            claimedAt: null,
+            resolvedAt: null,
+            replies: [],
+          },
+        ],
+      }, null, 2)}\n`,
+      'utf8'
+    );
+
+    const res = createMockRes();
+    await viewAnnotationsEnabled({ params: { 0: 'docs/doc.md' } }, res);
+    assert.equal(res.statusCode, 200, 'annotations-enabled markdown view failed');
+    assert(res.body.includes('class="annotate-btn"'), 'annotate affordance missing');
+    assert(res.body.includes('data-annotate-kind="heading"'), 'heading affordance missing');
+    assert(res.body.includes('data-annotations-mount'), 'annotation mount slot missing');
+    assert(res.body.includes('data-anchor-id="hello"'), 'mount anchor id missing');
+    assert(res.body.includes('data-annotations-stale'), 'stale-anchor aside slot missing');
+    assert(res.body.includes('data-annotations-chip'), 'annotations toolbar chip missing');
+    assert(res.body.includes('/public/annotations.js'), 'annotations client script missing');
+    assert(res.body.includes('id="annotations-bootstrap"'), 'annotations bootstrap script missing');
+  }
+
+  {
+    const res = createMockRes();
+    await viewAnnotationsEnabled({ params: { 0: 'docs/nested.yaml' } }, res);
+    assert.equal(res.statusCode, 200, 'annotations-enabled yaml view failed');
+    assert(res.body.includes('data-annotate-kind="yamlKey"'), 'yaml affordance missing');
+    assert(res.body.includes('data-annotate-anchor-id="key-subkey-leaf"'), 'nested yaml affordance missing');
+  }
+
+  {
+    const res = createMockRes();
+    await viewAnnotationsDisabled({ params: { 0: 'docs/doc.md' } }, res);
+    assert.equal(res.statusCode, 200, 'annotations-disabled view failed');
+    assert(!res.body.includes('class="annotate-btn"'), 'annotate affordance leaked when disabled');
+    assert(!res.body.includes('data-annotations-mount'), 'annotation mount leaked when disabled');
+    assert(!res.body.includes('data-annotations-stale'), 'stale-anchor aside leaked when disabled');
+    assert(!res.body.includes('data-annotations-chip'), 'annotations chip leaked when disabled');
+    assert(!res.body.includes('/public/annotations.js'), 'annotations client script leaked when disabled');
   }
 
   console.log('editable mode validation passed');

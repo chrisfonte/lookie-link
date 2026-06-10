@@ -848,6 +848,313 @@ tbody tr:last-child td {
   opacity: 0.7;
 }
 
+.annotate-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.3;
+  margin-left: 0.25em;
+  font: inherit;
+  padding: 0;
+  color: inherit;
+}
+
+.content h1:hover .annotate-btn,
+.content h2:hover .annotate-btn,
+.content h3:hover .annotate-btn,
+.content h4:hover .annotate-btn,
+.content h5:hover .annotate-btn,
+.content h6:hover .annotate-btn,
+.yaml-anchor-wrap:hover .annotate-btn,
+.annotate-btn:focus,
+.annotate-btn:hover {
+  opacity: 0.85;
+}
+
+.annotations-mount:empty {
+  display: none;
+}
+
+.annotations-mount {
+  margin: 0.5rem 0 1.25rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.annotation-card {
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  border-radius: 6px;
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.annotation-card.is-resolved {
+  opacity: 0.7;
+}
+
+.annotation-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+}
+
+.annotation-author {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.annotation-when {
+  font-variant-numeric: tabular-nums;
+}
+
+.annotation-claimed-by {
+  font-style: italic;
+}
+
+.annotation-anchor {
+  font-size: 0.78rem;
+  background: var(--bg-code);
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+}
+
+.annotation-state {
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.annotation-state-open {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.annotation-state-claimed {
+  color: #c9a227;
+  border-color: #c9a227;
+}
+
+.annotation-state-resolved {
+  color: var(--text-soft);
+}
+
+.annotation-body {
+  white-space: pre-wrap;
+  font: inherit;
+  line-height: 1.5;
+}
+
+.annotation-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-left: 2px solid var(--border);
+  padding-left: 0.65rem;
+}
+
+.annotation-reply-meta {
+  font-size: 0.78rem;
+  color: var(--text-soft);
+}
+
+.annotation-reply-body {
+  white-space: pre-wrap;
+}
+
+.annotation-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.annotation-action {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.25rem 0.6rem;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.annotation-action:hover,
+.annotation-action:focus {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.annotation-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.annotation-editor-input {
+  width: 100%;
+  min-height: 4.5rem;
+  resize: vertical;
+  font: inherit;
+  font-family: 'Space Grotesk', sans-serif;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.5rem;
+}
+
+.annotation-editor-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.annotation-editor-actions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.annotation-editor-submit,
+.annotation-editor-cancel {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.annotation-editor-submit {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+.annotation-editor-submit:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.annotation-editor-status {
+  font-size: 0.78rem;
+  color: var(--text-soft);
+}
+
+.annotations-stale,
+.annotations-line-range {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.annotations-stale-title,
+.annotations-line-range-title {
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+  color: var(--text-soft);
+}
+
+.annotations-stale-list,
+.annotations-line-range-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+[data-annotations-chip].is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.code-with-gutter {
+  display: flex;
+  gap: 0;
+  align-items: stretch;
+  position: relative;
+}
+
+.code-with-gutter pre {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+.line-gutter {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-code);
+  border-right: 1px solid var(--border);
+  padding: 1rem 0.35rem 1rem 0.5rem;
+  user-select: none;
+  min-width: 2.5rem;
+}
+
+.line-num {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  text-align: right;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  border-radius: 2px;
+}
+
+.line-num:hover {
+  background: var(--bg-elev);
+  color: var(--text);
+}
+
+.line-num.is-pick-start,
+.line-num.is-pick-end {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.line-num.is-in-range {
+  background: var(--bg-elev);
+  color: var(--accent);
+}
+
+.line-range-annotate {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  appearance: none;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
 .yaml-anchor-wrap {
   display: inline-flex;
   align-items: center;

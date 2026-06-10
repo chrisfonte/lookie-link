@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-09 — Unreleased — Annotations Viewer UX (FON-11764)
+
+- FON-11764 — Annotations Phase 1 Chunk C. Added the viewer UX layer on top of the FON-11763 transport. When `server.enableAnnotations` is true, document pages now ship a `💬 Annotate` button next to every markdown heading and nested YAML key, an empty `<section data-annotations-mount>` slot under each heading, a `💬 N` toolbar chip, and a `<aside data-annotations-stale>` slot for annotations whose anchor has gone missing.
+- Added `public/annotations.js`: on `DOMContentLoaded` it fetches the sidecar, mounts a card under each live anchor (creating per-anchor mounts on the fly for YAML keys), buckets `lineRange` annotations into a dedicated line-range aside, and routes stale-anchor annotations into the stale aside. Cards expose `Claim` / `Resolve` / `Reopen` / `Reply` controls that PATCH the transport with the current `expectedMtimeMs`; a 409 transparently refetches and re-renders without a page reload. Bodies render as plain text with `white-space: pre-wrap`, so no client-side DOMPurify is required.
+- Inline editor opens next to the anchor when `💬 Annotate` is clicked; supports Ctrl/⌘-Enter to submit and Escape to cancel. Author identity is captured once via `localStorage` (`lookie-link-author`), prompted on first use.
+- Line-range picker: for whole-file code views (non-YAML), the client overlays a clickable line gutter. Click-to-pick start, click-to-pick end, then a floating `Annotate lines L<s>-L<e>` button opens the editor and POSTs with `anchorKind: "lineRange"`, `anchor: "#L<s>-L<e>"`.
+- Toolbar chip shows the total annotation count and toggles visibility of resolved annotations (hidden by default).
+- Extended `scripts/validate-editable-mode.js` with three renderer assertions: markdown view with a stored sidecar exposes `annotate-btn`, `data-annotations-mount`, the chip, the bootstrap, and the client script include; nested YAML view exposes `data-annotate-kind="yamlKey"` affordances; and none of those tokens leak into the rendered HTML when `enableAnnotations` is false.
+- Styled annotation cards, stale/line-range asides, and the line-range gutter against existing `--bg`, `--bg-elev`, `--accent`, `--border` theme tokens so all built-in and custom themes inherit consistent visuals.
+
 ## 2026-06-09 — Unreleased — Annotations Sidecar Transport (FON-11763)
 
 - Added sidecar-backed annotation storage at `<repoRoot>/.lookie-link/annotations/<repo>/<relative-path>.json` with atomic temp+rename writes, per-day annotation IDs, and stale-write protection via `expectedMtimeMs` on PATCH.

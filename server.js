@@ -676,6 +676,7 @@ function createApp(options = {}) {
         : null,
       customThemeCss,
       queryToken: accessContext.queryToken,
+      annotationsEnabled,
     });
 
     res.status(200).type('html').send(html);
