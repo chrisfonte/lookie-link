@@ -45,6 +45,7 @@ const {
   renderImagePage,
   renderAudioPage,
   renderPdfPage,
+  renderCsvPage,
   renderEditPage,
   renderPreviewHtml,
   setThemeList,
@@ -74,6 +75,8 @@ const PDF_MIME_TYPES = {
   '.pdf': 'application/pdf',
 };
 
+const CSV_EXTENSIONS = new Set(['.csv']);
+
 // Text/source asset mime allowlist. Served as raw bytes via /asset/ so agents
 // (and curl) can fetch markdown, code, and config sources without scraping HTML.
 // HTML-ish extensions are intentionally returned as text/plain to prevent the
@@ -87,6 +90,7 @@ const TEXT_MIME_TYPES = {
   '.yml': 'text/yaml; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.xml': 'application/xml; charset=utf-8',
+  '.csv': 'text/csv; charset=utf-8',
   '.txt': TEXT_PLAIN,
   '.toml': TEXT_PLAIN,
   '.ini': TEXT_PLAIN,
@@ -593,6 +597,33 @@ function createApp(options = {}) {
         relativePath,
         parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
         pdfHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
+        mtime: formatMTime(stat.mtime),
+        size: formatFileSize(stat.size),
+        customThemeCss,
+        queryToken: accessContext.queryToken,
+      });
+
+      res.status(200).type('html').send(html);
+      return;
+    }
+
+    if (CSV_EXTENSIONS.has(extension)) {
+      let csvSource;
+      try {
+        csvSource = await fs.readFile(resolved, 'utf8');
+      } catch (error) {
+        console.error('Failed to read CSV file', { resolved, error });
+        res.status(500).type('text/plain').send('Failed to read file.');
+        return;
+      }
+
+      const parentRel = parentPath(relativePath);
+      const html = renderCsvPage({
+        repo,
+        relativePath,
+        source: csvSource,
+        parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
+        rawHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
         mtime: formatMTime(stat.mtime),
         size: formatFileSize(stat.size),
         customThemeCss,
