@@ -16,6 +16,7 @@ server:
   port: 9876
   hostname: localhost  # e.g., my-server.local or my-host.tailnet.ts.net
   enableEditing: false # opt-in: set true only on trusted private networks
+  enableAnnotations: false # opt-in: enables sidecar annotation API routes
 
 # Repository mappings
 # Each key becomes a URL prefix: /view/<key>/<path>

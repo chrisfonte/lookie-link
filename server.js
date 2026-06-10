@@ -9,6 +9,7 @@ const {
   getPort,
   getHostname,
   getEditingEnabled,
+  getAnnotationsEnabled,
   getAccessConfig,
   loadCustomThemes,
   generateCustomThemeCss,
@@ -50,6 +51,12 @@ const {
   renderPreviewHtml,
   setThemeList,
 } = require('./lib/renderer');
+const {
+  readAnnotationDocument,
+  filterAnnotationsByState,
+  createAnnotation,
+  updateAnnotation,
+} = require('./lib/annotations');
 
 const IMAGE_MIME_TYPES = {
   '.png': 'image/png',
@@ -262,6 +269,7 @@ function createApp(options = {}) {
   const app = express();
   const mappings = options.mappings || loadRootMappings();
   const editingEnabled = options.editingEnabled === undefined ? getEditingEnabled() : Boolean(options.editingEnabled);
+  const annotationsEnabled = options.annotationsEnabled === undefined ? getAnnotationsEnabled() : Boolean(options.annotationsEnabled);
   const customThemeCss = options.customThemeCss || '';
   const rawAccessConfig = options.accessConfig === undefined ? getAccessConfig() : options.accessConfig;
   const accessConfig = parseAccessConfig(rawAccessConfig);
@@ -433,7 +441,7 @@ function createApp(options = {}) {
   });
 
   app.get('/healthz', (_req, res) => {
-    res.status(200).json({ status: 'ok', editingEnabled });
+    res.status(200).json({ status: 'ok', editingEnabled, annotationsEnabled });
   });
 
   app.get('/api/repos', (req, res) => {
@@ -968,6 +976,271 @@ function createApp(options = {}) {
     res.status(200).json({ ok: true, html });
   });
 
+  app.get('/api/annotations/:repo/*', async (req, res) => {
+    if (!annotationsEnabled) {
+      res.status(404).json({ ok: false, error: 'Annotations are disabled.' });
+      return;
+    }
+
+    const repo = req.params.repo;
+    const relativePath = req.params[0] || '';
+    const rootPath = mappings[repo];
+    const accessContext = resolveAccessContext(req);
+
+    if (!rootPath) {
+      res.status(404).json({ ok: false, error: `Unknown repository: ${repo}` });
+      return;
+    }
+
+    if (!relativePath) {
+      res.status(400).json({ ok: false, error: 'Annotations require a file path.' });
+      return;
+    }
+
+    if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
+      sendAccessError(res, accessContext, true);
+      return;
+    }
+
+    let resolved;
+    try {
+      resolved = await safeResolve(rootPath, relativePath);
+    } catch (error) {
+      if (error && error.code === 'EACCES') {
+        res.status(403).json({ ok: false, error: 'Invalid path.' });
+        return;
+      }
+
+      if (error && error.code === 'ENOENT') {
+        res.status(404).json({ ok: false, error: 'File not found.' });
+        return;
+      }
+
+      console.error('Failed to resolve annotation path', { rootPath, relativePath, error });
+      res.status(500).json({ ok: false, error: 'Failed to resolve file path.' });
+      return;
+    }
+
+    let stat;
+    try {
+      stat = await fs.stat(resolved);
+    } catch (error) {
+      if (error && error.code === 'ENOENT') {
+        res.status(404).json({ ok: false, error: 'File not found.' });
+        return;
+      }
+
+      console.error('Failed to stat annotation file', { resolved, error });
+      res.status(500).json({ ok: false, error: 'Failed to read file metadata.' });
+      return;
+    }
+
+    if (!stat.isFile()) {
+      res.status(400).json({ ok: false, error: 'Annotations only apply to files.' });
+      return;
+    }
+
+    try {
+      const result = await readAnnotationDocument(rootPath, repo, relativePath);
+      const states = Array.isArray(req.query.state)
+        ? req.query.state
+        : req.query.state !== undefined
+          ? [req.query.state]
+          : [];
+      const filtered = filterAnnotationsByState(result.document, states);
+      res.status(200).json(filtered);
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        res.status(500).json({ ok: false, error: 'Annotation sidecar contains invalid JSON.' });
+        return;
+      }
+
+      if (error.message.startsWith('Unsupported state filter:')) {
+        res.status(400).json({ ok: false, error: error.message });
+        return;
+      }
+
+      console.error('Failed to read annotations', { repo, relativePath, error });
+      res.status(500).json({ ok: false, error: 'Failed to read annotations.' });
+    }
+  });
+
+  app.post('/api/annotations/:repo/*', async (req, res) => {
+    if (!annotationsEnabled) {
+      res.status(404).json({ ok: false, error: 'Annotations are disabled.' });
+      return;
+    }
+
+    const repo = req.params.repo;
+    const relativePath = req.params[0] || '';
+    const rootPath = mappings[repo];
+    const accessContext = resolveAccessContext(req);
+
+    if (!rootPath) {
+      res.status(404).json({ ok: false, error: `Unknown repository: ${repo}` });
+      return;
+    }
+
+    if (!relativePath) {
+      res.status(400).json({ ok: false, error: 'Annotations require a file path.' });
+      return;
+    }
+
+    if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
+      sendAccessError(res, accessContext, true);
+      return;
+    }
+
+    let sourceStat;
+    try {
+      sourceStat = await fs.stat(await safeResolve(rootPath, relativePath));
+    } catch (error) {
+      if (error && error.code === 'EACCES') {
+        res.status(403).json({ ok: false, error: 'Invalid path.' });
+        return;
+      }
+
+      if (error && error.code === 'ENOENT') {
+        res.status(404).json({ ok: false, error: 'File not found.' });
+        return;
+      }
+
+      console.error('Failed to stat source file for annotations', { repo, relativePath, error });
+      res.status(500).json({ ok: false, error: 'Failed to read file metadata.' });
+      return;
+    }
+
+    if (!sourceStat.isFile()) {
+      res.status(400).json({ ok: false, error: 'Annotations only apply to files.' });
+      return;
+    }
+
+    try {
+      const result = await createAnnotation(rootPath, repo, relativePath, req.body || {});
+      res.status(201).json({
+        ok: true,
+        annotation: result.annotation,
+        mtimeMs: result.mtimeMs,
+      });
+    } catch (error) {
+      if (
+        error.message === 'Anchor is required.' ||
+        error.message === 'anchorKind is required.' ||
+        error.message === 'body is required.' ||
+        error.message === 'author is required.' ||
+        error.message.startsWith('Unsupported anchorKind') ||
+        error.message.startsWith('Anchor must start') ||
+        error.message.startsWith('lineRange anchors must') ||
+        error.message.startsWith('lineRange anchor end')
+      ) {
+        res.status(400).json({ ok: false, error: error.message });
+        return;
+      }
+
+      if (error instanceof SyntaxError) {
+        res.status(500).json({ ok: false, error: 'Annotation sidecar contains invalid JSON.' });
+        return;
+      }
+
+      console.error('Failed to create annotation', { repo, relativePath, error });
+      res.status(500).json({ ok: false, error: 'Failed to create annotation.' });
+    }
+  });
+
+  app.patch('/api/annotations/:repo/*', async (req, res) => {
+    if (!annotationsEnabled) {
+      res.status(404).json({ ok: false, error: 'Annotations are disabled.' });
+      return;
+    }
+
+    const repo = req.params.repo;
+    const relativePath = req.params[0] || '';
+    const rootPath = mappings[repo];
+    const accessContext = resolveAccessContext(req);
+
+    if (!rootPath) {
+      res.status(404).json({ ok: false, error: `Unknown repository: ${repo}` });
+      return;
+    }
+
+    if (!relativePath) {
+      res.status(400).json({ ok: false, error: 'Annotations require a file path.' });
+      return;
+    }
+
+    if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
+      sendAccessError(res, accessContext, true);
+      return;
+    }
+
+    let sourceStat;
+    try {
+      sourceStat = await fs.stat(await safeResolve(rootPath, relativePath));
+    } catch (error) {
+      if (error && error.code === 'EACCES') {
+        res.status(403).json({ ok: false, error: 'Invalid path.' });
+        return;
+      }
+
+      if (error && error.code === 'ENOENT') {
+        res.status(404).json({ ok: false, error: 'File not found.' });
+        return;
+      }
+
+      console.error('Failed to stat source file for annotation update', { repo, relativePath, error });
+      res.status(500).json({ ok: false, error: 'Failed to read file metadata.' });
+      return;
+    }
+
+    if (!sourceStat.isFile()) {
+      res.status(400).json({ ok: false, error: 'Annotations only apply to files.' });
+      return;
+    }
+
+    try {
+      const result = await updateAnnotation(rootPath, repo, relativePath, req.body || {});
+      res.status(200).json({
+        ok: true,
+        annotation: result.annotation,
+        mtimeMs: result.mtimeMs,
+      });
+    } catch (error) {
+      if (error.code === 'ESTALE') {
+        const current = await readAnnotationDocument(rootPath, repo, relativePath);
+        res.status(409).json({
+          ok: false,
+          error: error.message,
+          currentMtimeMs: error.currentMtimeMs,
+          current: current.document,
+        });
+        return;
+      }
+
+      if (
+        error.message === 'id is required.' ||
+        error.message === 'op is required.' ||
+        error.message === 'Annotation not found.' ||
+        error.message.startsWith('Unsupported op') ||
+        error.message === 'payload.claimedBy is required.' ||
+        error.message === 'payload.author is required.' ||
+        error.message === 'payload.body is required.' ||
+        error.message === 'Invalid expectedMtimeMs value.'
+      ) {
+        const status = error.message === 'Annotation not found.' ? 404 : 400;
+        res.status(status).json({ ok: false, error: error.message });
+        return;
+      }
+
+      if (error instanceof SyntaxError) {
+        res.status(500).json({ ok: false, error: 'Annotation sidecar contains invalid JSON.' });
+        return;
+      }
+
+      console.error('Failed to update annotation', { repo, relativePath, error });
+      res.status(500).json({ ok: false, error: 'Failed to update annotation.' });
+    }
+  });
+
   app.get('/asset/:repo/*', async (req, res) => {
     const accessContext = resolveAccessContext(req);
     const repo = req.params.repo;
@@ -1062,6 +1335,7 @@ function startServer() {
   const hostname = getHostname();
   const mappings = loadRootMappings();
   const editingEnabled = getEditingEnabled();
+  const annotationsEnabled = getAnnotationsEnabled();
   const accessConfig = getAccessConfig();
 
   const customThemes = loadCustomThemes();
@@ -1074,11 +1348,12 @@ function startServer() {
   const allThemes = [...builtInThemes, ...customThemes.map((t) => ({ slug: t.slug, label: t.label }))];
   setThemeList(allThemes);
 
-  const app = createApp({ mappings, editingEnabled, customThemeCss, accessConfig });
+  const app = createApp({ mappings, editingEnabled, annotationsEnabled, customThemeCss, accessConfig });
 
   app.listen(port, '0.0.0.0', () => {
     console.log(`Lookie Link listening on http://${hostname}:${port}`);
     console.log(`Editing mode: ${editingEnabled ? 'enabled' : 'disabled'}`);
+    console.log(`Annotations: ${annotationsEnabled ? 'enabled' : 'disabled'}`);
     if (customThemes.length > 0) {
       console.log(`Custom themes: ${customThemes.map((t) => t.label).join(', ')}`);
     }

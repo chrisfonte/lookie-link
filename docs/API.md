@@ -10,6 +10,9 @@
 | `GET /edit/<repo>/<path>` | Edit page (only when editing enabled) |
 | `POST /api/save/<repo>/<path>` | Save updated file content (JSON body) |
 | `POST /api/preview/<repo>/<path>` | Render preview HTML from draft content (JSON body) |
+| `GET /api/annotations/<repo>/<path>` | Read sidecar annotations for a file. Supports repeatable `?state=open|claimed|resolved`. Returns an empty schema document when no sidecar exists. |
+| `POST /api/annotations/<repo>/<path>` | Create an annotation. Requires only `view` access and `enableAnnotations: true`. |
+| `PATCH /api/annotations/<repo>/<path>` | Apply `claim`, `resolve`, `reopen`, or `reply` to an annotation with stale-write protection. Requires only `view` access and `enableAnnotations: true`. |
 | `GET /api/grants` | List managed grants (`Authorization: Bearer <admin-token>`) |
 | `POST /api/grants` | Create a managed grant and return token + issue comment helper |
 | `POST /api/grants/:grantId/renew` | Renew a managed grant and return issue comment helper |
@@ -32,6 +35,7 @@ Route enforcement in phase 1:
 - `/asset/*` requires `view`
 - `/edit/*` and `/api/save/*` require `edit`
 - `/api/preview/*` requires `view` and still respects global editing mode
+- `/api/annotations/*` requires `view` and returns `404` when annotations are disabled
 
 Invalid tokens return `403`. Missing tokens return `401` when unauthenticated human access is restricted.
 
@@ -84,6 +88,52 @@ Request body:
 ```
 
 Returns `{"ok": true, "html": "rendered HTML"}`.
+
+## Annotation Endpoints
+
+`GET /api/annotations/<repo>/<path>`
+
+- Requires `server.enableAnnotations: true`
+- Requires `view` access to the target file
+- Returns `{ "schema": 1, "file": "<repo>/<path>", "annotations": [] }` when no sidecar exists yet
+- Optional `?state=` filter can be repeated, for example `?state=open&state=claimed`
+
+`POST /api/annotations/<repo>/<path>`
+
+Request body:
+
+```json
+{
+  "anchor": "#design-decisions",
+  "anchorKind": "heading",
+  "body": "Please split this section.",
+  "author": "agent-bob"
+}
+```
+
+- `anchorKind` must be `heading`, `yamlKey`, or `lineRange`
+- `lineRange` anchors must use `#L<start>-L<end>`
+- Server assigns `id`, `createdAt`, and `state: "open"`
+- Sidecars are written under `<repoRoot>/.lookie-link/annotations/<repo>/<path>.json`
+
+`PATCH /api/annotations/<repo>/<path>`
+
+Request body:
+
+```json
+{
+  "id": "2026-06-09-001",
+  "expectedMtimeMs": 1749500000000,
+  "op": "claim",
+  "payload": {
+    "claimedBy": "agent-bob"
+  }
+}
+```
+
+- Supported `op` values: `claim`, `resolve`, `reopen`, `reply`
+- `reply` payload requires `author` and `body`
+- Stale `expectedMtimeMs` returns `409` with the current annotation document in `current`
 
 ## Managed Grant Lifecycle
 
