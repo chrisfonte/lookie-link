@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-09 — Unreleased — Annotations Sidecar Transport (FON-11763)
+
+- Added sidecar-backed annotation storage at `<repoRoot>/.lookie-link/annotations/<repo>/<relative-path>.json` with atomic temp+rename writes, per-day annotation IDs, and stale-write protection via `expectedMtimeMs` on PATCH.
+- Added `GET | POST | PATCH /api/annotations/<repo>/<path>` behind a new `server.enableAnnotations` flag (and `LOOKIE_LINK_ENABLE_ANNOTATIONS` env var), independent of `enableEditing`. Routes reuse the existing token-scoped `view` permission for both reads and writes.
+- `GET` returns the sidecar (or an empty schema-1 document when no sidecar exists) and supports repeatable `?state=open|claimed|resolved` filters. `POST` accepts `anchor`, `anchorKind` (`heading`, `yamlKey`, `lineRange`), `body`, `author`. `PATCH` supports `claim`, `resolve`, `reopen`, and `reply` ops with 409 on stale mtime.
+- Extended `scripts/validate-editable-mode.js` to cover the annotation transport: disabled-gate 404, empty-doc read, create + sidecar placement, claim → resolve → reopen → reply state walk, state filters (including invalid filter rejection), stale-mtime conflict, cross-repo access-control parity (403 on read and write), and 404 on missing source files.
+- Documented the transport in `docs/API.md`, the flag in `docs/CONFIGURATION.md`, and the example in `lookie-link.yaml.example`.
+
 ## 2026-06-09 — Unreleased — Annotations & Agent-Feedback Loop Spec
 
 - FON-11762 — Nested YAML key anchors. Anchor IDs now use full-path slugs like `database-connection-host`, with deterministic `-2`, `-3` suffixes for collisions. Existing top-level vs nested TOC styling is preserved; nested keys get their own anchor-link buttons. Adds an HTTP regression test through `/view` for nested YAML coverage.

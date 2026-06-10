@@ -7,6 +7,7 @@ server:
   port: 9876
   hostname: my-server.example.com
   enableEditing: false
+  enableAnnotations: false
 
 repositories:
   docs: ~/Documents/docs
@@ -106,6 +107,17 @@ Settings resolve in this order (first wins):
 | `ROOT_MAPPINGS` | Comma-separated `repo=path` pairs or JSON object |
 | `LOOKIE_LINK_CONFIG` | Path to a custom config file (overrides search) |
 | `LOOKIE_LINK_ENABLE_EDITING` | Boolean override for edit mode (`true/false`, `1/0`, `yes/no`) |
+| `LOOKIE_LINK_ENABLE_ANNOTATIONS` | Boolean override for annotation routes (`true/false`, `1/0`, `yes/no`) |
+
+## Annotation Transport
+
+`server.enableAnnotations` gates the JSON sidecar transport under `/api/annotations/*`.
+
+- Default: `false`
+- Precedence: `LOOKIE_LINK_ENABLE_ANNOTATIONS` env var, then user/project YAML, then default
+- Independent of `enableEditing`
+- When disabled, `GET|POST|PATCH /api/annotations/<repo>/<path>` return `404`
+- Annotation sidecars live inside each served repo at `.lookie-link/annotations/<repo>/<relative-path>.json`
 
 ## Custom Themes
 
