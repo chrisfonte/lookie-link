@@ -34,7 +34,7 @@ Reference fixtures live under `operations-research/ai-tools/notebooklm/`. Each r
 | Audio overview | `.m4a` | Dedicated audio player page with controls, download, file metadata | `audio/mp4` (Range requests honored) | Inline `<audio>` player auto-rendered from markdown link | Supported |
 | Slide deck | `.pdf` | Dedicated viewer page with embedded PDF frame, "Open in browser", download | `application/pdf` | Markdown links to `.pdf` open the viewer page | Supported |
 | Infographic | `.png` | Dedicated image page; inline images get a lightbox when referenced from markdown | `image/png` | `![alt](path.png)` renders inline; click → lightbox | Supported |
-| Capabilities / data tables | `.csv` | Renders as auto-highlighted text in the document page (no table layout) | `text/csv; charset=utf-8` (added in commit `b460e5e`) | Standard `<a>` link → text view (no table) | Supported (raw); see Gap 2 for table viewer |
+| Capabilities / data tables | `.csv` | Dedicated CSV viewer page — first row becomes header, rest becomes table body, with View raw / Download actions | `text/csv; charset=utf-8` | Standard `<a>` link → table viewer | Supported |
 | Flashcards, mind-map mismatches | `.json` | JSON syntax-highlighted via highlight.js, with theme + anchor support | `application/json; charset=utf-8` | Standard `<a>` link → highlighted JSON view | Supported (documented behavior: highlighted raw view, no special viewer) |
 
 > Historical note: during initial audit (2026-06-09) the live process predated commit `b460e5e`, so `/asset/<…>.csv` returned `415` and the text-MIME allowlist commit (`e2d3e88`, FON-11519) was not yet running. The live server has since been restarted and all six types return the table-listed Content-Type.
@@ -47,7 +47,7 @@ When the NotebookLM source side offers a choice of export formats, agents should
 - Slide decks → PDF (`.pdf`), not PPTX. PDF renders in-browser; PPTX is a binary download.
 - Audio overviews → `.m4a`, `.mp3`, or another browser-playable codec. Avoid raw WAV when an encoded option exists.
 - Infographics → PNG. SVG is also fine; both render inline. Avoid PDF for single-image infographics because the PDF path is dedicated to deck-style review.
-- Tabular data → CSV is the canonical interchange format. UX caveat: CSV does not yet have a dedicated table viewer (see Gap 2); review it via the manifest companion or download.
+- Tabular data → CSV is the canonical interchange format. CSVs render in the dedicated table viewer at `/view/<path>.csv` with header row + body rows + row × column count.
 - Raw structured exports (flashcards, mind maps) → JSON. JSON renders as highlighted raw text — keep the markdown companion (qa log / manifest) so a reviewer knows what they are looking at before opening the file.
 
 ## Live Coverage Test
@@ -71,7 +71,7 @@ The audit landing page also lives at `/view/lookie-link/docs/NOTEBOOKLM-ARTIFACT
 
 ## Identified Gaps
 
-### Gap 1 — CSV asset path returned 415 (CLOSED in `b460e5e`)
+### Gap 1 — CSV asset path returned 415 (CLOSED on `main`)
 
 `text/csv` was missing from the `/asset/` MIME allowlist, so:
 
@@ -79,13 +79,15 @@ The audit landing page also lives at `/view/lookie-link/docs/NOTEBOOKLM-ARTIFACT
 - The `lookie-read` agent CLI could not fetch CSV bytes through the normal asset path.
 - Any markdown that intentionally linked via `/asset/` (rather than `/view/`) for a raw download broke for CSV.
 
-Closed by commit `b460e5e` — `'.csv': 'text/csv; charset=utf-8'` added to `TEXT_MIME_TYPES` in `server.js`, with the existing `/asset/` MIME allowlist test in `test/access-control.test.js` extended to cover CSV.
+Closed by PR #68 (commit `2e74a57`) — `'.csv': 'text/csv; charset=utf-8'` added to `TEXT_MIME_TYPES` in `server.js`. The earlier held branch `fix/csv-asset-mime-allowlist` (`b460e5e`) is now superseded.
 
-### Gap 2 — No CSV table viewer
+### Gap 2 — CSV table viewer (CLOSED on `main`)
 
-`.csv` review today is "auto-highlighted text in the document page". A real CSV table view (rendered `<table>`, sortable columns, basic schema preview) would substantially improve the human-review path for capabilities tables and data tables, but is not required for parity with the rest of the artifact set.
+Originally `.csv` review was "auto-highlighted text in the document page" — no `<table>` layout, just highlight.js auto-detected raw source.
 
-**Recommendation:** out of scope for the minimal patch. Track as a follow-up enhancement (suggested issue title: "feat: CSV table viewer for `/view/<path>.csv`").
+Closed by PR #68 — `lib/renderer.js` gained `parseCsv()` (RFC4180-ish parser handling quoted commas, escaped doubled-quotes, CRLF/LF/CR, and a BOM strip) and `renderCsvPage()` (first row → `<thead>`, the rest → `<tbody>`, row × column count, View raw / Download actions). `server.js` routes `.csv` through the new viewer in the `/view/` handler ahead of the generic document path.
+
+**Possible future enhancement (not blocking):** sortable column headers, basic schema preview, or numeric alignment heuristics.
 
 ### Gap 3 — JSON review path under-documented
 
@@ -102,5 +104,5 @@ When all gaps above are closed, the artifact coverage doc and Lookie-Link docs j
 - [x] For each type, the docs state whether the review path is inline render, dedicated viewer, or formatted raw source.
 - [x] The recommended agent export format is named for every type that offers a choice.
 - [x] At least one CSV and one JSON fixture is covered by automated tests so the asset path cannot regress silently (`test/access-control.test.js`).
+- [x] CSV table viewer at `/view/<path>.csv` (Gap 2 closed by PR #68).
 - [ ] JSON/CSV "Structured Data Rendering" callout added to `FEATURES.md` (Gap 3 follow-up).
-- [ ] CSV table viewer (Gap 2 follow-up).
