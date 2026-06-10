@@ -34,8 +34,8 @@ This is the reference bundle the audit runs against. Files live under `operation
 | `notebooklm-qa-log.md` | Markdown | Native markdown render | Query log and artifact provenance |
 | `notebooklm-audio-customization-prompt.md` | Markdown | Native markdown render | Reusable source-citing audio prompt |
 | `notebooklm-quiz.md` | Markdown | Native markdown render | Quiz output in readable text form |
-| `notebooklm-data-table.csv` | CSV | Raw highlighted view at `/view`; `text/csv` at `/asset` | Structured extracted table |
-| `notebooklm-capabilities-table.csv` | CSV | Raw highlighted view at `/view`; `text/csv` at `/asset` | Capabilities/limits table |
+| `notebooklm-data-table.csv` | CSV | Dedicated table viewer at `/view`; `text/csv` at `/asset` | Structured extracted table |
+| `notebooklm-capabilities-table.csv` | CSV | Dedicated table viewer at `/view`; `text/csv` at `/asset` | Capabilities/limits table |
 | `notebooklm-audio-overview.m4a` | Audio | Inline audio player in Lookie-Link | NotebookLM audio overview |
 | `notebooklm-slide-deck.pdf` | PDF | Browser-viewable PDF | Slide-deck artifact in reviewable format |
 | `notebooklm-infographic.png` | PNG | Inline image render | Infographic artifact |
