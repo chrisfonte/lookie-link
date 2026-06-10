@@ -10,6 +10,7 @@ const {
   getHostname,
   getEditingEnabled,
   getAnnotationsEnabled,
+  getRawHtmlEnabled,
   getAccessConfig,
   loadCustomThemes,
   generateCustomThemeCss,
@@ -35,6 +36,7 @@ const {
   buildEditHref,
   buildSaveHref,
   buildPreviewHref,
+  buildRawHref,
   formatFileSize,
   formatMTime,
   compareEntries,
@@ -85,6 +87,8 @@ const PDF_MIME_TYPES = {
 
 const CSV_EXTENSIONS = new Set(['.csv']);
 const JSON_VIEWER_EXTENSIONS = new Set(['.json']);
+const HTML_EXTENSIONS = new Set(['.html', '.htm']);
+const RAW_HTML_MIME_TYPE = 'text/html; charset=utf-8';
 
 // Text/source asset mime allowlist. Served as raw bytes via /asset/ so agents
 // (and curl) can fetch markdown, code, and config sources without scraping HTML.
@@ -272,6 +276,7 @@ function createApp(options = {}) {
   const mappings = options.mappings || loadRootMappings();
   const editingEnabled = options.editingEnabled === undefined ? getEditingEnabled() : Boolean(options.editingEnabled);
   const annotationsEnabled = options.annotationsEnabled === undefined ? getAnnotationsEnabled() : Boolean(options.annotationsEnabled);
+  const rawHtmlEnabled = options.rawHtmlEnabled === undefined ? getRawHtmlEnabled() : Boolean(options.rawHtmlEnabled);
   const customThemeCss = options.customThemeCss || '';
   const rawAccessConfig = options.accessConfig === undefined ? getAccessConfig() : options.accessConfig;
   const accessConfig = parseAccessConfig(rawAccessConfig);
@@ -443,7 +448,7 @@ function createApp(options = {}) {
   });
 
   app.get('/healthz', (_req, res) => {
-    res.status(200).json({ status: 'ok', editingEnabled, annotationsEnabled });
+    res.status(200).json({ status: 'ok', editingEnabled, annotationsEnabled, rawHtmlEnabled });
   });
 
   app.get('/api/repos', (req, res) => {
@@ -698,6 +703,7 @@ function createApp(options = {}) {
 
     const source = sourceBuffer.toString('utf8');
     const parentRel = parentPath(relativePath);
+    const isHtmlFile = HTML_EXTENSIONS.has(extension);
     const html = renderDocumentPage({
       repo,
       repoRoot: rootPath,
@@ -708,6 +714,9 @@ function createApp(options = {}) {
       size: formatFileSize(stat.size),
       editHref: editingEnabled && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
         ? appendAccessToken(buildEditHref(repo, relativePath), accessContext)
+        : null,
+      rawHtmlHref: rawHtmlEnabled && isHtmlFile
+        ? appendAccessToken(buildRawHref(repo, relativePath), accessContext)
         : null,
       customThemeCss,
       queryToken: accessContext.queryToken,
@@ -1350,6 +1359,92 @@ function createApp(options = {}) {
     });
   });
 
+  // Serve trusted HTML files verbatim (FON-11792). See lib/config.js
+  // `getRawHtmlEnabled` for the trust assumption — only HTML extensions, only
+  // when enabled, only inside the configured roots. Inline <script> tags
+  // execute because we do not run them through DOMPurify on this path.
+  app.get('/raw/:repo/*', async (req, res) => {
+    if (!rawHtmlEnabled) {
+      res.status(404).type('text/plain').send('Raw HTML serving is disabled.');
+      return;
+    }
+
+    const accessContext = resolveAccessContext(req);
+    const repo = req.params.repo;
+    const relativePath = req.params[0] || '';
+    const rootPath = mappings[repo];
+
+    if (!rootPath) {
+      res.status(404).type('text/plain').send(`Unknown repository: ${repo}`);
+      return;
+    }
+
+    if (!relativePath) {
+      res.status(400).type('text/plain').send('Raw serving requires a file path.');
+      return;
+    }
+
+    const extension = path.extname(relativePath).toLowerCase();
+    if (!HTML_EXTENSIONS.has(extension)) {
+      res.status(415).type('text/plain').send('Raw mode only supports .html and .htm files.');
+      return;
+    }
+
+    if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
+      res.status(403).type('text/plain').send('Access denied.');
+      return;
+    }
+
+    let resolved;
+    try {
+      resolved = await safeResolve(rootPath, relativePath);
+    } catch (error) {
+      if (error && error.code === 'EACCES') {
+        res.status(403).type('text/plain').send('Invalid path.');
+        return;
+      }
+
+      if (error && error.code === 'ENOENT') {
+        res.status(404).type('text/plain').send('File not found.');
+        return;
+      }
+
+      console.error('Failed to resolve raw path', { rootPath, relativePath, error });
+      res.status(500).type('text/plain').send('Failed to resolve raw path.');
+      return;
+    }
+
+    let stat;
+    try {
+      stat = await fs.stat(resolved);
+    } catch (error) {
+      if (error && error.code === 'ENOENT') {
+        res.status(404).type('text/plain').send('File not found.');
+        return;
+      }
+
+      console.error('Failed to stat raw path', { resolved, error });
+      res.status(500).type('text/plain').send('Failed to read file metadata.');
+      return;
+    }
+
+    if (!stat.isFile()) {
+      res.status(404).type('text/plain').send('File not found.');
+      return;
+    }
+
+    res.type(RAW_HTML_MIME_TYPE).sendFile(resolved, (error) => {
+      if (!error) {
+        return;
+      }
+
+      console.error('Failed to serve raw HTML', { resolved, error });
+      if (!res.headersSent) {
+        res.status(500).type('text/plain').send('Failed to read file.');
+      }
+    });
+  });
+
   app.get('/view', (req, res) => {
     res.redirect(302, appendAccessToken('/', resolveAccessContext(req)));
   });
@@ -1372,6 +1467,7 @@ function startServer() {
   const mappings = loadRootMappings();
   const editingEnabled = getEditingEnabled();
   const annotationsEnabled = getAnnotationsEnabled();
+  const rawHtmlEnabled = getRawHtmlEnabled();
   const accessConfig = getAccessConfig();
 
   const customThemes = loadCustomThemes();
@@ -1384,12 +1480,13 @@ function startServer() {
   const allThemes = [...builtInThemes, ...customThemes.map((t) => ({ slug: t.slug, label: t.label }))];
   setThemeList(allThemes);
 
-  const app = createApp({ mappings, editingEnabled, annotationsEnabled, customThemeCss, accessConfig });
+  const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss, accessConfig });
 
   app.listen(port, '0.0.0.0', () => {
     console.log(`Lookie Link listening on http://${hostname}:${port}`);
     console.log(`Editing mode: ${editingEnabled ? 'enabled' : 'disabled'}`);
     console.log(`Annotations: ${annotationsEnabled ? 'enabled' : 'disabled'}`);
+    console.log(`Raw HTML serving: ${rawHtmlEnabled ? 'enabled' : 'disabled'}`);
     if (customThemes.length > 0) {
       console.log(`Custom themes: ${customThemes.map((t) => t.label).join(', ')}`);
     }
