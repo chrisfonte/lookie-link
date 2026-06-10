@@ -9,7 +9,8 @@
   "scripts": {
     "test": "node --test",
     "start": "node server.js",
-    "validate:editable": "node scripts/validate-editable-mode.js"
+    "validate:editable": "node scripts/validate-editable-mode.js",
+    "validate:raw-html": "node scripts/validate-raw-html.js"
   },
   "engines": {
     "node": ">=20"
