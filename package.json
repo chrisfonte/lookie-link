@@ -4,7 +4,8 @@
   "description": "Lightweight web file viewer for local directories \u2014 look at things, via links",
   "main": "server.js",
   "bin": {
-    "lookie-read": "./bin/lookie-read.js"
+    "lookie-read": "./bin/lookie-read.js",
+    "lookie-annotations": "./bin/lookie-annotations.js"
   },
   "scripts": {
     "test": "node --test",

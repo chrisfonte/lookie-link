@@ -1,11 +1,48 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { spawn } = require('node:child_process');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 
 const { createApp } = require('../server');
+
+const CLI_PATH = path.join(__dirname, '..', 'bin', 'lookie-annotations.js');
+
+function startApp(app) {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(0, '127.0.0.1', () => resolve(server));
+    server.on('error', reject);
+  });
+}
+
+function stopApp(server) {
+  return new Promise((resolve) => server.close(() => resolve()));
+}
+
+function runCli(args, { baseUrl, token, stdin } = {}) {
+  return new Promise((resolve, reject) => {
+    const env = { ...process.env };
+    if (baseUrl) env.LOOKIE_LINK_BASE_URL = baseUrl;
+    if (token === undefined) {
+      delete env.LOOKIE_LINK_TOKEN;
+    } else {
+      env.LOOKIE_LINK_TOKEN = token;
+    }
+    const child = spawn(process.execPath, [CLI_PATH, ...args], { env });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ status: code, stdout, stderr }));
+    if (stdin !== undefined) {
+      child.stdin.write(stdin);
+    }
+    child.stdin.end();
+  });
+}
 
 function getRouteHandler(app, method, routePath) {
   const layer = app._router.stack.find((entry) => entry.route && entry.route.path === routePath && entry.route.methods[method]);
@@ -441,6 +478,144 @@ async function run() {
     assert.equal(res.statusCode, 200, 'annotations-disabled view failed');
     assert(!res.body.includes('/public/annotations.js'), 'annotations script leaked into view when disabled');
     assert(!res.body.includes('lookie-link-annotations-bootstrap'), 'annotations bootstrap leaked into view when disabled');
+  }
+
+  // CLI shim coverage (FON-11765) — spawn the CLI against a real HTTP listener
+  // so we cover argv parsing, env-token auth, exit codes, and output formats.
+  const cliServer = await startApp(appAnnotationsEnabled);
+  const cliScopedServer = await startApp(appAnnotationsScoped);
+  try {
+    const cliBaseUrl = `http://127.0.0.1:${cliServer.address().port}`;
+    const scopedBaseUrl = `http://127.0.0.1:${cliScopedServer.address().port}`;
+
+    {
+      const result = await runCli(['list', 'docs/doc.md'], { baseUrl: cliBaseUrl });
+      assert.equal(result.status, 0, `CLI list failed: ${result.stderr}`);
+      const body = JSON.parse(result.stdout);
+      assert.equal(body.file, 'docs/doc.md', 'CLI list file id mismatch');
+      assert(Array.isArray(body.annotations), 'CLI list missing annotations[]');
+    }
+
+    let cliAnnotationA;
+    {
+      const result = await runCli(
+        ['add', 'docs/doc.md', '--anchor', '#hello', '--kind', 'heading', '--body', 'cli inline', '--author', 'cli-test'],
+        { baseUrl: cliBaseUrl }
+      );
+      assert.equal(result.status, 0, `CLI add (--body) failed: ${result.stderr}`);
+      const body = JSON.parse(result.stdout);
+      assert.equal(body.ok, true, 'CLI add response missing ok');
+      assert.equal(body.annotation.author, 'cli-test', 'CLI add author mismatch');
+      cliAnnotationA = body.annotation.id;
+    }
+
+    let cliAnnotationB;
+    {
+      const bodyFile = path.join(repoDir, '.cli-body.tmp');
+      await fs.writeFile(bodyFile, 'cli from file\n', 'utf8');
+      const result = await runCli(
+        ['add', 'docs/doc.md', '--anchor', '#hello', '--kind', 'heading', '--body-file', bodyFile, '--author', 'cli-test'],
+        { baseUrl: cliBaseUrl }
+      );
+      await fs.unlink(bodyFile);
+      assert.equal(result.status, 0, `CLI add (--body-file) failed: ${result.stderr}`);
+      cliAnnotationB = JSON.parse(result.stdout).annotation.id;
+    }
+
+    let cliAnnotationC;
+    {
+      const result = await runCli(
+        ['add', 'docs/doc.md', '--anchor', '#hello', '--kind', 'heading', '--body', '-', '--author', 'cli-test'],
+        { baseUrl: cliBaseUrl, stdin: 'cli from stdin\n' }
+      );
+      assert.equal(result.status, 0, `CLI add (--body -) failed: ${result.stderr}`);
+      cliAnnotationC = JSON.parse(result.stdout).annotation.id;
+    }
+
+    {
+      const result = await runCli(['get', 'docs/doc.md', cliAnnotationC], { baseUrl: cliBaseUrl });
+      assert.equal(result.status, 0, `CLI get failed: ${result.stderr}`);
+      const body = JSON.parse(result.stdout);
+      assert.equal(body.annotation.id, cliAnnotationC, 'CLI get id mismatch');
+    }
+
+    {
+      const result = await runCli(['claim', 'docs/doc.md', cliAnnotationA, '--by', 'cli-test'], { baseUrl: cliBaseUrl });
+      assert.equal(result.status, 0, `CLI claim failed: ${result.stderr}`);
+      const body = JSON.parse(result.stdout);
+      assert.equal(body.annotation.state, 'claimed', 'CLI claim state mismatch');
+      assert.equal(body.annotation.claimedBy, 'cli-test', 'CLI claim owner mismatch');
+    }
+
+    {
+      const result = await runCli(['resolve', 'docs/doc.md', cliAnnotationB], { baseUrl: cliBaseUrl });
+      assert.equal(result.status, 0, `CLI resolve failed: ${result.stderr}`);
+      const body = JSON.parse(result.stdout);
+      assert.equal(body.annotation.state, 'resolved', 'CLI resolve state mismatch');
+    }
+
+    {
+      const result = await runCli(
+        ['replies', 'docs/doc.md', cliAnnotationA, '--add', 'cli reply body', '--author', 'cli-test'],
+        { baseUrl: cliBaseUrl }
+      );
+      assert.equal(result.status, 0, `CLI replies --add failed: ${result.stderr}`);
+      const body = JSON.parse(result.stdout);
+      assert.equal(body.annotation.replies.length, 1, 'CLI reply append failed');
+      assert.equal(body.annotation.replies[0].author, 'cli-test', 'CLI reply author mismatch');
+    }
+
+    {
+      const result = await runCli(['replies', 'docs/doc.md', cliAnnotationA], { baseUrl: cliBaseUrl });
+      assert.equal(result.status, 0, `CLI replies (list) failed: ${result.stderr}`);
+      const body = JSON.parse(result.stdout);
+      assert.equal(body.id, cliAnnotationA, 'CLI replies id mismatch');
+      assert.equal(body.replies.length, 1, 'CLI replies list length mismatch');
+    }
+
+    {
+      const result = await runCli(
+        ['list', 'docs/doc.md', '--state', 'open', '--state', 'claimed'],
+        { baseUrl: cliBaseUrl }
+      );
+      assert.equal(result.status, 0, `CLI list --state failed: ${result.stderr}`);
+      const body = JSON.parse(result.stdout);
+      assert(body.annotations.length > 0, 'CLI state filter returned no annotations');
+      for (const annotation of body.annotations) {
+        assert(
+          annotation.state === 'open' || annotation.state === 'claimed',
+          `CLI state filter let through state=${annotation.state}`
+        );
+      }
+    }
+
+    {
+      const result = await runCli(['list', 'docs/doc.md', '--pretty'], { baseUrl: cliBaseUrl });
+      assert.equal(result.status, 0, `CLI --pretty failed: ${result.stderr}`);
+      assert(result.stdout.length > 0, 'CLI --pretty stdout empty');
+      assert(result.stdout.includes('docs/doc.md'), 'CLI --pretty missing file id');
+      let parsedAsJson = false;
+      try {
+        JSON.parse(result.stdout);
+        parsedAsJson = true;
+      } catch {
+        // expected — pretty output should not be valid JSON
+      }
+      assert.equal(parsedAsJson, false, 'CLI --pretty unexpectedly parsed as JSON');
+    }
+
+    {
+      const result = await runCli(['list', 'other/doc.md'], { baseUrl: scopedBaseUrl });
+      assert.equal(result.status, 4, `CLI no-token call expected exit 4, got ${result.status}: ${result.stderr}`);
+    }
+
+    {
+      const result = await runCli(['list', 'docs/doc.md'], { baseUrl: scopedBaseUrl, token: 'docs-reader-token' });
+      assert.equal(result.status, 0, `CLI scoped token call failed: ${result.stderr}`);
+    }
+  } finally {
+    await stopApp(cliServer);
+    await stopApp(cliScopedServer);
   }
 
   console.log('editable mode validation passed');

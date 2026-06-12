@@ -9,6 +9,13 @@
 - Author name is remembered in `localStorage` so repeat annotations don't re-prompt.
 - No source file mutation; sidecar is still the only on-disk surface. No new auth surface — the script uses the same `view` permission and query-token plumbing as the rest of the viewer.
 
+## 2026-06-09 — Unreleased — Annotations CLI Shim (FON-11765)
+
+- Added `bin/lookie-annotations.js` CLI shim, registered as the `lookie-annotations` bin. Mirrors `lookie-read.js` posture: env-based auth (`LOOKIE_LINK_BASE_URL`, `LOOKIE_LINK_TOKEN`, `LOOKIE_LINK_AUTHOR`), JSON-first stdout, shared exit-code grammar (`0/2/3/4/5`), and `--json-errors` for machine consumers.
+- Subcommands: `list`, `get`, `add`, `claim`, `resolve`, `replies` (with `--add`). `--state` is repeatable; `--pretty` prints a human-friendly form; body input accepts `--body STRING`, `--body-file PATH`, or `--body -` (stdin).
+- Extended `scripts/validate-editable-mode.js` to spawn the CLI against a real HTTP listener and cover every subcommand path, both body-input forms, state filtering, `--pretty`, no-token forbidden (exit 4), and scoped-token success.
+- Documented both shims in `docs/AGENT-SHIM.md`.
+
 ## 2026-06-09 — Unreleased — Annotations Sidecar Transport (FON-11763)
 
 - Added sidecar-backed annotation storage at `<repoRoot>/.lookie-link/annotations/<repo>/<relative-path>.json` with atomic temp+rename writes, per-day annotation IDs, and stale-write protection via `expectedMtimeMs` on PATCH.
