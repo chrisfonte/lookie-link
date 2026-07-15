@@ -2,6 +2,10 @@
 
 # User-Defined Forms Platform Plan Changelog
 
+## 0.3.1 - 2026-07-15
+
+- Recorded six operator decisions from the post-review co-design Q&A (sidecar `operator_decisions_2026_07_15`; full text on the referenced issues): multi-user principal contract from day one (#92); storage roots as deployment properties behind the adapter, SaaS-compatible (#93); purge tooling deferred with a tombstone purge-status seam (#93); webhook as the first dispatcher adapter (#102); documents-are-content/agents-are-principals confirmation clearing #106; workstreams v1 reads todos + plan sidecars (#136).
+
 ## 0.3.0 - 2026-07-15
 
 - Reconciliation pass prompted by cross-model review (GPT 5.6), which concurred with the Fable verdict but found the canonical plan text lagging the incorporated issue graph in eight places.

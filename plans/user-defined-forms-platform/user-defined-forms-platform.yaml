@@ -157,6 +157,16 @@ github:
     pilot:
       - {number: 134, parent: 104, title: pilot-alpha on phase-1 slice with YAML-authored templates}
 
+operator_decisions_2026_07_15:
+  source: co-design Q&A with the operator after review incorporation
+  decisions:
+    - {topic: principals, decision: multi-user contract per instance from day one — roadmap identity taxonomy, real permissions; v1 runtime single-operator + agent tokens as one provider; signed receipts before a second user principal, recorded_on: 92}
+    - {topic: storage roots, decision: deployment property behind the storage adapter — self-hosted configures repos (reference deployment replicates via its sync mesh); SaaS backs the same adapter with service-managed storage; core never assumes replication semantics, recorded_on: 93}
+    - {topic: deletion, decision: v1 = application deletion + documented purge runbook; purge tooling deferred but tombstones carry an extensible purge-status field as the seam, recorded_on: 93}
+    - {topic: first reaction, decision: webhook is the first dispatcher adapter (HMAC-signed, idempotent event IDs, allowlisted destinations) — works with any agentic system; other patterns become webhook consumers, recorded_on: 102}
+    - {topic: raw artifacts, decision: documents are content and agents are principals — no raw artifact intentionally calls Lookie APIs, so CSP sandbox enforces the intended model with no compatibility casualties, recorded_on: 106}
+    - {topic: workstream sources, decision: v1 parser reads both todo YAML and plan-package sidecars so plans render as workstreams with phase progress; repo list is config, recorded_on: 136}
+
 successor_direction:
   pages_epic:
     number: 135
