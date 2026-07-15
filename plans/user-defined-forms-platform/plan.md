@@ -6,7 +6,7 @@ Owner: Lookie-Link Project
 Author: Codex
 Created: 2026-07-15
 Last Updated: 2026-07-15
-Version: 0.2.0
+Version: 0.2.1
 Status: Draft — Independent Review Complete (approve with required changes)
 Summary: Plan a file-native, API-first forms platform in which users and agents define reusable templates, Lookie-Link renders first-party forms, and submissions become durable sovereign records before optional agent reactions run.
 Source: Operator co-design conversation dated 2026-07-15; current Lookie-Link source, tests, roadmap research, pull requests, and GitHub issues.
@@ -342,6 +342,10 @@ Coordinate with GitHub issues #82 and #83 so form/template metadata is discovera
 
 GitHub issue #85 may later expose operator-level forms roots, destination bindings, provider registries, and capability summaries. User template building remains separate from operator configuration.
 
+### User-defined pages (successor direction)
+
+Operator direction (2026-07-15, [#135](https://github.com/chrisfonte/lookie-link/issues/135)): forms are the first section type of a broader **user-defined pages** platform — versioned declarative page compositions (markdown blocks, embedded forms, provider-bound lists/tables) created through the API or as YAML and rendered first-party, under the same template/version/instance, logical-binding, and capability doctrine. Pages are **not** part of this epic; they become their own post-slice epic. What this plan owes them now is only shape: the #93 contract carries a resource-kind field rather than forms-only naming, #92's capabilities are a resource-kind grammar (`forms.*` now, `pages.*` later), #100's providers are framed as general approved read sources, and the #98-family renderer is a component registry. Design-input notes recording this are on #92 and #93; zero v1 scope is added. An interim hardcoded read-only `/workstreams` page (issues [#136](https://github.com/chrisfonte/lookie-link/issues/136)–[#138](https://github.com/chrisfonte/lookie-link/issues/138), children of #135) ships outside this epic's critical path and is later reimplemented as a built-in page template.
+
 ### CLI, OpenAPI, and skill packages
 
 After the API stabilizes, add `lookie forms`/`lookie templates` commands and advertise capability URLs through the existing discovery direction. Do not teach agent runtimes an unstable schema.
@@ -534,5 +538,6 @@ Independent review should answer these with evidence and should identify missing
 
 ## Revision History
 
+- **v0.2.1 (2026-07-15)** — Recorded the user-defined pages successor direction (#135) with ADR design inputs on #92/#93 (resource-kind contracts, capability grammar, providers as read sources, renderer component registry — no v1 scope change), and the approved interim read-only workstreams page (#136–#138).
 - **v0.2.0 (2026-07-15)** — Independent Fable review incorporated ([review-fable.md](./review-fable.md)): verdict approve with required changes (B1 raw-origin isolation via CSP sandbox, B2 fsync durability, B3 submit-only receipt access, B4 pilot/static-option resequencing, B5 deletion contract in #93). Issue graph decomposed into PR-sized, individually tested children #105–#134 at operator direction.
 - **v0.1.0 (2026-07-15)** — Initial draft from the operator co-design session, current source/test audit, existing forms brainstorm, commercialization roadmap, and open GitHub work. Establishes file-native/API-first architecture, user-owned templates, first-party rendering, immutable per-submission records, capability/CSRF boundaries, phased delivery, and verification gates.

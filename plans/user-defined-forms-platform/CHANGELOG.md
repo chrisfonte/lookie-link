@@ -2,6 +2,12 @@
 
 # User-Defined Forms Platform Plan Changelog
 
+## 0.2.1 - 2026-07-15
+
+- Recorded the user-defined pages successor direction (#135): forms become the first section type of declarative, API-created pages; ADR design inputs added to #92/#93 (resource-kind contract, capability grammar, providers as read sources, renderer component registry) with no v1 scope change.
+- Recorded the approved interim read-only workstreams page (#136 parser, #137 page, #138 config/ACL), outside this epic's critical path.
+- Added the `successor_direction` map to the sidecar.
+
 ## 0.2.0 - 2026-07-15
 
 - Incorporated the independent Fable review (`review-fable.md`): approve with required changes.

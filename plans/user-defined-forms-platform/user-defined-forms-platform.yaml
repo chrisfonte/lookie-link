@@ -3,7 +3,7 @@ _meta:
   title: User-Defined Forms Platform
   created: 2026-07-15
   updated: 2026-07-15
-  version: 0.2.0
+  version: 0.2.1
   status: review_complete
   owner: Lookie-Link Project
   document: ./plan.md
@@ -150,6 +150,19 @@ github:
       - {number: 133, title: browser security negative suite (verifies review B1)}
     pilot:
       - {number: 134, parent: 104, title: pilot-alpha on phase-1 slice with YAML-authored templates}
+
+successor_direction:
+  pages_epic:
+    number: 135
+    title: user-defined pages — declarative API-created pages rendered first-party
+    relationship: not a child of the epic; forms primitives are its foundation; ADR design inputs recorded on 92 and 93
+  interim_workstreams_page:
+    parent: 135
+    decided: '2026-07-15'
+    children:
+      - {number: 136, title: workstream source parser and normalizer}
+      - {number: 137, title: read-only /workstreams page behind own flag}
+      - {number: 138, title: source configuration and ACL filtering}
 
 open_decisions:
   - constrained field grammar versus restricted JSON Schema subset
