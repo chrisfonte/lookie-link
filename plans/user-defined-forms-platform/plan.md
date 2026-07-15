@@ -6,8 +6,8 @@ Owner: Lookie-Link Project
 Author: Codex
 Created: 2026-07-15
 Last Updated: 2026-07-15
-Version: 0.1.0
-Status: Draft — Awaiting Independent Review
+Version: 0.2.0
+Status: Draft — Independent Review Complete (approve with required changes)
 Summary: Plan a file-native, API-first forms platform in which users and agents define reusable templates, Lookie-Link renders first-party forms, and submissions become durable sovereign records before optional agent reactions run.
 Source: Operator co-design conversation dated 2026-07-15; current Lookie-Link source, tests, roadmap research, pull requests, and GitHub issues.
 Tags:
@@ -435,6 +435,8 @@ Exit gate: capture succeeds during dispatcher outage, queued reactions resume af
 | [#103](https://github.com/chrisfonte/lookie-link/issues/103) | Discovery, CLI, OpenAPI, and skill packages | #96, #97, #100 |
 | [#104](https://github.com/chrisfonte/lookie-link/issues/104) | Private gym pilot and operational validation | #99–#102 as applicable |
 
+**Granular decomposition (2026-07-15).** Per the independent review ([review-fable.md](./review-fable.md)) and operator direction, the implementation issues above were decomposed into PR-sized child issues #105–#134, each with its own explicit test gate; #94–#98 became tracking umbrellas whose bodies carry the child checklists. Standalone additions: [#105](https://github.com/chrisfonte/lookie-link/issues/105) (CI on every PR — the repo previously had none), [#106](https://github.com/chrisfonte/lookie-link/issues/106) (CSP-sandboxed `/raw`, review finding B1), [#111](https://github.com/chrisfonte/lookie-link/issues/111) (query-token deny on mutations), [#116](https://github.com/chrisfonte/lookie-link/issues/116) (inline static options moved from #100 into Phase 1, review finding B4), and [#134](https://github.com/chrisfonte/lookie-link/issues/134) (pilot-alpha on the Phase-1 slice, split from #104). Phase-2/3 issues #100–#103 stay whole and are decomposed the same way just before work starts. The machine-readable child map lives in the [package sidecar](./user-defined-forms-platform.yaml).
+
 ## Testing Strategy
 
 ### Unit and schema tests
@@ -532,4 +534,5 @@ Independent review should answer these with evidence and should identify missing
 
 ## Revision History
 
+- **v0.2.0 (2026-07-15)** — Independent Fable review incorporated ([review-fable.md](./review-fable.md)): verdict approve with required changes (B1 raw-origin isolation via CSP sandbox, B2 fsync durability, B3 submit-only receipt access, B4 pilot/static-option resequencing, B5 deletion contract in #93). Issue graph decomposed into PR-sized, individually tested children #105–#134 at operator direction.
 - **v0.1.0 (2026-07-15)** — Initial draft from the operator co-design session, current source/test audit, existing forms brainstorm, commercialization roadmap, and open GitHub work. Establishes file-native/API-first architecture, user-owned templates, first-party rendering, immutable per-submission records, capability/CSRF boundaries, phased delivery, and verification gates.

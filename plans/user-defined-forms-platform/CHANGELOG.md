@@ -2,6 +2,14 @@
 
 # User-Defined Forms Platform Plan Changelog
 
+## 0.2.0 - 2026-07-15
+
+- Incorporated the independent Fable review (`review-fable.md`): approve with required changes.
+- Blocking findings recorded: B1 raw-origin isolation via CSP sandbox (issue #106), B2 fsync durability (#107), B3 submit-only receipt access (#128), B4 pilot/static-option resequencing (#116, #134), B5 deletion/tombstone contract required in #93 before #97-family readiness.
+- Decomposed implementation issues into PR-sized children #105–#134 at operator direction; #94–#98 converted to tracking umbrellas with child checklists; #100 rescoped to dynamic providers; #104 split into pilot-alpha (#134) and pilot-beta.
+- Added CI as a prerequisite discipline (#105) — the repo previously had no CI to enforce per-issue test gates.
+- Updated the sidecar with review verdict and the machine-readable granular child map.
+
 ## 0.1.0 - 2026-07-15
 
 - Created the product-repo plan package.

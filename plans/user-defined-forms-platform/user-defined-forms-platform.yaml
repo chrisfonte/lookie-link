@@ -3,8 +3,8 @@ _meta:
   title: User-Defined Forms Platform
   created: 2026-07-15
   updated: 2026-07-15
-  version: 0.1.0
-  status: draft_review
+  version: 0.2.0
+  status: review_complete
   owner: Lookie-Link Project
   document: ./plan.md
   changelog: ./CHANGELOG.md
@@ -19,7 +19,10 @@ review:
   required: true
   reviewer: fable
   brief: ./review-brief-fable.md
-  status: pending
+  report: ./review-fable.md
+  status: complete
+  verdict: approve_with_required_changes
+  blocking_findings: [B1-raw-origin-isolation, B2-fsync-durability, B3-submit-only-receipt-access, B4-pilot-and-static-option-resequencing, B5-deletion-contract-in-93]
   implementation_ready: false
 
 decisions:
@@ -108,7 +111,45 @@ github:
     - {number: 101, phase: phase-2, title: user builder UI}
     - {number: 102, phase: phase-3, title: durable outbox and reactions}
     - {number: 103, phase: phase-2, title: discovery CLI OpenAPI and skills}
-    - {number: 104, phase: phase-3, title: private operational pilot}
+    - {number: 104, phase: phase-3, title: private operational pilot (beta; alpha split to 134)}
+  granular_children:
+    standalone:
+      - {number: 105, title: CI running tests and validators on every PR}
+      - {number: 106, parent: 92, title: CSP-sandbox /raw (review B1)}
+      - {number: 111, parent: 92, title: refuse query-string tokens on mutating routes}
+    umbrella_94:
+      - {number: 107, title: fsync-hardened atomic-replace helper (review B2)}
+      - {number: 108, title: exclusive safe-create with symlink-ancestor protection}
+      - {number: 109, title: annotation test baseline}
+      - {number: 110, title: annotation-create race fix}
+      - {number: 112, title: principal/actor normalization and audit primitive}
+      - {number: 113, title: route-module mounting seam}
+    umbrella_95:
+      - {number: 114, title: schema validator library}
+      - {number: 115, title: canonical serializer}
+      - {number: 116, title: inline static options in core schema (moved from 100, review B4)}
+      - {number: 117, title: template registry with last-known-good}
+      - {number: 118, title: form-instance registry with pinning}
+      - {number: 119, title: bounded rescan and invalidation}
+    umbrella_96:
+      - {number: 120, title: template read APIs}
+      - {number: 121, title: template draft write APIs with revision preconditions}
+      - {number: 122, title: publish/clone with immutability}
+      - {number: 123, title: form-instance lifecycle APIs}
+    umbrella_97:
+      - {number: 124, title: submission schema and pinned-version validation}
+      - {number: 125, title: immutable one-file-per-submission store (incl. deletion contract, review B5)}
+      - {number: 126, title: JSON submission endpoint with durable receipts}
+      - {number: 127, title: idempotency-key replay protection}
+      - {number: 128, title: receipt/list APIs and submit-only receipt access (review B3)}
+      - {number: 129, title: direct-file import marking}
+    umbrella_98:
+      - {number: 130, title: route-scoped urlencoded parsing}
+      - {number: 131, title: first-party form page rendering}
+      - {number: 132, title: native HTML POST with PRG}
+      - {number: 133, title: browser security negative suite (verifies review B1)}
+    pilot:
+      - {number: 134, parent: 104, title: pilot-alpha on phase-1 slice with YAML-authored templates}
 
 open_decisions:
   - constrained field grammar versus restricted JSON Schema subset
