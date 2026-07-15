@@ -1,0 +1,113 @@
+_meta:
+  schema: lookie-link-plan-v1
+  title: User-Defined Forms Platform
+  created: 2026-07-15
+  updated: 2026-07-15
+  version: 0.1.0
+  status: draft_review
+  owner: Lookie-Link Project
+  document: ./plan.md
+  changelog: ./CHANGELOG.md
+
+objective: >-
+  Deliver a file-native, API-first forms platform in which authorized users and
+  agents define versioned reusable templates, Lookie-Link renders first-party
+  forms, submissions become durable sovereign records, and optional reactions
+  run only after capture succeeds.
+
+review:
+  required: true
+  reviewer: fable
+  brief: ./review-brief-fable.md
+  status: pending
+  implementation_ready: false
+
+decisions:
+  - id: AD-1
+    status: proposed
+    decision: Stable generic endpoints; no generated server code per form.
+  - id: AD-2
+    status: proposed
+    decision: Lookie-Link renders first-party forms from declarative definitions.
+  - id: AD-3
+    status: proposed
+    decision: Files are canonical and portable; API is the preferred mutation path.
+  - id: AD-4
+    status: proposed
+    decision: Templates, immutable template versions, and form instances are separate resources.
+  - id: AD-5
+    status: proposed
+    decision: Each submission is one immutable JSON file; SQLite is rebuildable support state only.
+  - id: AD-6
+    status: proposed
+    decision: Server receipt time and user-supplied event time are separate fields.
+  - id: AD-7
+    status: proposed
+    decision: Persist first; dispatch optional reactions from a durable outbox afterward.
+  - id: AD-8
+    status: proposed
+    decision: Definitions select logical approved bindings, never arbitrary paths or commands.
+  - id: AD-9
+    status: proposed
+    decision: Raw HTML receives no implicit forms privileges; mutations require permission and CSRF controls.
+  - id: AD-10
+    status: proposed
+    decision: Stabilize schema and API before visual or conversational builders.
+  - id: AD-11
+    status: proposed
+    decision: Mount forms through dedicated modules and extract narrow shared primitives instead of growing monolith files.
+
+phases:
+  - id: preflight
+    title: Reconcile product baseline
+    status: blocked_open
+    depends_on: []
+  - id: phase-0
+    title: Contract and shared foundations
+    status: planned
+    depends_on: [preflight]
+  - id: phase-1
+    title: Minimal vertical slice
+    status: planned
+    depends_on: [phase-0]
+  - id: phase-2
+    title: User builder and reusable ecosystem
+    status: planned
+    depends_on: [phase-1]
+  - id: phase-3
+    title: Durable reactions and richer capture
+    status: planned
+    depends_on: [phase-1]
+
+existing_dependencies:
+  - number: 53
+    relationship: central access-control foundation
+  - number: 82
+    relationship: authorized artifact/form metadata discovery
+  - number: 83
+    relationship: metadata existence-leak prevention
+  - number: 84
+    relationship: centralized capability separation precedent
+  - number: 85
+    relationship: future operator configuration surface
+
+github:
+  plan_pull_request: null
+  epic_issue: null
+  child_issues: []
+
+open_decisions:
+  - constrained field grammar versus restricted JSON Schema subset
+  - repeatable groups in v1 versus follow-up
+  - minimal principal contract before browser accounts
+  - mounted-root-only launch versus managed-repo adapter integration
+  - correction, deletion, and retention event semantics
+  - direct submission imports and server attestation boundary
+  - audit redaction contract
+  - CSRF policy in unrestricted private-network mode
+  - stable shared interfaces available from in-flight roadmap work
+
+acceptance_commands:
+  baseline: npm test
+  forms_contract: npm run validate:forms
+  forms_browser: npm run validate:forms-e2e
