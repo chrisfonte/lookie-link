@@ -175,7 +175,7 @@ answered_decisions:
   answers:
     - {q: field grammar, a: constrained custom grammar with fixtures — no exposed JSON Schema subset, ratify: 93}
     - {q: repeatable groups, a: not in v1 — sessions deliver repeated entries as independent submissions, ratify: 93}
-    - {q: minimal principal, a: 'configured local-operator principal stamped server-side', ratify: 92}
+    - {q: minimal principal, a: 'multi-user contract from day one per operator direction 2026-07-15 — roadmap identity taxonomy, real per-principal permissions; v1 runtime = single-operator + agent tokens as one provider; signed receipts before a second user principal', ratify: 92}
     - {q: definition roots, a: mounted roots only behind a storage-adapter boundary, ratify: 93}
     - {q: event model + deletion, a: one file per submission + supersessions + delete-with-tombstone; ADR must distinguish application deletion from verified multi-peer/backup purging, ratify: 93}
     - {q: audit redaction, a: IDs/outcome classes/timestamps only — never values or titles, ratify: 92}
