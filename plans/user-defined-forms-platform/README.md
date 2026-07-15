@@ -19,3 +19,10 @@ This package plans a schema-driven, user-customizable forms platform for Lookie-
 
 Start with [review-brief-fable.md](./review-brief-fable.md), then read [plan.md](./plan.md) and [findings.md](./findings.md). Review should challenge the architecture before any implementation issue is marked ready.
 
+## GitHub coordination
+
+- Draft plan pull request: [#89](https://github.com/chrisfonte/lookie-link/pull/89)
+- Forms-platform epic: [#90](https://github.com/chrisfonte/lookie-link/issues/90)
+- Blocking product-baseline reconciliation: [#91](https://github.com/chrisfonte/lookie-link/issues/91)
+
+The epic owns the dependency-ordered child checklist. All implementation children remain planning-stage pending baseline reconciliation and independent review.

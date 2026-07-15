@@ -415,6 +415,26 @@ Exit gate: capture succeeds during dispatcher outage, queued reactions resume af
 - Regulated-health compliance claims.
 - Arbitrary plugin code supplied by template authors.
 
+### GitHub issue map
+
+| Issue | Scope | Depends on |
+|---|---|---|
+| [#90](https://github.com/chrisfonte/lookie-link/issues/90) | Parent epic and readiness gate | PR #89 review |
+| [#91](https://github.com/chrisfonte/lookie-link/issues/91) | Reconcile deployed development checkout, GitHub, docs, validators, PRs, and issues | None; blocks implementation |
+| [#92](https://github.com/chrisfonte/lookie-link/issues/92) | Ownership, permissions, CSRF, and raw-HTML ADR | #91 |
+| [#93](https://github.com/chrisfonte/lookie-link/issues/93) | Versioned schemas, files, direct edits, and attestation ADR | #91 |
+| [#94](https://github.com/chrisfonte/lookie-link/issues/94) | Shared safe persistence, principal/audit, viewer shell, and route seams | #91, #92, #93 |
+| [#95](https://github.com/chrisfonte/lookie-link/issues/95) | File-backed template and form registries | #93, #94 |
+| [#96](https://github.com/chrisfonte/lookie-link/issues/96) | Template and form lifecycle APIs | #92, #93, #95 |
+| [#97](https://github.com/chrisfonte/lookie-link/issues/97) | Immutable submission store, idempotent API, and receipts | #92–#95 |
+| [#98](https://github.com/chrisfonte/lookie-link/issues/98) | First-party server-rendered form runner | #94, #96, #97 |
+| [#99](https://github.com/chrisfonte/lookie-link/issues/99) | Session and repeatable-entry workflows | #97, #98 |
+| [#100](https://github.com/chrisfonte/lookie-link/issues/100) | Approved static, catalog, and history option providers | #92, #93, #95, #97 |
+| [#101](https://github.com/chrisfonte/lookie-link/issues/101) | User template and form builder | #96, #98, #100 |
+| [#102](https://github.com/chrisfonte/lookie-link/issues/102) | Durable outbox and operator-controlled reactions | #92, #97 |
+| [#103](https://github.com/chrisfonte/lookie-link/issues/103) | Discovery, CLI, OpenAPI, and skill packages | #96, #97, #100 |
+| [#104](https://github.com/chrisfonte/lookie-link/issues/104) | Private gym pilot and operational validation | #99–#102 as applicable |
+
 ## Testing Strategy
 
 ### Unit and schema tests

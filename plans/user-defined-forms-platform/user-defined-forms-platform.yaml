@@ -92,9 +92,23 @@ existing_dependencies:
     relationship: future operator configuration surface
 
 github:
-  plan_pull_request: null
-  epic_issue: null
-  child_issues: []
+  plan_pull_request: 89
+  epic_issue: 90
+  child_issues:
+    - {number: 91, phase: preflight, title: reconcile product baseline}
+    - {number: 92, phase: phase-0, title: ownership permissions CSRF and raw HTML ADR}
+    - {number: 93, phase: phase-0, title: versioned schema file and direct-edit ADR}
+    - {number: 94, phase: phase-0, title: shared safe persistence audit viewer and route seams}
+    - {number: 95, phase: phase-1, title: file-backed template and form registries}
+    - {number: 96, phase: phase-1, title: template and form lifecycle APIs}
+    - {number: 97, phase: phase-1, title: immutable submissions idempotency and receipts}
+    - {number: 98, phase: phase-1, title: first-party form runner}
+    - {number: 99, phase: phase-1, title: session and repeatable-entry workflows}
+    - {number: 100, phase: phase-2, title: approved option providers}
+    - {number: 101, phase: phase-2, title: user builder UI}
+    - {number: 102, phase: phase-3, title: durable outbox and reactions}
+    - {number: 103, phase: phase-2, title: discovery CLI OpenAPI and skills}
+    - {number: 104, phase: phase-3, title: private operational pilot}
 
 open_decisions:
   - constrained field grammar versus restricted JSON Schema subset

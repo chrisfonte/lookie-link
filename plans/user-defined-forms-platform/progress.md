@@ -7,4 +7,4 @@ Status: Active
 |---|---|---|---|---|
 | 2026-07-15 | Discovery | Codex | Audited current source, tests, roadmap research, open issues, active pull requests, and the existing forms brainstorm. | `findings.md` |
 | 2026-07-15 | Plan draft | Codex | Created the file-native/API-first architecture, phased acceptance contract, and independent Fable review brief. | `plan.md`, `review-brief-fable.md` |
-
+| 2026-07-15 | GitHub coordination | Codex | Opened draft plan PR #89, epic #90, blocking baseline issue #91, and dependency-ordered child issues #92–#104. | `user-defined-forms-platform.yaml` |
