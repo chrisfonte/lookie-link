@@ -3,8 +3,8 @@ _meta:
   title: User-Defined Forms Platform
   created: 2026-07-15
   updated: 2026-07-15
-  version: 0.2.1
-  status: review_complete
+  version: 0.3.0
+  status: review_incorporated
   owner: Lookie-Link Project
   document: ./plan.md
   changelog: ./CHANGELOG.md
@@ -23,41 +23,47 @@ review:
   status: complete
   verdict: approve_with_required_changes
   blocking_findings: [B1-raw-origin-isolation, B2-fsync-durability, B3-submit-only-receipt-access, B4-pilot-and-static-option-resequencing, B5-deletion-contract-in-93]
+  incorporated: '2026-07-15 (v0.3 reconciliation pass; plan text now matches the review and issue graph)'
+  cross_model_review:
+    reviewer: gpt-5.6
+    date: '2026-07-15'
+    verdict: concur_with_fable_verdict
+    contribution: found plan-text lag behind incorporated issues (8 contradictions, fixed in v0.3); added deletion purge-boundary refinement and branch-protection requirement for CI
   implementation_ready: false
 
 decisions:
   - id: AD-1
-    status: proposed
+    status: accepted_by_review
     decision: Stable generic endpoints; no generated server code per form.
   - id: AD-2
-    status: proposed
+    status: accepted_by_review
     decision: Lookie-Link renders first-party forms from declarative definitions.
   - id: AD-3
-    status: proposed
+    status: accepted_by_review
     decision: Files are canonical and portable; API is the preferred mutation path.
   - id: AD-4
-    status: proposed
+    status: accepted_by_review
     decision: Templates, immutable template versions, and form instances are separate resources.
   - id: AD-5
-    status: proposed
+    status: accepted_by_review
     decision: Each submission is one immutable JSON file; SQLite is rebuildable support state only.
   - id: AD-6
-    status: proposed
+    status: accepted_by_review
     decision: Server receipt time and user-supplied event time are separate fields.
   - id: AD-7
-    status: proposed
+    status: accepted_by_review
     decision: Persist first; dispatch optional reactions from a durable outbox afterward.
   - id: AD-8
-    status: proposed
+    status: accepted_by_review
     decision: Definitions select logical approved bindings, never arbitrary paths or commands.
   - id: AD-9
-    status: proposed
-    decision: Raw HTML receives no implicit forms privileges; mutations require permission and CSRF controls.
+    status: accepted_by_review
+    decision: Raw HTML receives no implicit forms privileges; boundary held by CSP-sandbox origin isolation of /raw (load-bearing, review B1) with Origin checks primary and CSRF tokens defense-in-depth.
   - id: AD-10
-    status: proposed
+    status: accepted_by_review
     decision: Stabilize schema and API before visual or conversational builders.
   - id: AD-11
-    status: proposed
+    status: accepted_by_review
     decision: Mount forms through dedicated modules and extract narrow shared primitives instead of growing monolith files.
 
 phases:
@@ -164,16 +170,19 @@ successor_direction:
       - {number: 137, title: read-only /workstreams page behind own flag}
       - {number: 138, title: source configuration and ACL filtering}
 
-open_decisions:
-  - constrained field grammar versus restricted JSON Schema subset
-  - repeatable groups in v1 versus follow-up
-  - minimal principal contract before browser accounts
-  - mounted-root-only launch versus managed-repo adapter integration
-  - correction, deletion, and retention event semantics
-  - direct submission imports and server attestation boundary
-  - audit redaction contract
-  - CSRF policy in unrestricted private-network mode
-  - stable shared interfaces available from in-flight roadmap work
+answered_decisions:
+  answered_by: review-fable.md section 7 (2026-07-15); working decisions recorded in plan.md, ratification in ADR issues
+  answers:
+    - {q: field grammar, a: constrained custom grammar with fixtures — no exposed JSON Schema subset, ratify: 93}
+    - {q: repeatable groups, a: not in v1 — sessions deliver repeated entries as independent submissions, ratify: 93}
+    - {q: minimal principal, a: 'configured local-operator principal stamped server-side', ratify: 92}
+    - {q: definition roots, a: mounted roots only behind a storage-adapter boundary, ratify: 93}
+    - {q: event model + deletion, a: one file per submission + supersessions + delete-with-tombstone; ADR must distinguish application deletion from verified multi-peer/backup purging, ratify: 93}
+    - {q: audit redaction, a: IDs/outcome classes/timestamps only — never values or titles, ratify: 92}
+    - {q: CSRF posture, a: CSP-sandboxed /raw origin isolation load-bearing + Origin checks primary + tokens defense-in-depth + query tokens refused, ratify: 92}
+    - {q: shared interfaces, a: merged-main only — temp+rename (hardened), safeResolve (+safe-create), canAccessPath seam, ratify: 92}
+    - {q: issue decomposition, a: resolved by granular decomposition 105-134}
+    - {q: direct imports, a: marked imports only; server-only attestation fields; provenance not security in single-operator mode, ratify: 93}
 
 acceptance_commands:
   baseline: npm test

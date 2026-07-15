@@ -2,6 +2,14 @@
 
 # User-Defined Forms Platform Plan Changelog
 
+## 0.3.0 - 2026-07-15
+
+- Reconciliation pass prompted by cross-model review (GPT 5.6), which concurred with the Fable verdict but found the canonical plan text lagging the incorporated issue graph in eight places.
+- plan.md: raw-HTML boundary restated with CSP origin isolation as the load-bearing control (CSRF tokens demoted to defense-in-depth); temp+rename constraint restated as harden-with-fsync; repeatable groups removed from v1 (sessions instead); viewer-shell extraction marked deferred in AD-11 and Phase 0; issue-map rows for #94/#100/#104 updated to post-decomposition scopes; open-decisions section converted to answered form with ADR ratification pointers.
+- Deletion answer refined (cross-model input): the #93 ADR must distinguish application-level deletion from verified multi-peer/backup purging — Syncthing versioning and backups may retain old bytes after canonical-file removal.
+- Sidecar: decisions marked accepted_by_review (AD-9 mechanism corrected), open_decisions replaced by answered_decisions, cross_model_review block added.
+- GitHub: #92 acceptance language corrected (origin isolation, not token-based, holds the raw boundary); #93 gains the purge-boundary deliverable; #105 gains the branch-protection requirement.
+
 ## 0.2.1 - 2026-07-15
 
 - Recorded the user-defined pages successor direction (#135): forms become the first section type of declarative, API-created pages; ADR design inputs added to #92/#93 (resource-kind contract, capability grammar, providers as read sources, renderer component registry) with no v1 scope change.

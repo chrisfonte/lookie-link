@@ -2,7 +2,7 @@
 
 # User-Defined Forms Platform Plan Package
 
-Status: Independent review complete — approve with required changes ([review-fable.md](./review-fable.md)). Implementation remains blocked on #91 and per-issue readiness marks.
+Status: Review incorporated (v0.3) — Fable review ([review-fable.md](./review-fable.md)) plus concurring cross-model review folded into the canonical plan and sidecar. Planning PR #89 is ready for the operator's merge decision; implementation remains blocked on #91 and per-issue readiness marks.
 
 This package plans a schema-driven, user-customizable forms platform for Lookie-Link. The product repository owns the plan because the work changes Lookie-Link itself. Deployment-specific configuration and captured personal data remain outside this public repository.
 

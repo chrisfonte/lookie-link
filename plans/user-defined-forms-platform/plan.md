@@ -6,8 +6,8 @@ Owner: Lookie-Link Project
 Author: Codex
 Created: 2026-07-15
 Last Updated: 2026-07-15
-Version: 0.2.1
-Status: Draft — Independent Review Complete (approve with required changes)
+Version: 0.3.0
+Status: Draft — Review Incorporated (v0.3 reconciliation pass; ready for planning-PR merge decision)
 Summary: Plan a file-native, API-first forms platform in which users and agents define reusable templates, Lookie-Link renders first-party forms, and submissions become durable sovereign records before optional agent reactions run.
 Source: Operator co-design conversation dated 2026-07-15; current Lookie-Link source, tests, roadmap research, pull requests, and GitHub issues.
 Tags:
@@ -52,7 +52,7 @@ This package is deliberately a draft. Independent review must close or explicitl
 - [Rollout Strategy](#rollout-strategy)
 - [Non-Goals](#non-goals)
 - [Risks and Mitigations](#risks-and-mitigations)
-- [Open Decisions for Independent Review](#open-decisions-for-independent-review)
+- [Open Decisions — Answered by Independent Review](#open-decisions--answered-by-independent-review)
 - [Revision History](#revision-history)
 
 ## Outcome and Acceptance Contract
@@ -127,7 +127,7 @@ Definitions reference operator-approved destination IDs, option-provider IDs, an
 
 ### AD-9: First-party forms are isolated from raw artifact trust
 
-Raw HTML currently executes as same-origin trusted content when enabled. Form management and submission APIs therefore require explicit permissions and CSRF protection. Merely being served from `/raw` must not confer forms privileges.
+Raw HTML currently executes as same-origin trusted content when enabled. CSRF tokens alone cannot hold this boundary — a same-origin script can read a token out of any page it can fetch. The load-bearing control is **origin isolation**: `/raw` responses carry `Content-Security-Policy: sandbox allow-scripts` (opaque origin even on direct navigation), so raw-served documents have no ambient authority against forms routes. Origin/Referer checks are the primary browser-side gate on mutations; CSRF tokens are defense-in-depth; explicit permissions still apply. Merely being served from `/raw` must not confer forms privileges. (Corrected per independent review finding B1; implementation: issue #106, ADR: #92.)
 
 ### AD-10: Schema versioning precedes builder UX
 
@@ -135,7 +135,7 @@ The API and file schema are the product foundation. A visual or conversational b
 
 ### AD-11: Forms ship as modules, not more monolith code
 
-Mount forms routes from a dedicated route module with injected definition, submission, index, clock, ID, audit, and principal services. Put schema, registry, renderer, and stores under a forms module. Extract the smallest reusable viewer-shell and atomic-persistence primitives with regression tests instead of growing `server.js` and `lib/renderer.js` or copying their internals.
+Mount forms routes from a dedicated route module with injected definition, submission, index, clock, ID, audit, and principal services. Put schema, registry, renderer, and stores under a forms module. Extract atomic-persistence primitives with regression tests instead of growing `server.js` and `lib/renderer.js` or copying their internals. Viewer-shell extraction is **deferred** per review: forms ships a minimal shell first (#131); shared-shell adoption becomes a later issue if still wanted.
 
 ## Current-System Constraints
 
@@ -143,7 +143,7 @@ The design must preserve these Lookie-Link characteristics:
 
 - Express and server-rendered HTML, with no required frontend build step.
 - Existing `safeResolve()` path-boundary behavior for all filesystem access.
-- Existing stale-write protection and temp-file-plus-rename patterns.
+- Existing stale-write protection, and the temp-file-plus-rename pattern as a starting point to **harden, not preserve as-is**: no current write site fsyncs the file or parent directory, so the idiom is atomic but not durable. Submission receipts return only after write → fsync(file) → rename → fsync(parent) completes (review finding B2; issue #107).
 - DOMPurify as the final step for sanitized artifact rendering.
 - Opt-in editing, annotations, and raw HTML.
 - Token/grant path scoping and compatibility with unrestricted single-operator mode.
@@ -294,7 +294,7 @@ Unrestricted single-operator mode may map to all capabilities, but stored record
 
 ### CSRF and same-origin risk
 
-Cookie/session or unrestricted-browser mutations require CSRF tokens and origin checks. Bearer-authenticated agents use the JSON API and are not authenticated by browser ambient state. Query-string tokens should not authorize form-management mutations because they leak through URLs and referrers.
+The same-origin threat (trusted `/raw` scripts) defeats token-only CSRF schemes, because same-origin scripts can fetch a form page and read its token. The policy is therefore layered: (1) origin isolation of `/raw` via CSP sandbox so raw documents carry no ambient authority (issue #106); (2) Origin/Referer validation on all browser mutations as the primary check; (3) CSRF tokens as defense-in-depth. Bearer-authenticated agents use the JSON API and are not authenticated by browser ambient state. Query-string tokens are explicitly refused on all forms mutation routes (they leak through URLs and referrers; issue #111).
 
 ### Validation
 
@@ -316,7 +316,7 @@ The generic file editor may edit form YAML for advanced users, but the forms API
 
 ### Raw HTML
 
-Raw artifacts may link to a first-party form. They do not receive special form API privileges. Existing same-origin raw-HTML risk should be documented and covered by CSRF/permission tests before forms mutations ship.
+Raw artifacts may link to a first-party form. They do not receive special form API privileges. The raw-HTML boundary is enforced by origin isolation (CSP sandbox on `/raw`, issue #106) — not by CSRF tokens, which same-origin scripts can harvest — and verified by negative browser tests (#133) before forms mutations ship.
 
 ### Annotations
 
@@ -373,7 +373,7 @@ Exit gate: GitHub, the deployed checkout, docs, issues, and all default validato
 
 1. Approve the architectural decision record, threat model, schemas, storage layout, and compatibility contract.
 2. Extract or define shared atomic-file, safe-create, canonical-serialization, revision, principal, audit, and path-binding interfaces without changing existing behavior.
-3. Extract a narrow reusable viewer shell and mount forms through dedicated route/module seams rather than extending monolith files.
+3. Mount forms through dedicated route/module seams rather than extending monolith files (viewer-shell extraction deferred per review — forms ships a minimal shell).
 4. Add a forms-specific capability/CSRF policy and negative-test harness before exposing mutations.
 
 Exit gate: schema fixtures validate; rejected writes are proven side-effect free; existing tests remain green.
@@ -382,7 +382,7 @@ Exit gate: schema fixtures validate; rejected writes are proven side-effect free
 
 1. Implement file-backed template and form registries with direct-edit reload and last-known-good behavior.
 2. Implement draft/publish/clone template API and pinned form-instance API.
-3. Implement first-party server-rendered forms for the core field set: select, multi-select, number, checkbox, date/time, short text, textarea/notes, and repeatable groups if the schema review accepts them for v1.
+3. Implement first-party server-rendered forms for the core field set: select, multi-select, number, checkbox, date/time, short text, and textarea/notes. Repeatable groups are **out of v1** per review (open decision 2): sessions (#99) deliver repeated entries as independent submissions, which is also the durability-friendlier shape; revisit after pilot-alpha evidence.
 4. Implement JSON and native HTML submission paths through one service.
 5. Persist one immutable JSON file per submission with receipt timestamp, optional event time, IANA timezone and client offset, actor, schema versions/digest, stable option IDs/label snapshots, and idempotency.
 6. Add receipt/detail views and private submission list API.
@@ -427,17 +427,17 @@ Exit gate: capture succeeds during dispatcher outage, queued reactions resume af
 | [#91](https://github.com/chrisfonte/lookie-link/issues/91) | Reconcile deployed development checkout, GitHub, docs, validators, PRs, and issues | None; blocks implementation |
 | [#92](https://github.com/chrisfonte/lookie-link/issues/92) | Ownership, permissions, CSRF, and raw-HTML ADR | #91 |
 | [#93](https://github.com/chrisfonte/lookie-link/issues/93) | Versioned schemas, files, direct edits, and attestation ADR | #91 |
-| [#94](https://github.com/chrisfonte/lookie-link/issues/94) | Shared safe persistence, principal/audit, viewer shell, and route seams | #91, #92, #93 |
+| [#94](https://github.com/chrisfonte/lookie-link/issues/94) | Tracking umbrella: shared persistence/principal/audit/route-seam children #107–#113 (viewer shell deferred) | #91, #92, #93 |
 | [#95](https://github.com/chrisfonte/lookie-link/issues/95) | File-backed template and form registries | #93, #94 |
 | [#96](https://github.com/chrisfonte/lookie-link/issues/96) | Template and form lifecycle APIs | #92, #93, #95 |
 | [#97](https://github.com/chrisfonte/lookie-link/issues/97) | Immutable submission store, idempotent API, and receipts | #92–#95 |
 | [#98](https://github.com/chrisfonte/lookie-link/issues/98) | First-party server-rendered form runner | #94, #96, #97 |
 | [#99](https://github.com/chrisfonte/lookie-link/issues/99) | Session and repeatable-entry workflows | #97, #98 |
-| [#100](https://github.com/chrisfonte/lookie-link/issues/100) | Approved static, catalog, and history option providers | #92, #93, #95, #97 |
+| [#100](https://github.com/chrisfonte/lookie-link/issues/100) | Dynamic option providers only (catalog/history); inline static options moved to #116 in Phase 1 | #92, #93, #95, #97 |
 | [#101](https://github.com/chrisfonte/lookie-link/issues/101) | User template and form builder | #96, #98, #100 |
 | [#102](https://github.com/chrisfonte/lookie-link/issues/102) | Durable outbox and operator-controlled reactions | #92, #97 |
 | [#103](https://github.com/chrisfonte/lookie-link/issues/103) | Discovery, CLI, OpenAPI, and skill packages | #96, #97, #100 |
-| [#104](https://github.com/chrisfonte/lookie-link/issues/104) | Private gym pilot and operational validation | #99–#102 as applicable |
+| [#104](https://github.com/chrisfonte/lookie-link/issues/104) | Pilot-beta: builder/provider validation (pilot-alpha split to #134, which depends on #99 + #116 only) | #99, #101, #100; optional #102; #134 findings |
 
 **Granular decomposition (2026-07-15).** Per the independent review ([review-fable.md](./review-fable.md)) and operator direction, the implementation issues above were decomposed into PR-sized child issues #105–#134, each with its own explicit test gate; #94–#98 became tracking umbrellas whose bodies carry the child checklists. Standalone additions: [#105](https://github.com/chrisfonte/lookie-link/issues/105) (CI on every PR — the repo previously had none), [#106](https://github.com/chrisfonte/lookie-link/issues/106) (CSP-sandboxed `/raw`, review finding B1), [#111](https://github.com/chrisfonte/lookie-link/issues/111) (query-token deny on mutations), [#116](https://github.com/chrisfonte/lookie-link/issues/116) (inline static options moved from #100 into Phase 1, review finding B4), and [#134](https://github.com/chrisfonte/lookie-link/issues/134) (pilot-alpha on the Phase-1 slice, split from #104). Phase-2/3 issues #100–#103 stay whole and are decomposed the same way just before work starts. The machine-readable child map lives in the [package sidecar](./user-defined-forms-platform.yaml).
 
@@ -509,7 +509,7 @@ Rollback is feature-flag disablement plus removal of rebuildable indexes. Canoni
 
 | Risk | Mitigation |
 |---|---|
-| Raw same-origin artifacts call privileged APIs | First-party routes, granular permissions, CSRF/origin enforcement, bearer-only agent mutations, negative browser tests. |
+| Raw same-origin artifacts call privileged APIs | Origin isolation of `/raw` via CSP sandbox (load-bearing; #106), Origin checks on mutations, CSRF tokens as defense-in-depth, granular permissions, bearer-only agent mutations, negative browser tests (#133). |
 | Forms duplicate storage/auth/audit systems | Shared adapters and principal/capability interfaces; explicit dependencies on existing roadmap foundations. |
 | Direct edits diverge from API behavior | One parser/validator/serializer; last-known-good activation; canonical round-trip tests. |
 | Syncthing conflicts or partial files | One immutable file per submission, atomic rename, bounded rescans, no shared append file or synced live DB. |
@@ -521,23 +521,24 @@ Rollback is feature-flag disablement plus removal of rebuildable indexes. Canoni
 | Future multi-user support requires rewrite | Stable principal/owner fields and capabilities now; single-operator mapping is one provider, not a special schema. |
 | Dependency growth conflicts with small-core design | Prefer standard library; justify and pin any schema/CSRF dependency; monitor bundle/runtime and vulnerability impact. |
 
-## Open Decisions for Independent Review
+## Open Decisions — Answered by Independent Review
 
-1. Should v1 use a constrained custom field grammar backed by JSON Schema validation, or expose a carefully restricted JSON Schema subset directly?
-2. Should repeatable field groups ship in the vertical slice or follow after single-event capture?
-3. What is the minimal stable principal representation before browser user accounts exist?
-4. Should form-definition roots initially target mounted repos only, or also consume the managed-repo storage adapter when that work stabilizes?
-5. Is one-file-per-submission sufficient as the canonical event model, including corrections and deletion/retention, or is an explicit append-only event envelope required?
-6. Which audit fields may be stored without leaking sensitive submission values?
-7. What CSRF posture is required for unrestricted private-network mode given trusted raw HTML is same-origin?
-8. Which parts of the planned managed-repo/publish/API-key work are stable enough to extract as shared interfaces before forms begin?
-9. Does the proposed issue sequence isolate independently mergeable changes, or are any slices still too broad?
-10. Should directly created submission files be supported only as explicitly marked imports, and what attestation fields must remain server-only?
+All ten were answered with evidence in [review-fable.md](./review-fable.md) §7 (2026-07-15). Answers below are the working decisions; final ratification happens in the ADR issues (#92, #93) during Phase 0. Cross-model review (2026-07-15) concurred and added the purge-boundary refinement to answer 5.
 
-Independent review should answer these with evidence and should identify missing failure modes rather than merely confirm the plan.
+1. **Field grammar:** Constrained custom grammar, hand-validated with fixtures; no exposed JSON Schema subset and no new schema dependency in v1. Ratify in #93.
+2. **Repeatable groups:** Not in v1. Sessions (#99) deliver repeated entries as independent submissions. Revisit after pilot-alpha (#134) evidence.
+3. **Principal:** Configured stable local principal (`{id, type: "local-operator"}`) stamped server-side; unrestricted mode maps to all capabilities; aligns with the roadmap identity taxonomy so SSO/local accounts map in later without record migration. Ratify in #92.
+4. **Definition roots:** Operator-configured mounted roots only in v1, behind a storage-adapter boundary; managed-repo adapter added later, after #91 reconciles that work.
+5. **Event model:** One immutable file per submission, corrections as supersession records, plus a first-class delete operation (physical canonical-file removal + content-free tombstone; indexes tolerate missing records). **Honest boundary (cross-model refinement):** application-level deletion removes the canonical record but Syncthing versioning (`.stversions`) and backups may retain old bytes — the #93 ADR must distinguish ordinary application deletion from verified multi-peer/backup purging and document what each guarantees. Ratify in #93 before #97-family readiness.
+6. **Audit fields:** IDs (submission/form/template), template version, schema digest, principal ID, outcome class, timestamps, byte counts, destination binding ID. Never field values, notes, or titles. Ratify in #92.
+7. **CSRF posture:** Layered — CSP-sandbox origin isolation of `/raw` (load-bearing; #106), Origin/Referer checks on browser mutations (primary), CSRF tokens (defense-in-depth), bearer-only agent mutations, query tokens refused (#111). Token-only schemes cannot hold the same-origin boundary. Ratify in #92.
+8. **Shared interfaces from in-flight work:** Extract only from merged main — the temp+rename idiom (hardened per B2), `safeResolve` (extended with safe-create), and the `canAccessPath` seam. Nothing from the unreconciled deployed tree until #91 closes.
+9. **Issue decomposition:** Resolved by the 2026-07-15 granular decomposition (#105–#134): #94 and #104 were too broad and were split; ordering otherwise stood.
+10. **Direct submission files:** Imports only, explicitly marked, validated on ingest, never presented as receipts. Server-only fields: `receivedAt`, `principal`, `attestation`, idempotency key digest, CSRF/origin posture, computed schema digest. In single-operator mode attestation is provenance bookkeeping, not a security boundary; multi-user needs signed receipts first. Ratify in #93.
 
 ## Revision History
 
+- **v0.3.0 (2026-07-15)** — Reconciliation pass after cross-model review (GPT 5.6) found the canonical plan lagging the incorporated issue graph: raw-HTML boundary language corrected to CSP origin isolation as the load-bearing control (B1); temp+rename constraint restated as harden-with-fsync (B2); repeatable groups removed from v1; viewer-shell extraction marked deferred; issue-map rows for #94/#100/#104 updated to post-decomposition scopes; all ten open decisions converted to answered form with ADR ratification pointers; deletion answer gains the application-delete vs verified-purge boundary (Syncthing versioning/backups retain bytes).
 - **v0.2.1 (2026-07-15)** — Recorded the user-defined pages successor direction (#135) with ADR design inputs on #92/#93 (resource-kind contracts, capability grammar, providers as read sources, renderer component registry — no v1 scope change), and the approved interim read-only workstreams page (#136–#138).
 - **v0.2.0 (2026-07-15)** — Independent Fable review incorporated ([review-fable.md](./review-fable.md)): verdict approve with required changes (B1 raw-origin isolation via CSP sandbox, B2 fsync durability, B3 submit-only receipt access, B4 pilot/static-option resequencing, B5 deletion contract in #93). Issue graph decomposed into PR-sized, individually tested children #105–#134 at operator direction.
 - **v0.1.0 (2026-07-15)** — Initial draft from the operator co-design session, current source/test audit, existing forms brainstorm, commercialization roadmap, and open GitHub work. Establishes file-native/API-first architecture, user-owned templates, first-party rendering, immutable per-submission records, capability/CSRF boundaries, phased delivery, and verification gates.
