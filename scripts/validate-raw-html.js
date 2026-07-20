@@ -1,11 +1,13 @@
 'use strict';
 
-// Validates raw HTML serving.
+// Validates source and transformed HTML serving.
 //
 // Verifies:
 //   * /raw/<path>.html is 404 when disabled
 //   * /raw/<path>.html serves the file verbatim with text/html when enabled
 //   * /raw/<path>.txt returns 415 (only .html/.htm allowed)
+//   * /embed/<path>.html injects base/theme/navigation without changing /raw
+//   * /embed rejects binary and invalid UTF-8 input
 //   * /view/<path>.html still wraps + sanitises (no inline <script> survives)
 //   * /view exposes an "Open raw" toolbar link only when raw HTML is enabled
 //
@@ -33,6 +35,7 @@ function fetchResponse(server, urlPath) {
           resolve({
             status: res.statusCode,
             contentType: res.headers['content-type'] || '',
+            headers: res.headers,
             body,
             text: body.toString('utf8'),
           });
@@ -77,7 +80,11 @@ async function run() {
     await fs.writeFile(path.join(repoDir, 'notes.md'), '# Notes\n', 'utf8');
 
     const appDisabled = createApp({ mappings: { docs: repoDir }, rawHtmlEnabled: false });
-    const appEnabled = createApp({ mappings: { docs: repoDir }, rawHtmlEnabled: true });
+    const appEnabled = createApp({
+      mappings: { docs: repoDir },
+      rawHtmlEnabled: true,
+      annotationsEnabled: true,
+    });
 
     const disabledServer = await listen(appDisabled);
     const enabledServer = await listen(appEnabled);
@@ -99,19 +106,37 @@ async function run() {
       assert.equal(oddEncodingResp.status, 200, '/raw odd-encoding HTML should 200');
       assert.deepEqual(oddEncodingResp.body, ODD_ENCODING_HTML, '/raw must not decode or normalize invalid UTF-8 bytes');
 
-      // 3. Enabled instance: /raw rejects non-html extensions.
+      // 3. /embed injection contract is separate from /raw byte identity.
+      const embedResp = await fetchResponse(
+        enabledServer,
+        '/embed/docs/flashcards.html?lookie-theme=light&lookie-scheme=teal'
+      );
+      assert.equal(embedResp.status, 200, '/embed/<.html> should 200 when enabled');
+      assert.equal(embedResp.headers['x-lookie-content-mode'], 'transformed-embed');
+      assert.match(embedResp.text, /<base href="\/asset\/docs\/">/, '/embed injects an opaque asset base');
+      assert.match(embedResp.text, /id="lookie-link-embed-theme"/, '/embed injects theme tokens');
+      assert.match(embedResp.text, /data-lookie-link-theme="light"/, '/embed accepts the framed theme mode');
+      assert.match(embedResp.text, /data-lookie-link-scheme="teal"/, '/embed accepts the framed color scheme');
+      assert.match(embedResp.text, /lookie-link-annotations-bootstrap/, '/embed mounts annotations when enabled');
+      assert.match(embedResp.text, /<script>document\.getElementById/, 'authored inline scripts survive /embed');
+      assert.notDeepEqual(embedResp.body, enabledResp.body, '/embed is explicitly transformed');
+
+      const rejectedEmbed = await fetchResponse(enabledServer, '/embed/docs/odd-encoding.htm');
+      assert.equal(rejectedEmbed.status, 415, '/embed rejects invalid UTF-8 while /raw preserves it');
+
+      // 4. Enabled instance: /raw rejects non-html extensions.
       const notMdResp = await fetchResponse(enabledServer, '/raw/docs/notes.md');
       assert.equal(notMdResp.status, 415, '/raw rejects non-html extensions with 415');
 
-      // 4. Enabled instance: unknown repo returns 404.
+      // 5. Enabled instance: unknown repo returns 404.
       const unknownResp = await fetchResponse(enabledServer, '/raw/missing/flashcards.html');
       assert.equal(unknownResp.status, 404, 'unknown repo returns 404');
 
-      // 5. Enabled instance: directory traversal blocked.
+      // 6. Enabled instance: directory traversal blocked.
       const traversalResp = await fetchResponse(enabledServer, '/raw/docs/../../../etc/passwd');
       assert.notEqual(traversalResp.status, 200, 'directory traversal must not return 200');
 
-      // 6. /view/<.html> still wraps + sanitises on both disabled and enabled.
+      // 7. /view/<.html> still wraps + sanitises on both disabled and enabled.
       const viewDisabled = await fetchResponse(disabledServer, '/view/docs/flashcards.html');
       assert.equal(viewDisabled.status, 200);
       assert.match(viewDisabled.contentType, /^text\/html/);
@@ -130,18 +155,18 @@ async function run() {
         '/view must strip inline <script> even when raw mode is enabled'
       );
 
-      // 7. "Open raw" toolbar appears only when raw HTML is enabled.
+      // 8. "Open raw" toolbar appears only when raw HTML is enabled.
       assert.doesNotMatch(viewDisabled.text, /Open raw/, 'disabled /view should not advertise raw mode');
       assert.match(viewEnabled.text, /Open raw/, 'enabled /view should advertise raw mode');
       assert.match(viewEnabled.text, /href="\/raw\/docs\/flashcards\.html"/, 'Open raw button should link to /raw/');
 
-      // 8. healthz reflects rawHtmlEnabled.
+      // 9. healthz reflects rawHtmlEnabled.
       const healthDisabled = JSON.parse((await fetchResponse(disabledServer, '/healthz')).text);
       const healthEnabled = JSON.parse((await fetchResponse(enabledServer, '/healthz')).text);
       assert.equal(healthDisabled.rawHtmlEnabled, false);
       assert.equal(healthEnabled.rawHtmlEnabled, true);
 
-      console.log('OK — /raw HTML serving validates against the acceptance criteria.');
+      console.log('OK — /raw exact bytes and /embed injection validate as separate contracts.');
     } finally {
       await close(disabledServer);
       await close(enabledServer);

@@ -60,6 +60,10 @@ const {
   createAnnotation,
   updateAnnotation,
 } = require('./lib/annotations');
+const {
+  decodeEmbedHtmlBuffer,
+  transformEmbedHtml,
+} = require('./lib/embed-html');
 
 const IMAGE_MIME_TYPES = {
   '.png': 'image/png',
@@ -1372,6 +1376,116 @@ function createApp(options = {}) {
         res.status(500).type('text/plain').send('Failed to read asset.');
       }
     });
+  });
+
+  app.get('/embed/:repo/*', async (req, res) => {
+    if (!rawHtmlEnabled) {
+      res.status(404).type('text/plain').send('Embedded HTML serving is disabled.');
+      return;
+    }
+
+    const accessContext = resolveAccessContext(req);
+    const repo = req.params.repo;
+    const relativePath = req.params[0] || '';
+    const rootPath = mappings[repo];
+
+    if (!rootPath) {
+      res.status(404).type('text/plain').send(`Unknown repository: ${repo}`);
+      return;
+    }
+    if (!relativePath) {
+      res.status(400).type('text/plain').send('Embedded serving requires a file path.');
+      return;
+    }
+    if (!HTML_EXTENSIONS.has(path.extname(relativePath).toLowerCase())) {
+      res.status(415).type('text/plain').send('Embedded mode only supports .html and .htm files.');
+      return;
+    }
+    if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
+      res.status(403).type('text/plain').send('Access denied.');
+      return;
+    }
+
+    let resolved;
+    try {
+      resolved = await safeResolve(rootPath, relativePath);
+    } catch (error) {
+      if (error && error.code === 'EACCES') {
+        res.status(403).type('text/plain').send('Invalid path.');
+        return;
+      }
+      if (error && error.code === 'ENOENT') {
+        res.status(404).type('text/plain').send('File not found.');
+        return;
+      }
+      console.error('Failed to resolve embed path', { rootPath, relativePath, error });
+      res.status(500).type('text/plain').send('Failed to resolve embedded path.');
+      return;
+    }
+
+    let stat;
+    try {
+      stat = await fs.stat(resolved);
+    } catch (error) {
+      if (error && error.code === 'ENOENT') {
+        res.status(404).type('text/plain').send('File not found.');
+        return;
+      }
+      console.error('Failed to stat embed path', { resolved, error });
+      res.status(500).type('text/plain').send('Failed to read file metadata.');
+      return;
+    }
+    if (!stat.isFile()) {
+      res.status(404).type('text/plain').send('File not found.');
+      return;
+    }
+
+    let sourceBuffer;
+    try {
+      sourceBuffer = await fs.readFile(resolved);
+    } catch (error) {
+      console.error('Failed to read embed HTML', { resolved, error });
+      res.status(500).type('text/plain').send('Failed to read file.');
+      return;
+    }
+
+    let source;
+    try {
+      source = decodeEmbedHtmlBuffer(sourceBuffer);
+    } catch (error) {
+      if (error && error.code === 'EINVALIDHTML') {
+        res.status(415).type('text/plain').send(error.message);
+        return;
+      }
+      throw error;
+    }
+
+    try {
+      const html = transformEmbedHtml(source, {
+        repo,
+        rootPath,
+        relativePath,
+        mappings,
+        queryToken: accessContext.queryToken,
+        sensitiveValues: accessContext.source === 'header' ? [extractPresentedToken(req)] : [],
+        annotationsEnabled: annotationsEnabled && canAccessPath(accessContext, 'view', repo, relativePath, 'file'),
+        themeMode: typeof req.query['lookie-theme'] === 'string' ? req.query['lookie-theme'] : 'dark',
+        themeScheme: typeof req.query['lookie-scheme'] === 'string' ? req.query['lookie-scheme'] : 'slate',
+        customThemeCss,
+        canAccess: (targetRepo, targetPath, isDirectory) => canAccessPath(
+          accessContext,
+          'view',
+          targetRepo,
+          targetPath,
+          isDirectory ? 'directory' : 'file'
+        ),
+      });
+      res.set('X-Lookie-Content-Mode', 'transformed-embed');
+      res.status(200).type(RAW_HTML_MIME_TYPE).send(html);
+    } catch (error) {
+      console.error('Failed to transform embed HTML', { repo, relativePath, error });
+      res.status(500).type('text/plain').send('Failed to transform embedded HTML.');
+    }
   });
 
   // Serve trusted HTML files verbatim. See lib/config.js

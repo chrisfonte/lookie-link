@@ -333,6 +333,57 @@ test('html and htm files render as sanitized documents with raw toggle and edit 
   }
 });
 
+test('embed transforms authorized HTML while raw remains exact and bearer credentials stay out of output', async () => {
+  const fixture = await makeFixture();
+  const authoredBytes = await fs.readFile(path.join(fixture.mappings.alpha, 'docs', 'landing.htm'));
+  const server = await startTestServer({
+    mappings: fixture.mappings,
+    rawHtmlEnabled: true,
+    annotationsEnabled: true,
+    accessConfig: {
+      humanDefault: 'restricted',
+      tokens: {
+        viewer: {
+          secret: 'viewer-token',
+          repos: { alpha: { paths: ['docs/'] } },
+          permissions: { view: true, edit: false },
+        },
+      },
+    },
+  });
+
+  try {
+    const rawResponse = await server.request('/raw/alpha/docs/landing.htm?token=viewer-token');
+    assert.equal(rawResponse.status, 200);
+    assert.deepEqual(Buffer.from(await rawResponse.arrayBuffer()), authoredBytes);
+
+    const queryEmbed = await server.request('/embed/alpha/docs/landing.htm?token=viewer-token');
+    assert.equal(queryEmbed.status, 200);
+    assert.equal(queryEmbed.headers.get('x-lookie-content-mode'), 'transformed-embed');
+    const queryHtml = await queryEmbed.text();
+    assert.match(queryHtml, /<base href="\/asset\/alpha\/docs\/">/);
+    assert.match(queryHtml, /src="\/asset\/alpha\/docs\/diagram\.png\?token=viewer-token"/);
+    assert.match(queryHtml, /lookie-link-annotations-bootstrap/);
+
+    const bearerEmbed = await server.request('/embed/alpha/docs/landing.htm', {
+      headers: { Authorization: 'Bearer viewer-token' },
+    });
+    assert.equal(bearerEmbed.status, 200);
+    const bearerHtml = await bearerEmbed.text();
+    assert.doesNotMatch(bearerHtml, /viewer-token/);
+    assert.match(bearerHtml, /"queryToken":null/);
+
+    const deniedView = await server.request('/view/beta/notes.md?token=viewer-token');
+    const deniedAsset = await server.request('/asset/beta/notes.md?token=viewer-token');
+    const deniedEmbed = await server.request('/embed/beta/missing.html?token=viewer-token');
+    assert.equal(deniedEmbed.status, deniedView.status);
+    assert.equal(deniedEmbed.status, deniedAsset.status);
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test('yaml files render nested key anchors with full-path slugs', async () => {
   const fixture = await makeFixture();
   const server = await startTestServer({

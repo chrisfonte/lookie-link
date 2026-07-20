@@ -294,7 +294,8 @@
 
   function injectAnnotateButtons() {
     const root = document.querySelector('article.content[data-rendered-view]')
-      || document.querySelector('article.content');
+      || document.querySelector('article.content')
+      || document.body;
     if (!root) return;
     const targets = root.querySelectorAll(
       'h1[id], h2[id], h3[id], h4[id], h5[id], h6[id], span.yaml-anchor-wrap[id]'
