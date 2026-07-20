@@ -4,6 +4,8 @@
 |-------|-------------|
 | `GET /` | Repository index |
 | `GET /healthz` | Health check, including `editingEnabled`, `annotationsEnabled`, and `rawHtmlEnabled` booleans |
+| `GET /.well-known/agent.json` | Caller-scoped runtime capability discovery |
+| `GET /api/whoami` | Caller identity, permissions, repo/path scopes, capabilities, and authorized endpoint templates |
 | `GET /api/repos` | Discover served repos as JSON (filtered by grant scope when a token is presented) |
 | `GET /view/<repo>/<path>` | Rendered file or directory listing. For `.html` and `.htm`, append `?validate=1` to inspect local asset and document references as JSON. |
 | `GET /asset/<repo>/<path>` | Raw asset serving. Supports `Range` requests so `<audio>` can seek, backs the embedded PDF viewer page, and is the agent-facing read path for text/source files (see `lookie-read` CLI in the repo `bin/`). MIME types: images (`.png`/`.jpg`/`.gif`/`.webp`/`.svg`/`.jpeg`), audio (`.m4a`/`.mp3`/`.wav`/`.ogg`/`.oga`/`.opus`/`.flac`/`.aac`), PDF (`.pdf`), markdown (`.md`/`.markdown`/`.mdown` → `text/markdown`), YAML (`.yaml`/`.yml` → `text/yaml`), JSON (`.json`), XML (`.xml`), and the editable text/source set (shell, Python, JS/TS, Go, Rust, C/C++, etc.) returned as `text/plain; charset=utf-8`. Anything else returns `415 Unsupported asset type`. |
@@ -27,6 +29,8 @@
 | `POST /api/publish` | Create a publish slug and immutable revision 1 |
 | `POST /api/publish/:slug` | Create the next immutable revision with an `expectedRevision` guard |
 | `POST /api/publish/:slug/revoke` | Revoke current and historical readback for a publish slug |
+| `GET /raw/<repo>/<path>` | Byte-preserving authored HTML when raw HTML is enabled |
+| `GET /embed/<repo>/<path>` | Transformed HTML runtime when raw HTML is enabled |
 | `GET /api/grants` | List managed grants (`Authorization: Bearer <admin-token>`) |
 | `POST /api/grants` | Create a managed grant and return token + issue comment helper |
 | `POST /api/grants/:grantId/renew` | Renew a managed grant and return issue comment helper |
@@ -117,7 +121,6 @@ Lets agents discover served repos at runtime without parsing the HTML index or r
   "repos": [
     {
       "repo": "operations",
-      "rootPath": "~/notes",
       "viewUrl": "/view/operations/",
       "assetUrl": "/asset/operations/"
     }
@@ -126,9 +129,43 @@ Lets agents discover served repos at runtime without parsing the HTML index or r
 }
 ```
 
-The list is filtered to the repos the caller can `view`: with a scoped token the response only contains repos that token can reach; unauthenticated callers see all mappings when `access.humanDefault` allows it and otherwise receive `401`. `viewUrl` and `assetUrl` are repo-rooted paths — append your own `?token=...` if you authenticate via query string.
-`rootPath` remains present for legacy static mappings but is omitted for managed
-repositories so registry additions do not disclose host filesystem paths.
+The list is filtered to the repos the caller can `view`: with a scoped token the response only contains repos that token can reach; unauthenticated callers see all mappings when `access.humanDefault` allows it and otherwise receive `401`. `viewUrl` and `assetUrl` are opaque repo-rooted URLs. The response never includes source roots, home-directory paths, or the server's repo mapping.
+
+## Caller and Agent Discovery
+
+`GET /api/whoami` returns the presented caller's sanitized identity, effective permissions, visible repo/path scopes, capabilities, and endpoint templates. `GET /.well-known/agent.json` wraps the same caller-specific fields in a versioned runtime document. Both endpoints return `401` for a missing credential when `access.humanDefault` is restricted and `403` for an invalid credential.
+
+Capabilities are the intersection of runtime configuration, registered route availability, and caller authorization. A disabled feature has a `false` capability and no feature endpoint templates. A scoped caller never receives a repo, path scope, or mutation endpoint outside its grant. Grant-management and API-key-management routes are administrative surfaces and are not advertised through caller discovery.
+
+The discovery endpoint matrix is authoritative for the templates emitted in `endpoints`:
+
+| Endpoint key | Template | Emitted when |
+|---|---|---|
+| `agentDiscovery` | `/.well-known/agent.json` | Caller is authenticated or unrestricted human access is enabled |
+| `whoami` | `/api/whoami` | Caller is authenticated or unrestricted human access is enabled |
+| `repos` | `/api/repos` | Caller is authenticated or unrestricted human access is enabled |
+| `view` | `/view/:repo/*path` | Caller has a visible `view` scope |
+| `assetRead` | `/asset/:repo/*path` | Caller has a visible `view` scope and the route is registered |
+| `edit` | `/edit/:repo/*path` | Editing is enabled and caller has a visible `write` scope |
+| `save` | `/api/save/:repo/*path` | Editing is enabled and caller has a visible `write` scope |
+| `preview` | `/api/preview/:repo/*path` | Editing is enabled and caller has a visible `view` scope |
+| `annotationRead` | `/api/annotations/:repo/*path` | Annotations are enabled and caller has a visible `view` scope |
+| `annotationCreate` | `/api/annotations/:repo/*path` | Annotations are enabled and caller has a visible `write` scope |
+| `annotationUpdate` | `/api/annotations/:repo/*path` | Annotations are enabled and caller has a visible `write` scope |
+| `rawHtml` | `/raw/:repo/*path` | Raw HTML is enabled and caller has a visible `view` scope |
+| `embeddedHtml` | `/embed/:repo/*path` | Raw HTML is enabled and caller has a visible `view` scope |
+| `managedRepoList` | `/api/managed-repos` | Managed repos and route are enabled and caller has a visible managed repo |
+| `managedFileRead` | `/api/managed-repos/:repo/files/*path` | Managed repos and route are enabled and caller has a visible managed repo |
+| `managedFileWrite` | `/api/managed-repos/:repo/files/*path` | Managed repos and route are enabled and caller has a visible `write` scope |
+| `managedTree` | `/api/managed-repos/:repo/tree` | Managed repos and route are enabled for the caller |
+| `managedChanges` | `/api/managed-repos/:repo/changes` | Managed repos and route are enabled for the caller |
+| `search` | `/api/search` | Managed search and route are enabled for the caller |
+| `searchSuggest` | `/api/search/suggest` | Managed search and route are enabled for the caller |
+| `publishCreate` | `/api/publish` | Publishing is enabled and caller has repo-level `publish` scope |
+| `publishUpdate` | `/api/publish/:slug` | Publishing is enabled and caller has repo-level `publish` scope |
+| `publishRevoke` | `/api/publish/:slug/revoke` | Publishing is enabled and caller has repo-level `publish` scope |
+
+Neither discovery response contains source roots, managed-store roots, publish-area paths, home directories, credentials, administrative token names, or private grant/audit metadata.
 
 ## Save Endpoint
 
