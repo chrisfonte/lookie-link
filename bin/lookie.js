@@ -7,6 +7,7 @@ const path = require('node:path');
 const {
   AUTH_PATH,
   normalizeBaseUrl,
+  readAuthFile,
   readTokenFromStdin,
   resolveAuth,
   writeAuthFile,
@@ -452,7 +453,13 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  const token = process.env.LOOKIE_LINK_TOKEN;
-  die(EXIT_TRANSPORT, error && error.message ? error.message : error, [token]);
+main().catch(async (error) => {
+  const secrets = [process.env.LOOKIE_LINK_TOKEN];
+  try {
+    const stored = await readAuthFile();
+    if (stored && stored.token) secrets.push(stored.token);
+  } catch {
+    // ignore: redaction is best-effort and must not mask the original error
+  }
+  die(EXIT_TRANSPORT, error && error.message ? error.message : error, secrets);
 });
