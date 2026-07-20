@@ -132,7 +132,7 @@ async function run() {
       for (const selector of CURRENT_ANNOTATION_SELECTORS) {
         assert.ok(embedDocument.querySelector(selector), `/embed must emit current annotation selector ${selector}`);
       }
-      const oldAnchorLinkOnly = embedDocument.querySelector('a.anchor-link[data-anchor-id]')
+      const oldAnchorLinkOnly = Boolean(embedDocument.querySelector('a.anchor-link[data-anchor-id]'))
         && !embedDocument.querySelector('[data-annotations-mount][data-anchor-id]')
         && !embedDocument.querySelector('[data-annotate-trigger][data-anchor-id]');
       assert.equal(oldAnchorLinkOnly, false, '/embed must not regress to obsolete anchor-link-only annotation markup');
