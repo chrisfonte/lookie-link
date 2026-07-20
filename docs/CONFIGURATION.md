@@ -47,6 +47,7 @@ access:
       permissions:
         view: true
         write: true
+        publish: false
 ```
 
 Notes:
@@ -58,6 +59,32 @@ Notes:
 - Static tokens still accept legacy `edit: true|false` and normalize it to `write` for backward compatibility.
 - Static tokens may carry optional `subject`, `issuer`, and `audit` metadata so future agent-facing `whoami/repos/grant` APIs can identify the Paperclip issue, agent, or projected grant behind a token without changing the phase 1 config shape.
 - Query-string tokens are preserved across rendered links so tokenized browser sessions can keep navigating.
+
+## Publish Artifacts
+
+```yaml
+publish:
+  enabled: true
+  areaPath: ~/.local/share/lookie-link/published
+  repoId: published
+  maxFiles: 100
+  maxFileBytes: 2097152
+  maxRevisionBytes: 10485760
+  maxMetadataBytes: 65536
+  maxRevisions: 20
+```
+
+Notes:
+
+- `areaPath` enables the publish store unless `enabled` is explicitly `false`.
+- `repoId` is the virtual repo used by published `view`, `asset`, and `raw` URLs. It defaults to `published`.
+- `repoId` must not match a configured `repositories` key; Lookie-Link rejects that collision at startup so the virtual publish namespace cannot shadow a real repository.
+- The file, byte, metadata, and revision limits above are the defaults. All limit values must be positive integers.
+- `maxRevisions` rejects another update at the limit. It does not prune historical revisions.
+- Publish is a repo-level capability: a credential needs `publish: true` plus whole-repo scope for `repoId` (or `repos: all`) to create, update, or revoke. Path-scoped publish credentials are rejected rather than treated as slug-level grants. Readback still uses normal path-aware `view` scope.
+- Publish routes inherit `access.humanDefault`. Because the default is `full`, enabling publishing without explicit access control also enables anonymous publish, update, and revoke. Multi-user deployments should set `humanDefault: restricted` or `none` and issue explicit publish credentials.
+- Source paths belong in `privateMetadata`, which is stored internally but omitted from responses and artifact readback. Public `metadata` is descriptive and never changes authorization.
+- See [PUBLISHING.md](PUBLISHING.md) for immutability, atomicity, history, and revocation semantics.
 
 ## Managed Grants
 

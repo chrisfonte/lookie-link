@@ -73,6 +73,18 @@ repositories:
 #       paperclip:
 #         secretEnv: LOOKIE_LINK_GRANT_ADMIN_TOKEN
 
+# Optional immutable-revision publish area
+# A slug can advance, but each numbered revision remains unchanged.
+# publish:
+#   enabled: true
+#   areaPath: ~/.local/share/lookie-link/published
+#   repoId: published
+#   maxFiles: 100
+#   maxFileBytes: 2097152
+#   maxRevisionBytes: 10485760
+#   maxMetadataBytes: 65536
+#   maxRevisions: 20
+
 # Custom themes
 # Each theme needs dark and/or light variants.
 # CSS property names use underscores (bg_elev → --bg-elev).
