@@ -938,7 +938,7 @@ function createApp(options = {}) {
       size: formatFileSize(stat.size),
       viewHref: appendAccessToken(buildHref(repo, relativePath), accessContext),
       saveHref: buildSaveHref(repo, relativePath),
-      previewHref: appendAccessToken(buildPreviewHref(repo, relativePath), accessContext),
+      previewHref: buildPreviewHref(repo, relativePath),
       customThemeCss,
       queryToken: accessContext.queryToken,
     });

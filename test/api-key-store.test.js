@@ -148,10 +148,16 @@ test('managed API keys are hashed, mode 0600, one-time, rotatable, revocable, an
 });
 
 test('API-key comparison explicitly uses timingSafeEqual', async () => {
-  const source = await fs.readFile(path.join(__dirname, '..', 'lib', 'api-key-store.js'), 'utf8');
-  assert.match(source, /crypto\.timingSafeEqual\(/);
-  assert.match(source, /constantTimeEqual\(apiKey\.secretHash, hash\)/);
-  assert.doesNotMatch(source, /apiKey\.secretHash\s*!==\s*hash/);
+  for (const relativePath of ['lib/access-control.js', 'lib/api-key-store.js', 'lib/grant-store.js']) {
+    const source = await fs.readFile(path.join(__dirname, '..', relativePath), 'utf8');
+    assert.match(source, /crypto\.createHash\('sha256'\).*\.digest\(\)/s);
+    assert.match(source, /crypto\.timingSafeEqual\(/);
+    assert.doesNotMatch(source, /if \(leftBuffer\.length !== rightBuffer\.length\)/);
+  }
+
+  const apiKeySource = await fs.readFile(path.join(__dirname, '..', 'lib', 'api-key-store.js'), 'utf8');
+  assert.match(apiKeySource, /constantTimeEqual\(apiKey\.secretHash, hash\)/);
+  assert.doesNotMatch(apiKeySource, /apiKey\.secretHash\s*!==\s*hash/);
 });
 
 test('credentials resolve static token then API key then grant with header precedence', () => {
@@ -226,7 +232,22 @@ test('mutation query tokens are rejected even when a bearer header is present', 
     method: 'POST',
     path: '/api/preview/docs/file.md',
     query: { token: 'query-placeholder' },
-  }), false);
+  }), true);
+  assert.equal(mutationUsesQueryToken({
+    method: 'PATCH',
+    path: '/API/ANNOTATIONS/docs/file.md',
+    query: { token: 'query-placeholder' },
+  }), true);
+  assert.equal(mutationUsesQueryToken({
+    method: 'DELETE',
+    path: '/future/mutation',
+    query: { token: 'query-placeholder' },
+  }), true);
+  assert.equal(mutationUsesQueryToken({
+    method: 'PUT',
+    path: '/future/mutation',
+    query: { token: '' },
+  }), true);
 });
 
 test('key-ID denials are uniform before and after authorized lookup', async () => {
