@@ -124,6 +124,7 @@ Behavior:
 - `<script>` tags and inline event handlers are stripped by DOMPurify
 - Local `<img src="./file.png">` references are rewritten through `/asset/<repo>/<path>` so images still load from the repo
 - Heading anchors and TOC generation apply to rendered HTML headings the same way they do for markdown
+- Agents can inspect a local HTML bundle without launching a browser by requesting `/view/<repo>/<path>.html?validate=1`. The JSON response checks stylesheet, script, image/source, and local HTML navigation references, reports missing/unsupported counts, and contains repo-relative URLs only. Reference checks enforce the caller's view scope; unreadable and absent targets use the same not-found result.
 
 ## Annotations
 

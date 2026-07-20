@@ -5,7 +5,7 @@
 | `GET /` | Repository index |
 | `GET /healthz` | Health check (returns `{"status":"ok","editingEnabled":bool}`) |
 | `GET /api/repos` | Discover served repos as JSON (filtered by grant scope when a token is presented) |
-| `GET /view/<repo>/<path>` | Rendered file or directory listing |
+| `GET /view/<repo>/<path>` | Rendered file or directory listing. For `.html` and `.htm`, append `?validate=1` to inspect local asset and document references as JSON. |
 | `GET /asset/<repo>/<path>` | Raw asset serving. Supports `Range` requests so `<audio>` can seek, backs the embedded PDF viewer page, and is the agent-facing read path for text/source files (see `lookie-read` CLI in the repo `bin/`). MIME types: images (`.png`/`.jpg`/`.gif`/`.webp`/`.svg`/`.jpeg`), audio (`.m4a`/`.mp3`/`.wav`/`.ogg`/`.oga`/`.opus`/`.flac`/`.aac`), PDF (`.pdf`), markdown (`.md`/`.markdown`/`.mdown` → `text/markdown`), YAML (`.yaml`/`.yml` → `text/yaml`), JSON (`.json`), XML (`.xml`), and the editable text/source set (shell, Python, JS/TS, Go, Rust, C/C++, etc.) returned as `text/plain; charset=utf-8`. Anything else returns `415 Unsupported asset type`. |
 | `GET /edit/<repo>/<path>` | Edit page (only when editing enabled) |
 | `POST /api/save/<repo>/<path>` | Save updated file content (JSON body) |
@@ -38,6 +38,21 @@ Route enforcement in phase 1:
 - `/api/annotations/*` requires `view` and returns `404` when annotations are disabled
 
 Invalid tokens return `403`. Missing tokens return `401` when unauthenticated human access is restricted.
+
+## HTML Bundle Validation
+
+`GET /view/<repo>/<path>.html?validate=1`
+
+Returns the HTML source metadata, repo-relative view/asset URLs, local references
+from stylesheet, script, image, and source elements, and local HTML/directory
+navigation targets. Each reference includes its resolved repo-relative path,
+content type, existence, byte count, and rewritten view URL where applicable.
+The `summary` object provides missing and unsupported counts for automated checks.
+
+Validation uses the caller's normal `view` scope for every referenced target.
+An unreadable target is reported with the same `exists: false`, null metadata,
+and `not_found` error as an absent target. Responses never include filesystem
+paths from the host.
 
 ## Repo Discovery Endpoint
 

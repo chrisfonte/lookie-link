@@ -3,6 +3,7 @@
 const express = require('express');
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const { JSDOM } = require('jsdom');
 
 const {
   loadRootMappings,
@@ -276,6 +277,213 @@ function parseBooleanQuery(value) {
   }
 
   return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+}
+
+function buildAssetBaseHref(repo, relativePath, accessContext) {
+  const normalized = toPosixPath(relativePath);
+  const currentDir = path.posix.dirname(normalized) === '.' ? '' : path.posix.dirname(normalized);
+  const repoPart = encodeURIComponent(repo);
+  const dirPart = currentDir ? `${currentDir.split('/').map(encodeURIComponent).join('/')}/` : '';
+  return appendAccessToken(`/asset/${repoPart}/${dirPart}`, accessContext);
+}
+
+function isExternalOrSpecialHref(value) {
+  return /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(String(value || '').trim());
+}
+
+function splitSrcset(value) {
+  return String(value || '')
+    .split(',')
+    .map((entry) => entry.trim().split(/\s+/)[0])
+    .filter(Boolean);
+}
+
+function normalizeLocalReference(relativePath, rawValue) {
+  const value = String(rawValue || '').trim();
+  if (!value || isExternalOrSpecialHref(value)) {
+    return null;
+  }
+
+  const match = value.match(/^([^?#]*)(\?[^#]*)?(#.*)?$/);
+  if (!match) {
+    return null;
+  }
+
+  const rawPath = match[1] || '';
+  const query = match[2] || '';
+  const hash = match[3] || '';
+  const currentDir = path.posix.dirname(toPosixPath(relativePath)) === '.'
+    ? ''
+    : path.posix.dirname(toPosixPath(relativePath));
+  let pathname;
+  try {
+    pathname = decodeURIComponent(rawPath);
+  } catch (_error) {
+    return null;
+  }
+  if (!pathname || pathname === '/') {
+    return null;
+  }
+
+  const referencePath = pathname.replace(/^\/+/, '');
+  const resolvedPath = value.startsWith('/')
+    ? referencePath
+    : path.posix.join(currentDir, referencePath);
+  const normalized = toPosixPath(path.posix.normalize(resolvedPath));
+  if (!normalized || normalized === '.' || normalized.startsWith('../') || normalized === '..') {
+    return null;
+  }
+
+  return {
+    original: value,
+    path: normalized,
+    query,
+    hash,
+    directoryHint: /\/(?:[?#].*)?$/.test(value),
+  };
+}
+
+function buildReferenceDescription({ repo, normalized, tag, attr, kind, accessContext }) {
+  const extension = effectiveViewExtension(normalized.path);
+  const contentType = ASSET_MIME_TYPES[extension] || null;
+  const viewUrl = appendAccessToken(buildHref(repo, normalized.path), accessContext);
+  const assetUrl = appendAccessToken(buildAssetHref(repo, normalized.path), accessContext);
+  const entry = {
+    tag,
+    attr,
+    kind,
+    href: normalized.original,
+    resolvedPath: normalized.path,
+    query: normalized.query,
+    hash: normalized.hash,
+    assetUrl,
+    viewUrl,
+    contentType,
+    exists: false,
+    bytes: null,
+    isDirectory: false,
+    supportedAsset: Boolean(contentType),
+  };
+
+  if (kind === 'document') {
+    entry.rewrittenViewUrl = viewUrl + normalized.query + normalized.hash;
+    entry.rewriteTarget = '_top';
+  }
+
+  return entry;
+}
+
+async function describeLocalReference({ repo, rootPath, sourceRelativePath, tag, attr, value, kind, accessContext }) {
+  const normalized = normalizeLocalReference(sourceRelativePath, value);
+  if (!normalized) {
+    return null;
+  }
+
+  const entry = buildReferenceDescription({ repo, normalized, tag, attr, kind, accessContext });
+  let stat;
+  try {
+    const absolutePath = await safeResolve(rootPath, normalized.path);
+    stat = await fs.stat(absolutePath);
+  } catch (_error) {
+    entry.error = 'not_found';
+    return entry;
+  }
+
+  const pathType = stat.isDirectory() ? 'directory' : 'file';
+  if (!canAccessPath(accessContext, 'view', repo, normalized.path, pathType)) {
+    entry.error = 'not_found';
+    return entry;
+  }
+
+  entry.exists = true;
+  entry.isDirectory = stat.isDirectory();
+  entry.bytes = stat.isFile() ? stat.size : null;
+  if (entry.isDirectory) {
+    entry.contentType = 'text/html; charset=utf-8';
+    entry.supportedAsset = false;
+  }
+  return entry;
+}
+
+async function buildHtmlRenderValidation({ repo, rootPath, relativePath, stat, source, rawHtmlEnabled, accessContext }) {
+  const dom = new JSDOM(source);
+  const { document } = dom.window;
+  const assetRefs = [];
+  const documentRefs = [];
+
+  function pushAsset(selector, attr) {
+    document.querySelectorAll(selector).forEach((node) => {
+      const raw = node.getAttribute(attr);
+      if (!raw) {
+        return;
+      }
+      const values = attr === 'srcset' ? splitSrcset(raw) : [raw];
+      values.forEach((value) => {
+        assetRefs.push({ tag: node.tagName.toLowerCase(), attr, value, kind: 'asset' });
+      });
+    });
+  }
+
+  pushAsset('link[href]', 'href');
+  pushAsset('script[src]', 'src');
+  pushAsset('img[src]', 'src');
+  pushAsset('img[srcset]', 'srcset');
+  pushAsset('source[src]', 'src');
+  pushAsset('source[srcset]', 'srcset');
+
+  document.querySelectorAll('a[href]').forEach((node) => {
+    const href = node.getAttribute('href');
+    const normalized = normalizeLocalReference(relativePath, href);
+    if (!normalized) {
+      return;
+    }
+    if (HTML_EXTENSIONS.has(effectiveViewExtension(normalized.path)) || normalized.directoryHint) {
+      documentRefs.push({ tag: 'a', attr: 'href', value: href, kind: 'document' });
+    }
+  });
+
+  const localAssets = (await Promise.all(assetRefs.map((ref) => describeLocalReference({
+    repo,
+    rootPath,
+    sourceRelativePath: relativePath,
+    accessContext,
+    ...ref,
+  })))).filter(Boolean);
+  const navigationLinks = (await Promise.all(documentRefs.map((ref) => describeLocalReference({
+    repo,
+    rootPath,
+    sourceRelativePath: relativePath,
+    accessContext,
+    ...ref,
+  })))).filter(Boolean);
+
+  return {
+    ok: true,
+    kind: 'html-render-validation',
+    repo,
+    relativePath,
+    renderMode: rawHtmlEnabled ? 'raw-html-iframe' : 'sanitized-html',
+    source: {
+      bytes: stat.size,
+      mtimeMs: stat.mtimeMs,
+      contentType: RAW_HTML_MIME_TYPE,
+    },
+    urls: {
+      view: appendAccessToken(buildHref(repo, relativePath), accessContext),
+      raw: rawHtmlEnabled ? appendAccessToken(buildRawHref(repo, relativePath), accessContext) : null,
+      asset: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
+      assetBase: buildAssetBaseHref(repo, relativePath, accessContext),
+    },
+    localAssets,
+    navigationLinks,
+    summary: {
+      localAssetCount: localAssets.length,
+      missingLocalAssetCount: localAssets.filter((entry) => !entry.exists).length,
+      unsupportedLocalAssetCount: localAssets.filter((entry) => !entry.supportedAsset).length,
+      navigationLinkCount: navigationLinks.length,
+      missingNavigationTargetCount: navigationLinks.filter((entry) => !entry.exists).length,
+    },
+  };
 }
 
 function sendGrantJsonError(res, status, error) {
@@ -581,6 +789,40 @@ function createApp(options = {}) {
     }
 
     const extension = effectiveViewExtension(relativePath);
+    if (parseBooleanQuery(req.query && req.query.validate) && HTML_EXTENSIONS.has(extension)) {
+      let sourceBuffer;
+      try {
+        sourceBuffer = await fs.readFile(resolved);
+      } catch (error) {
+        console.error('Failed to read HTML file for validation', { resolved, error });
+        res.status(500).json({ ok: false, error: 'Failed to read file.' });
+        return;
+      }
+
+      if (isBinaryBuffer(sourceBuffer)) {
+        res.status(415).json({ ok: false, error: 'Binary files are not supported.' });
+        return;
+      }
+
+      try {
+        const validation = await buildHtmlRenderValidation({
+          repo,
+          rootPath,
+          relativePath,
+          stat,
+          source: sourceBuffer.toString('utf8'),
+          rawHtmlEnabled,
+          accessContext,
+        });
+        res.status(200).json(validation);
+        return;
+      } catch (error) {
+        console.error('Failed to validate HTML render', { resolved, error });
+        res.status(500).json({ ok: false, error: 'Failed to validate HTML render.' });
+        return;
+      }
+    }
+
     if (IMAGE_EXTENSIONS.has(extension)) {
       const parentRel = parentPath(relativePath);
       const html = renderImagePage({
