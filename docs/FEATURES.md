@@ -156,6 +156,12 @@ and the nearest existing ancestor of a new path, preventing symlink-ancestor
 escapes. Missing and unauthorized managed paths have the same not-found
 response, and registry responses omit host filesystem roots.
 
+`GET /api/search` performs bounded path and full-text matching over supported
+text formats; `GET /api/search/suggest` performs bounded path suggestions.
+Both prune traversal using the caller's repository and path scopes, silently
+exclude requested scopes the caller cannot see, cap work and result counts, and
+report when a response was truncated.
+
 ## Themes
 
 10 built-in color themes, each with dark and light variants:

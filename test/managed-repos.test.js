@@ -167,3 +167,50 @@ test('managed repo HTTP CRUD is scoped, conflict-aware, non-leaking, and recover
   assert.equal(hardDeleteTrash.status, 200);
   assert.equal((await hardDeleteTrash.json()).deleted, 'hard');
 });
+
+test('search and suggest responses contain only caller-visible managed paths', async (t) => {
+  const fixture = await startFixture();
+  t.after(() => fixture.close());
+  const create = await fixture.request('/api/managed-repos', {
+    method: 'POST',
+    headers: auth('managed-admin-placeholder', { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ repoId: 'shared-notes', rootPath: path.join(fixture.allowRoot, 'shared-notes') }),
+  });
+  assert.equal(create.status, 201);
+
+  for (const [filePath, content] of [
+    ['notes/visible-topic.md', 'common scope marker in visible content\n'],
+    ['private/hidden-topic.md', 'common scope marker in private content\n'],
+  ]) {
+    const write = await fixture.request(`/api/managed-repos/shared-notes/files/${filePath}`, {
+      method: 'PUT',
+      headers: auth('maintainer-placeholder', { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ content, expectedMtimeMs: null }),
+    });
+    assert.equal(write.status, 201);
+  }
+
+  const search = await fixture.request('/api/search?q=common%20scope%20marker&limit=10&maxEntries=50', {
+    headers: auth('reader-placeholder'),
+  });
+  assert.equal(search.status, 200);
+  const searchText = await search.text();
+  const searchPayload = JSON.parse(searchText);
+  assert.deepEqual(searchPayload.results.map((entry) => entry.path), ['notes/visible-topic.md']);
+  assert.equal(searchText.includes('hidden-topic'), false);
+  assert.equal(searchText.includes('private content'), false);
+
+  const suggest = await fixture.request('/api/search/suggest?q=topic&limit=10', {
+    headers: auth('reader-placeholder'),
+  });
+  assert.equal(suggest.status, 200);
+  const suggestText = await suggest.text();
+  assert.deepEqual(JSON.parse(suggestText).suggestions.map((entry) => entry.path), ['notes/visible-topic.md']);
+  assert.equal(suggestText.includes('hidden-topic'), false);
+
+  const excludedScope = await fixture.request('/api/search?q=common&scope=unknown-repo', {
+    headers: auth('reader-placeholder'),
+  });
+  assert.equal(excludedScope.status, 200);
+  assert.deepEqual((await excludedScope.json()).results, []);
+});

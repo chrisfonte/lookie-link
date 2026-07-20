@@ -22,6 +22,8 @@
 | `DELETE /api/managed-repos/:repo/files/<path>` | Soft-delete a file by default, or hard-delete with `?hard=1` |
 | `POST /api/managed-repos/:repo/trash/:trashId/restore` | Restore a soft-deleted file |
 | `DELETE /api/managed-repos/:repo/trash/:trashId` | Permanently remove a soft-deleted file |
+| `GET /api/search?q=<text>` | Search path and text content across caller-visible managed files |
+| `GET /api/search/suggest?q=<text>` | Suggest caller-visible managed paths |
 | `GET /api/grants` | List managed grants (`Authorization: Bearer <admin-token>`) |
 | `POST /api/grants` | Create a managed grant and return token + issue comment helper |
 | `POST /api/grants/:grantId/renew` | Renew a managed grant and return issue comment helper |
@@ -58,6 +60,13 @@ returns `409` if the file changed; passing `null` asserts that it does not exist
 Tree and change responses accept `maxEntries` (capped at 5,000), and tree depth
 is capped at 10. Soft delete returns a `trashId` that can be restored or later
 hard-deleted.
+
+Search and suggest accept repeatable or comma-separated `scope=<repo>`, plus
+bounded `limit` and `maxEntries` parameters. Result limits are capped at 100,
+traversal at 5,000 entries, each searched file at 1 MiB, and aggregate content
+reads at 10 MiB. Responses report `truncated` and their effective limits.
+Traversal prunes directories outside the caller's path scopes before reading
+file contents; inaccessible repo names and paths never appear in results.
 
 ## HTML Bundle Validation
 

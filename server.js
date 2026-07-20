@@ -33,6 +33,7 @@ const {
 } = require('./lib/grant-store');
 const { ApiKeyStore } = require('./lib/api-key-store');
 const { ManagedRepoStore } = require('./lib/managed-repo-store');
+const { searchManagedRepos, suggestManagedRepos } = require('./lib/managed-repo-search');
 const {
   safeResolve,
   toPosixPath,
@@ -850,6 +851,68 @@ function createApp(options = {}) {
     } catch (error) {
       const status = managedErrorStatus(error);
       res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+    }
+  });
+
+  app.get('/api/search', async (req, res) => {
+    if (!managedRepoStore || !managedRepoStore.isEnabled()) {
+      managedNotFound(res);
+      return;
+    }
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (!query) {
+      res.status(400).json({ ok: false, error: 'q is required.' });
+      return;
+    }
+    if (query.length > 256) {
+      res.status(400).json({ ok: false, error: 'q must be at most 256 characters.' });
+      return;
+    }
+    const accessContext = resolveAccessContext(req);
+    try {
+      const result = await searchManagedRepos({
+        store: managedRepoStore,
+        repos: managedRepoStore.listRepos().repos,
+        query,
+        scope: req.query.scope,
+        limit: req.query.limit,
+        maxEntries: req.query.maxEntries,
+        canView: (repo, relativePath, type) => canAccessPath(accessContext, 'view', repo, relativePath, type),
+      });
+      res.status(200).json({ ok: true, ...result });
+    } catch (error) {
+      res.status(500).json({ ok: false, error: 'Search failed.' });
+    }
+  });
+
+  app.get('/api/search/suggest', async (req, res) => {
+    if (!managedRepoStore || !managedRepoStore.isEnabled()) {
+      managedNotFound(res);
+      return;
+    }
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (!query) {
+      res.status(400).json({ ok: false, error: 'q is required.' });
+      return;
+    }
+    if (query.length > 256) {
+      res.status(400).json({ ok: false, error: 'q must be at most 256 characters.' });
+      return;
+    }
+    const accessContext = resolveAccessContext(req);
+    try {
+      const result = await suggestManagedRepos({
+        store: managedRepoStore,
+        repos: managedRepoStore.listRepos().repos,
+        query,
+        scope: req.query.scope,
+        limit: req.query.limit,
+        maxEntries: req.query.maxEntries,
+        canView: (repo, relativePath, type) => canAccessPath(accessContext, 'view', repo, relativePath, type),
+      });
+      res.status(200).json({ ok: true, ...result });
+    } catch (error) {
+      res.status(500).json({ ok: false, error: 'Suggestion lookup failed.' });
     }
   });
 
