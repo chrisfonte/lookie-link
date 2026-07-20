@@ -1059,15 +1059,24 @@ tbody tr:last-child td {
 
 /* Annotations (Phase 1) */
 .lookie-annotate-btn {
-  display: inline-block; margin-left: 0.4rem; padding: 0 0.3rem;
-  font-size: 0.8em; line-height: 1.4; background: transparent;
-  border: 1px solid var(--border); border-radius: 4px;
-  color: var(--text-soft); cursor: pointer; opacity: 0.55;
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  margin-left: 0.4rem; padding: 0.08rem 0.45rem;
+  font-size: 0.76em; line-height: 1.4; background: transparent;
+  border: 1px solid var(--border); border-radius: 999px;
+  color: var(--text-soft); cursor: pointer; opacity: 0.72;
   vertical-align: baseline;
   transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
+.lookie-annotate-btn { display: none; }
+.lookie-annotations-active .lookie-annotate-btn {
+  display: inline-flex;
+}
 .lookie-annotate-btn:hover, .lookie-annotate-btn:focus {
   opacity: 1; color: var(--accent); border-color: var(--accent);
+}
+.toolbar-btn-annotation-count[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .lookie-annotation-card {
   margin: 0.4rem 0 1.1rem; padding: 0.7rem 0.85rem 0.85rem;
@@ -1076,11 +1085,51 @@ tbody tr:last-child td {
   font-size: 0.93em;
 }
 .lookie-annotation-card-header { font-weight: 600; color: var(--text-soft); margin-bottom: 0.55rem; }
-.lookie-annotation-item { padding: 0.45rem 0; border-top: 1px dashed var(--border); }
+.lookie-annotation-item { padding: 0.32rem 0; border-top: 1px dashed var(--border); }
 .lookie-annotation-item:first-of-type { border-top: none; }
-.lookie-annotation-item-header {
-  display: flex; align-items: center; gap: 0.55rem;
-  margin-bottom: 0.3rem; font-size: 0.85em; color: var(--text-soft);
+.lookie-annotation-summary {
+  display: grid;
+  grid-template-columns: auto auto auto auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.48rem;
+  row-gap: 0.14rem;
+  min-width: 0;
+  font-size: 0.85em; color: var(--text-soft);
+  cursor: pointer;
+  list-style: none;
+}
+.lookie-annotation-summary::-webkit-details-marker { display: none; }
+.lookie-annotation-summary::before {
+  content: '▸';
+  color: var(--text-soft);
+  transform: translateY(-0.02rem);
+}
+.lookie-annotation-item[open] > .lookie-annotation-summary { margin-bottom: 0.3rem; }
+.lookie-annotation-item[open] > .lookie-annotation-summary::before { content: '▾'; }
+.lookie-annotation-preview {
+  min-width: 0;
+  grid-column: 1 / -1;
+  padding-left: 1.35rem;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.lookie-annotation-reply-count {
+  flex: 0 0 auto;
+  justify-self: end;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-soft);
+  font-size: 0.78em;
+}
+.lookie-annotation-reply-count-empty {
+  visibility: hidden;
+}
+.lookie-annotation-detail {
+  padding-left: 1.4rem;
 }
 .lookie-annotation-state {
   text-transform: uppercase; font-size: 0.72em; letter-spacing: 0.07em;
@@ -1091,7 +1140,11 @@ tbody tr:last-child td {
 .lookie-annotation-state-claimed { background: rgba(0, 132, 255, 0.16); color: #196edc; }
 .lookie-annotation-state-resolved { background: rgba(0, 168, 92, 0.16); color: #008a4d; }
 .lookie-annotation-author { font-weight: 600; color: var(--text); }
-.lookie-annotation-time { margin-left: auto; font-variant-numeric: tabular-nums; }
+.lookie-annotation-time {
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .lookie-annotation-body { white-space: pre-wrap; margin: 0.15rem 0 0.45rem; color: var(--text); }
 .lookie-annotation-replies {
   margin: 0.3rem 0 0.4rem 0.4rem; padding-left: 0.6rem;
@@ -1125,3 +1178,48 @@ tbody tr:last-child td {
 }
 .lookie-annotation-submit { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .lookie-annotation-cancel { background: transparent; color: var(--text-soft); }
+.lookie-line-range-root,
+.lookie-annotations-stale {
+  margin: 1rem 0 1.4rem;
+}
+.lookie-line-range-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0 0 0.9rem;
+  padding: 0.7rem 0.85rem 0.85rem;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+}
+.lookie-line-range-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+.lookie-line-range-form input,
+.lookie-line-range-form textarea {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg-code);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.lookie-line-range-form textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+}
+.lookie-line-range-groups:empty {
+  display: none;
+}
+.lookie-stale-title {
+  margin: 0 0 0.65rem;
+  font-size: 0.95rem;
+  color: var(--text-soft);
+}
+@media (max-width: 720px) {
+  .lookie-line-range-row {
+    grid-template-columns: 1fr;
+  }
+}

@@ -130,11 +130,16 @@ Behavior:
 
 When `server.enableAnnotations: true`, the document viewer adds an inline annotation layer to every rendered file.
 
-- A small 💬 button appears next to every anchored heading (markdown) and YAML key path. Clicking it opens an inline form to attach an annotation to that anchor.
-- Stored annotations render inline next to their anchor as a styled card, showing author, body, state (`open` / `claimed` / `resolved`), claim metadata, and replies.
-- State controls: **Claim**, **Resolve**, **Reopen**, **Reply**. Each action calls the `/api/annotations/<repo>/<path>` API and refreshes inline.
+- The toolbar exposes a `💬 Annotate` mode. Existing annotations stay visible; add-comment icons appear next to anchored markdown/HTML headings and YAML key paths only while annotation mode is active.
+- Authored HTML can declare a deliberate target with `data-lookie-annotation-anchor="anchor-id"`; Lookie-Link assigns that ID, adds an annotation affordance, and mounts its annotation cards after the target.
+- Stored annotations render as collapsed cards by default. The summary shows state (`open` / `claimed` / `resolved`), author/time, a body preview, and reply count; expanding it reveals the full thread and actions.
+- State controls include **Claim**, **Resolve**, **Reopen**, **Reply**, and **Redact**. Redaction scrubs annotation and reply bodies, resolves the item, and preserves minimal audit metadata.
+- The `💬 N` toolbar chip reports the total count and toggles resolved annotations, which are hidden by default.
+- Plain-text and code views expose a `#L<start>-L<end>` line-range picker.
+- Annotations whose anchors no longer exist remain available in a `Stale anchors` section instead of being dropped.
 - Annotation data lives at `<repoRoot>/.lookie-link/annotations/<repo>/<relative-path>.json` (sidecar). Source files are never mutated.
 - The flag is independent of `enableEditing` — annotations are available on the default safe configuration.
+- Reads require `view` access. Creating, claiming, resolving, reopening, replying, and redacting require `write` access.
 
 See `docs/ANNOTATIONS-SPEC.md` for the full sidecar schema, phase split, and the agent-feedback loop the API enables. The HTTP transport and viewer UX are both available.
 
