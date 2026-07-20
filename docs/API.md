@@ -24,6 +24,9 @@
 | `DELETE /api/managed-repos/:repo/trash/:trashId` | Permanently remove a soft-deleted file |
 | `GET /api/search?q=<text>` | Search path and text content across caller-visible managed files |
 | `GET /api/search/suggest?q=<text>` | Suggest caller-visible managed paths |
+| `POST /api/publish` | Create a publish slug and immutable revision 1 |
+| `POST /api/publish/:slug` | Create the next immutable revision with an `expectedRevision` guard |
+| `POST /api/publish/:slug/revoke` | Revoke current and historical readback for a publish slug |
 | `GET /api/grants` | List managed grants (`Authorization: Bearer <admin-token>`) |
 | `POST /api/grants` | Create a managed grant and return token + issue comment helper |
 | `POST /api/grants/:grantId/renew` | Renew a managed grant and return issue comment helper |
@@ -47,6 +50,7 @@ Route enforcement in phase 1:
 - `/edit/*` and `/api/save/*` require `write` (`edit` remains a backward-compatible alias)
 - `/api/preview/*` requires `view` and still respects global editing mode
 - annotation reads require `view`; annotation creates and updates require `write`; all annotation routes return `404` when annotations are disabled
+- `/api/publish*` mutations require repo-level `publish` access to the configured publish repo; path-scoped publish credentials are rejected. Readback under that repo requires normal path-aware `view` access.
 
 Invalid tokens return `403`. Missing tokens return `401` when unauthenticated human access is restricted.
 
@@ -67,6 +71,25 @@ traversal at 5,000 entries, each searched file at 1 MiB, and aggregate content
 reads at 10 MiB. Responses report `truncated` and their effective limits.
 Traversal prunes directories outside the caller's path scopes before reading
 file contents; inaccessible repo names and paths never appear in results.
+
+## Publish Endpoints
+
+Publishing is available when `publish.areaPath` is configured and `publish.enabled` is not `false`.
+
+`POST /api/publish` accepts a non-empty `files` array and an optional slug, `entryPath`, public `metadata`, and non-projected `privateMetadata`. File content is UTF-8 by default; use `"encoding": "base64"` for binary data. It returns `201` with the slug, revision, publication projection, and view URL.
+
+`POST /api/publish/:slug` accepts the same complete-bundle payload plus a mandatory positive `expectedRevision`. Every successful call creates a new immutable numbered snapshot. A stale guard returns `409` with `currentRevision` and the safe current publication projection.
+
+`POST /api/publish/:slug/revoke` requires `{ "reason": "..." }`. After revocation, current and historical readback return `410`.
+
+Readback reuses the existing routes under a virtual repo namespace:
+
+- `/view/published/<slug>/<path>`
+- `/asset/published/<slug>/<path>`
+- `/raw/published/<slug>/<path>` when raw HTML is enabled
+- append `?version=<positive-integer>` to select a historical revision
+
+The configured `publish.repoId` replaces `published` in these paths when customized. Published metadata is never interpreted as an authorization grant or source-repository mapping, and public metadata containing absolute filesystem paths is rejected. `privateMetadata` and the publish area's control files are not reachable through published readback. See [PUBLISHING.md](PUBLISHING.md) for the complete contract and examples.
 
 ## HTML Bundle Validation
 
