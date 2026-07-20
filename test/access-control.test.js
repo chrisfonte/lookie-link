@@ -22,7 +22,14 @@ async function makeFixture() {
   await fs.mkdir(betaRoot, { recursive: true });
 
   await fs.writeFile(path.join(alphaRoot, 'README.md'), '# Alpha\n');
-  await fs.writeFile(path.join(alphaRoot, 'docs', 'guide.md'), '# Guide\n![Diagram](diagram.png)\n');
+  await fs.writeFile(path.join(alphaRoot, 'docs', 'guide.md'), [
+    '# Guide',
+    '![Diagram](diagram.png)',
+    '[Beta relative](../../beta/notes.md#beta)',
+    `[Beta absolute](${path.join(betaRoot, 'notes.md')}#beta)`,
+    '[[beta-notes#beta|Beta wiki]]',
+    '',
+  ].join('\n'));
   await fs.writeFile(path.join(alphaRoot, 'docs', 'landing.htm'), htmlFixture);
   await fs.writeFile(
     path.join(alphaRoot, 'docs', 'settings.yaml'),
@@ -40,6 +47,7 @@ async function makeFixture() {
   await fs.writeFile(path.join(alphaRoot, 'docs', 'diagram.png'), 'png-bytes');
   await fs.writeFile(path.join(alphaRoot, 'secret', 'hidden.md'), '# Hidden\n');
   await fs.writeFile(path.join(betaRoot, 'notes.md'), '# Beta\n');
+  await fs.writeFile(path.join(betaRoot, 'beta-notes.md'), '# Beta Notes\n');
 
   return {
     root,
@@ -162,15 +170,35 @@ test('GET /api/repos returns repo discovery payload for unrestricted humans', as
     assert.ok(reposByName.has('beta'));
 
     const alphaEntry = reposByName.get('alpha');
-    assert.equal(alphaEntry.rootPath, fixture.mappings.alpha);
+    assert.equal(Object.prototype.hasOwnProperty.call(alphaEntry, 'rootPath'), false);
     assert.equal(alphaEntry.viewUrl, '/view/alpha/');
     assert.equal(alphaEntry.assetUrl, '/asset/alpha/');
     for (const entry of payload.repos) {
       assert.equal(typeof entry.repo, 'string');
-      assert.equal(typeof entry.rootPath, 'string');
+      assert.equal(Object.prototype.hasOwnProperty.call(entry, 'rootPath'), false);
       assert.equal(typeof entry.viewUrl, 'string');
       assert.equal(typeof entry.assetUrl, 'string');
     }
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('rendered views resolve authorized cross-repo and wiki links without disclosing roots', async () => {
+  const fixture = await makeFixture();
+  const server = await startTestServer({ mappings: fixture.mappings });
+
+  try {
+    const response = await server.request('/view/alpha/docs/guide.md');
+    assert.equal(response.status, 200);
+    const html = await response.text();
+
+    assert.match(html, /href="\/view\/beta\/notes\.md#beta">Beta relative<\/a>/);
+    assert.match(html, /href="\/view\/beta\/notes\.md#beta">Beta absolute<\/a>/);
+    assert.match(html, /href="\/view\/beta\/beta-notes\.md#beta" class="cross-link">Beta wiki<\/a>/);
+    assert.doesNotMatch(html, new RegExp(fixture.root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.doesNotMatch(html, /rootPath|repoMappings/);
   } finally {
     await server.close();
     await fs.rm(fixture.root, { recursive: true, force: true });
@@ -212,7 +240,7 @@ test('GET /api/repos filters by grant scope and rejects unauthenticated/invalid 
     assert.equal(scopedPayload.count, 1);
     assert.equal(scopedPayload.repos.length, 1);
     assert.equal(scopedPayload.repos[0].repo, 'alpha');
-    assert.equal(scopedPayload.repos[0].rootPath, fixture.mappings.alpha);
+    assert.equal(Object.prototype.hasOwnProperty.call(scopedPayload.repos[0], 'rootPath'), false);
     assert.equal(scopedPayload.repos[0].viewUrl, '/view/alpha/');
     assert.equal(scopedPayload.repos[0].assetUrl, '/asset/alpha/');
     assert.ok(!scopedPayload.repos.some((entry) => entry.repo === 'beta'));

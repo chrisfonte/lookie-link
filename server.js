@@ -316,6 +316,16 @@ function createApp(options = {}) {
     );
     return grantAccess || accessContext;
   };
+  const linkResolutionContext = (accessContext) => ({
+    repoMappings: mappings,
+    canResolveLink: (repo, relativePath, isDirectory) => canAccessPath(
+      accessContext,
+      'view',
+      repo,
+      relativePath,
+      isDirectory ? 'directory' : 'file'
+    ),
+  });
 
   const authenticateGrantAdmin = (req) => {
     if (!grantStore || !grantStore.isEnabled()) {
@@ -470,9 +480,8 @@ function createApp(options = {}) {
     }
     const repos = Object.entries(mappings)
       .filter(([repo]) => canAccessPath(accessContext, 'view', repo, '', 'directory'))
-      .map(([repo, rootPath]) => ({
+      .map(([repo]) => ({
         repo,
-        rootPath,
         viewUrl: `/view/${encodeURIComponent(repo)}/`,
         assetUrl: `/asset/${encodeURIComponent(repo)}/`,
       }));
@@ -718,6 +727,7 @@ function createApp(options = {}) {
     const html = renderDocumentPage({
       repo,
       repoRoot: rootPath,
+      ...linkResolutionContext(accessContext),
       relativePath,
       source,
       parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
@@ -811,6 +821,7 @@ function createApp(options = {}) {
       repo,
       relativePath,
       repoRoot: rootPath,
+      ...linkResolutionContext(accessContext),
       source: sourceBuffer.toString('utf8'),
       mtimeMs: Math.trunc(stat.mtimeMs),
       mtime: formatMTime(stat.mtime),
@@ -1024,6 +1035,7 @@ function createApp(options = {}) {
     const html = renderPreviewHtml({
       repo,
       repoRoot: rootPath,
+      ...linkResolutionContext(accessContext),
       relativePath,
       source: content,
       queryToken: accessContext.queryToken,
