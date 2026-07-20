@@ -6,12 +6,47 @@ const fs = require('node:fs');
 const fsPromises = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { JSDOM } = require('jsdom');
 
 const {
   decodeEmbedHtmlBuffer,
   transformEmbedHtml,
 } = require('../lib/embed-html');
 const { renderDocumentPage } = require('../lib/renderer');
+
+const CURRENT_ANNOTATION_SELECTORS = [
+  '[data-annotations-mount]',
+  '[data-annotate-trigger]',
+  '[data-annotations-stale]',
+  '[data-annotations-toggle]',
+  '[data-rendered-view]',
+];
+
+function assertCurrentAnnotationContract(html) {
+  const document = new JSDOM(html).window.document;
+  for (const selector of CURRENT_ANNOTATION_SELECTORS) {
+    assert.ok(document.querySelector(selector), `missing current annotation selector ${selector}`);
+  }
+
+  const mounts = Array.from(document.querySelectorAll('[data-annotations-mount][data-anchor-id]'));
+  const triggers = Array.from(document.querySelectorAll('[data-annotate-trigger][data-anchor-id]'));
+  const anchors = Array.from(document.querySelectorAll('[data-lookie-annotation-anchor]'));
+  assert.ok(mounts.length > 0, 'current annotation contract requires at least one anchored mount');
+  assert.equal(mounts.length, anchors.length, 'each declared annotation anchor must have a mount');
+  assert.equal(triggers.length, mounts.length, 'each annotation mount must have an annotate trigger');
+  for (const mount of mounts) {
+    const anchorId = mount.getAttribute('data-anchor-id');
+    assert.ok(document.getElementById(anchorId), `annotation mount ${anchorId} must resolve to an anchor node`);
+    assert.ok(
+      triggers.some((trigger) => trigger.getAttribute('data-anchor-id') === anchorId),
+      `annotation mount ${anchorId} must have a matching annotate trigger`
+    );
+  }
+
+  const oldAnchors = Array.from(document.querySelectorAll('a.anchor-link[data-anchor-id]'));
+  const isOldAnchorLinkOnlyContract = oldAnchors.length > 0 && mounts.length === 0 && triggers.length === 0;
+  assert.equal(isOldAnchorLinkOnlyContract, false, 'obsolete anchor-link-only markup must not be the annotation mount');
+}
 
 async function makeFixture() {
   const fixtureRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'lookie-embed-html-'));
@@ -100,14 +135,14 @@ test('embed annotations are opt-in and query credentials are limited to required
   const fixture = await makeFixture();
   try {
     const enabled = transformEmbedHtml(
-      '<h1>Annotate me</h1><img src="image.png"><a href="guide.html?token=authored-token&mode=print">Guide</a><p data-secret="bearer&amp;example">Credential</p>',
+      '<h1>Annotate me</h1><h2 id="second-target">Second target</h2><img src="image.png"><a href="guide.html?token=authored-token&mode=print">Guide</a><p data-secret="bearer&amp;example">Credential</p>',
       options(fixture, {
         annotationsEnabled: true,
         queryToken: 'query-example',
         sensitiveValues: ['bearer&example'],
       })
     );
-    assert.match(enabled, /<h1 id="annotate-me">Annotate me<a class="anchor-link"/);
+    assertCurrentAnnotationContract(enabled);
     assert.match(enabled, /lookie-link-annotations-bootstrap/);
     assert.match(enabled, /"queryToken":"query-example"/);
     assert.match(enabled, /src="\/asset\/alpha\/docs\/image\.png\?token=query-example"/);
@@ -117,10 +152,20 @@ test('embed annotations are opt-in and query credentials are limited to required
 
     const disabled = transformEmbedHtml('<h1>Plain</h1>', options(fixture, { annotationsEnabled: false }));
     assert.doesNotMatch(disabled, /lookie-link-annotations-bootstrap/);
-    assert.doesNotMatch(disabled, /class="anchor-link"/);
+    for (const selector of CURRENT_ANNOTATION_SELECTORS) {
+      assert.equal(new JSDOM(disabled).window.document.querySelector(selector), null);
+    }
   } finally {
     await fsPromises.rm(fixture.fixtureRoot, { recursive: true, force: true });
   }
+});
+
+test('annotation contract negative canary rejects obsolete anchor-link-only markup', () => {
+  const obsolete = '<!doctype html><body><h1 id="legacy">Legacy<a class="anchor-link" href="#legacy" data-anchor-id="legacy">🔗</a></h1></body>';
+  assert.throws(
+    () => assertCurrentAnnotationContract(obsolete),
+    /missing current annotation selector \[data-annotations-mount\]/
+  );
 });
 
 test('embed output redacts host roots and inaccessible cross-repo targets', async () => {

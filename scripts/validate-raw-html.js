@@ -19,8 +19,17 @@ const fs = require('node:fs/promises');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
+const { JSDOM } = require('jsdom');
 
 const { createApp } = require('../server');
+
+const CURRENT_ANNOTATION_SELECTORS = [
+  '[data-annotations-mount]',
+  '[data-annotate-trigger]',
+  '[data-annotations-stale]',
+  '[data-annotations-toggle]',
+  '[data-rendered-view]',
+];
 
 function fetchResponse(server, urlPath) {
   return new Promise((resolve, reject) => {
@@ -61,6 +70,7 @@ const FLASHCARDS_HTML = [
   '<!doctype html>',
   '<html><head><title>Flashcards</title></head>',
   '<body>',
+  '  <h1>Flashcards</h1>',
   '  <div id="root"></div>',
   '  <script>document.getElementById("root").textContent = "flipped";</script>',
   '</body></html>',
@@ -118,6 +128,14 @@ async function run() {
       assert.match(embedResp.text, /data-lookie-link-theme="light"/, '/embed accepts the framed theme mode');
       assert.match(embedResp.text, /data-lookie-link-scheme="teal"/, '/embed accepts the framed color scheme');
       assert.match(embedResp.text, /lookie-link-annotations-bootstrap/, '/embed mounts annotations when enabled');
+      const embedDocument = new JSDOM(embedResp.text).window.document;
+      for (const selector of CURRENT_ANNOTATION_SELECTORS) {
+        assert.ok(embedDocument.querySelector(selector), `/embed must emit current annotation selector ${selector}`);
+      }
+      const oldAnchorLinkOnly = embedDocument.querySelector('a.anchor-link[data-anchor-id]')
+        && !embedDocument.querySelector('[data-annotations-mount][data-anchor-id]')
+        && !embedDocument.querySelector('[data-annotate-trigger][data-anchor-id]');
+      assert.equal(oldAnchorLinkOnly, false, '/embed must not regress to obsolete anchor-link-only annotation markup');
       assert.match(embedResp.text, /<script>document\.getElementById/, 'authored inline scripts survive /embed');
       assert.notDeepEqual(embedResp.body, enabledResp.body, '/embed is explicitly transformed');
 
