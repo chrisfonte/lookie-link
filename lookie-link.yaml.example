@@ -48,16 +48,16 @@ repositories:
 #             - README.md
 #       permissions:
 #         view: true
-#         edit: false
-#     docs_editor:
-#       secretEnv: LOOKIE_TOKEN_DOCS_EDITOR
+#         write: false
+#     docs_writer:
+#       secretEnv: LOOKIE_TOKEN_DOCS_WRITER
 #       repos:
 #         docs:
 #           paths:
 #             - drafts/
 #       permissions:
 #         view: true
-#         edit: true
+#         write: true
 #   grants:
 #     storePath: ~/.local/share/lookie-link/grants.yaml
 #     projectionPath: ~/.local/share/lookie-link/grants-projection.yaml
