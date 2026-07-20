@@ -76,6 +76,12 @@ const {
   decodeEmbedHtmlBuffer,
   transformEmbedHtml,
 } = require('./lib/embed-html');
+const {
+  buildAgentDiscoveryDocument,
+  buildWhoAmIDocument,
+} = require('./lib/agent-discovery');
+
+const { version: LOOKIE_LINK_VERSION } = require('./package.json');
 
 const IMAGE_MIME_TYPES = {
   '.png': 'image/png',
@@ -542,6 +548,50 @@ function sendGrantJsonError(res, status, error) {
 
 function sendApiKeyJsonError(res, status, error) {
   res.status(status).json({ ok: false, error });
+}
+
+function inferBaseUrl(req) {
+  return `${req.protocol}://${req.get('host')}`;
+}
+
+function getRouteAvailability(app) {
+  const routes = app._router && Array.isArray(app._router.stack)
+    ? app._router.stack
+      .filter((layer) => layer.route)
+      .map((layer) => ({
+        path: layer.route.path,
+        methods: layer.route.methods || {},
+      }))
+    : [];
+  const has = (method, routePath) => routes.some((route) => (
+    route.path === routePath && route.methods[method] === true
+  ));
+
+  return {
+    agentDiscovery: has('get', '/.well-known/agent.json'),
+    whoami: has('get', '/api/whoami'),
+    repos: has('get', '/api/repos'),
+    view: has('get', '/view/*'),
+    assetRead: has('get', '/asset/:repo/*'),
+    edit: has('get', '/edit/*'),
+    save: has('post', '/api/save/*'),
+    preview: has('post', '/api/preview/*'),
+    annotationRead: has('get', '/api/annotations/:repo/*'),
+    annotationCreate: has('post', '/api/annotations/:repo/*'),
+    annotationUpdate: has('patch', '/api/annotations/:repo/*'),
+    rawHtml: has('get', '/raw/:repo/*'),
+    embeddedHtml: has('get', '/embed/:repo/*'),
+    managedRepoList: has('get', '/api/managed-repos'),
+    managedFileRead: has('get', '/api/managed-repos/:repo/files/*'),
+    managedFileWrite: has('put', '/api/managed-repos/:repo/files/*'),
+    managedTree: has('get', '/api/managed-repos/:repo/tree'),
+    managedChanges: has('get', '/api/managed-repos/:repo/changes'),
+    search: has('get', '/api/search'),
+    searchSuggest: has('get', '/api/search/suggest'),
+    publishCreate: has('post', '/api/publish'),
+    publishUpdate: has('post', '/api/publish/:slug'),
+    publishRevoke: has('post', '/api/publish/:slug/revoke'),
+  };
 }
 
 function createApp(options = {}) {
@@ -1271,20 +1321,48 @@ function createApp(options = {}) {
     res.status(200).json({ status: 'ok', editingEnabled, annotationsEnabled, rawHtmlEnabled });
   });
 
+  const buildDiscoveryOptions = (req) => ({
+    accessContext: resolveAccessContext(req),
+    mappings,
+    version: LOOKIE_LINK_VERSION,
+    baseUrl: inferBaseUrl(req),
+    editingEnabled,
+    annotationsEnabled,
+    rawHtmlEnabled,
+    managedRepoStore,
+    publishStore,
+    publishedRepo,
+    routeAvailability: getRouteAvailability(app),
+  });
+
+  app.get('/.well-known/agent.json', (req, res) => {
+    const optionsForCaller = buildDiscoveryOptions(req);
+    if (optionsForCaller.accessContext.mode === 'denied') {
+      sendAccessError(res, optionsForCaller.accessContext, true);
+      return;
+    }
+    res.status(200).json(buildAgentDiscoveryDocument(optionsForCaller));
+  });
+
+  app.get('/api/whoami', (req, res) => {
+    const optionsForCaller = buildDiscoveryOptions(req);
+    if (optionsForCaller.accessContext.mode === 'denied') {
+      sendAccessError(res, optionsForCaller.accessContext, true);
+      return;
+    }
+    res.status(200).json(buildWhoAmIDocument(optionsForCaller));
+  });
+
   app.get('/api/repos', (req, res) => {
     const accessContext = resolveAccessContext(req);
     if (accessContext.mode === 'denied') {
-      sendAccessError(res, accessContext);
+      sendAccessError(res, accessContext, true);
       return;
     }
-    const managedRepoIds = new Set(managedRepoStore && managedRepoStore.isEnabled()
-      ? managedRepoStore.listRepos().repos.map((repo) => repo.id)
-      : []);
-    const repos = Object.entries(mappings)
-      .filter(([repo]) => canAccessPath(accessContext, 'view', repo, '', 'directory'))
-      .map(([repo, rootPath]) => ({
+    const repos = Object.keys(mappings)
+      .filter((repo) => canAccessPath(accessContext, 'view', repo, '', 'directory'))
+      .map((repo) => ({
         repo,
-        ...(managedRepoIds.has(repo) ? {} : { rootPath }),
         viewUrl: `/view/${encodeURIComponent(repo)}/`,
         assetUrl: `/asset/${encodeURIComponent(repo)}/`,
       }));

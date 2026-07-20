@@ -334,12 +334,15 @@ POST /api/grants/request
 
 CLI/API contract:
 
-- `lookie whoami` / `GET /api/whoami` should return the presented subject,
-  company, repo/path scopes, expiry, and any associated Paperclip issue/grant
-  metadata.
-- `lookie repos` / `GET /api/repos` should list only repos and path roots
-  visible to the presented token. It must not reveal unauthorized repo names or
-  directory names.
+- `GET /api/whoami` returns the presented subject, effective permissions,
+  caller-visible repo/path scopes, live capabilities, and authorized endpoint
+  templates. It deliberately omits private grant, audit, and storage metadata.
+- `GET /.well-known/agent.json` exposes the same caller-scoped surface in a
+  runtime discovery document. Missing and invalid credentials receive the same
+  `401` / `403` handling as `/api/repos`.
+- `GET /api/repos` lists only repos visible to the presented token. It must not
+  reveal unauthorized repo names, directory names, source roots, home paths, or
+  the server's repository mappings.
 - `lookie get` / `GET /api/files/:repo/*path` is for explicit scoped document
   access when the caller does not already have filesystem access. It is not a
   replacement for ordinary local file opens.

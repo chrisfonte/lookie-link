@@ -171,15 +171,15 @@ test('GET /api/repos returns repo discovery payload for unrestricted humans', as
     assert.ok(reposByName.has('beta'));
 
     const alphaEntry = reposByName.get('alpha');
-    assert.equal(alphaEntry.rootPath, fixture.mappings.alpha);
     assert.equal(alphaEntry.viewUrl, '/view/alpha/');
     assert.equal(alphaEntry.assetUrl, '/asset/alpha/');
     for (const entry of payload.repos) {
       assert.equal(typeof entry.repo, 'string');
-      assert.equal(typeof entry.rootPath, 'string');
       assert.equal(typeof entry.viewUrl, 'string');
       assert.equal(typeof entry.assetUrl, 'string');
+      assert.equal(Object.hasOwn(entry, 'rootPath'), false);
     }
+    assert.doesNotMatch(JSON.stringify(payload), new RegExp(fixture.root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   } finally {
     await server.close();
     await fs.rm(fixture.root, { recursive: true, force: true });
@@ -241,9 +241,9 @@ test('GET /api/repos filters by grant scope and rejects unauthenticated/invalid 
     assert.equal(scopedPayload.count, 1);
     assert.equal(scopedPayload.repos.length, 1);
     assert.equal(scopedPayload.repos[0].repo, 'alpha');
-    assert.equal(scopedPayload.repos[0].rootPath, fixture.mappings.alpha);
     assert.equal(scopedPayload.repos[0].viewUrl, '/view/alpha/');
     assert.equal(scopedPayload.repos[0].assetUrl, '/asset/alpha/');
+    assert.equal(Object.hasOwn(scopedPayload.repos[0], 'rootPath'), false);
     assert.ok(!scopedPayload.repos.some((entry) => entry.repo === 'beta'));
 
     const bearer = await server.request('/api/repos', {

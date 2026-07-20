@@ -4,3 +4,8 @@ node_modules/
 .cache/
 *.log
 /tmp-audit-*/
+
+# Fleet scratch dirs (worker task files, deliverables) — never public
+out/
+tasks/
+logs/
