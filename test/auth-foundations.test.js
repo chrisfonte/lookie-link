@@ -106,8 +106,20 @@ test('publish is authorization vocabulary only and implies no write or endpoint'
     },
   });
   const access = authenticateRequest(requestWithBearer('publisher-placeholder'), config);
+  const roundTrippedConfig = parseAccessConfig({
+    humanDefault: 'restricted',
+    tokens: {
+      publisher: {
+        secret: 'publisher-placeholder',
+        permissions: config.tokens[0].permissions,
+        repos: { docs: 'all' },
+      },
+    },
+  });
+  const roundTrippedAccess = authenticateRequest(requestWithBearer('publisher-placeholder'), roundTrippedConfig);
 
   assert.deepEqual(access.permissions, { view: true, write: false, edit: false, publish: true });
+  assert.deepEqual(roundTrippedAccess.permissions, { view: true, write: false, edit: false, publish: true });
   assert.equal(canAccessPath(access, 'publish', 'docs', 'release.md'), true);
   assert.equal(canAccessPath(access, 'write', 'docs', 'release.md'), false);
 

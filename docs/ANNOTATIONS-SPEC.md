@@ -1,6 +1,6 @@
 # Annotations and Agent-Feedback Loop — Spec
 
-**Status**: Draft spec — planning doc, no code changes yet. Source for follow-up implementation issues.
+**Status**: Phase 1 implementation reference. Later-phase sections remain planning guidance.
 
 **Related**:
 
@@ -19,7 +19,7 @@ This doc covers six decision areas. Each ends with a verdict (**adopt**, **adopt
 ## Constraints this spec respects
 
 - **Many repos, many agents, intermittent presence.** The agent that wrote a file may not be running when the human annotates it. Feedback must survive across processes.
-- **Network is the perimeter.** Tailscale + token-scoped access. No new auth needed; the existing access model gates annotation routes the same way it gates `/view` and `/edit`.
+- **Network is the perimeter.** Trusted-network + token-scoped access. Annotation reads require `view`; every sidecar mutation requires the write-class `write` capability (`edit` remains a legacy alias).
 - **Multi-format.** Lookie-Link renders markdown, code, YAML, PDF, audio, and sanitized HTML. The annotation primitive must work for at least the text-shaped formats (markdown, YAML, code). HTML can get a richer treatment in a later phase.
 - **Write-back exists but is opt-in.** Editable mode is off by default for safety ([EDITING.md](EDITING.md)). Any storage choice that requires mutating the source file must therefore be gated on the same flag.
 - **Clean git diffs matter.** Many served repos are git-backed. Annotation noise in the source file pollutes blame and review unless explicitly chosen.
@@ -85,7 +85,7 @@ For other text formats (code, plain text), inline mode is **not supported** in p
 }
 ```
 
-`anchorKind` is one of `heading`, `yamlKey`, `lineRange`, `elementSelector` (HTML phase), `textRange` (HTML phase).
+Phase 1 accepts `heading`, `yamlKey`, or `lineRange`. Deliberate authored-HTML targets use `heading` with a stable `data-lookie-annotation-anchor`; `elementSelector` and `textRange` remain reserved for a later HTML phase.
 
 ## 2. Agent talkback: live polling vs. flat-file pickup
 
@@ -101,6 +101,7 @@ Lookie-Link serves many repos and many intermittent agents. A polling endpoint p
   - `GET /api/annotations/<repo>/<path>?state=open` (HTTP)
   - `lookie annotations list <repo>/<path> --state open` (CLI)
 - The agent marks an annotation `claimed` while it works, then `resolved` when it lands its fix.
+- If content must be removed after posting, `redact` replaces the annotation and reply bodies with placeholders, resolves the item, and preserves authorship, timestamps, and `redactedBy` metadata instead of erasing the audit trail.
 
 **How the agent learns there is new feedback** (without polling):
 
@@ -118,9 +119,9 @@ Lookie-Link already auto-anchors every markdown heading and top-level YAML key (
 
 **Phase 1 gesture:**
 
-- A small `Annotate` affordance appears next to every anchored heading and every YAML key when the viewer loads.
+- The toolbar exposes annotation mode. Existing feedback remains visible, while add-comment affordances appear next to anchored headings and YAML keys only while that mode is active.
 - Clicking it opens an inline editor near that section; submitting writes to the sidecar with `anchorKind: "heading"` (or `yamlKey`) and the existing anchor ID.
-- For files without anchors (plain code, plain text), clicking opens a line-range picker; the annotation records `anchorKind: "lineRange"` with `{ start, end }`.
+- For files without anchors (plain code, plain text), the viewer exposes a line-range picker; the annotation records `anchorKind: "lineRange"` with an anchor such as `#L4-L9`.
 
 **Nested YAML key anchors are a prerequisite.** The Lookie-Link analysis already calls out that nested YAML keys are not currently anchored. Annotations on YAML files are second-class until they are, so extending the anchor generator to nested paths (`a.b.c`) is part of phase 1.
 
@@ -138,6 +139,7 @@ Phase 2 is where Lookie-Link absorbs Lavish's strongest differentiator — preci
 The current pipeline (anchors, link rewriting, DOMPurify) already injects post-processing around the source. The annotation layer extends that pipeline:
 
 - Sidecar annotations are merged into the rendered output at render time as styled inline blocks anchored to the matching heading, key, line range, element, or text range.
+- Sanitized authored HTML can declare a deliberate phase-1 target with `data-lookie-annotation-anchor="anchor-id"`. Annotation cards are collapsed by default so active feedback remains visible without overwhelming rich layouts.
 - Source bytes on disk are unchanged in the default (sidecar) mode.
 - In inline mode, source bytes are modified only for markdown and YAML, only when `enableEditing: true` and a new `enableAnnotations: inline` config flag are both set, and writes go through the same `safeResolve` + mtime guard + temp+rename path that editable mode already uses.
 - The `Raw` toolbar button continues to show the source as it exists on disk. In sidecar mode the raw view is unchanged; in inline mode the raw view shows the comment markers, which is the honest representation.
@@ -184,10 +186,10 @@ A `?annotate=1` URL hint or a CLAUDE.md fragment that tells the agent to drop a 
 - Sidecar storage under `.lookie-link/annotations/<repo>/<relative-path>.json` with the schema above.
 - Nested YAML key anchors in the existing anchor generator (prerequisite).
 - Viewer renders annotations inline next to anchored sections.
-- `Annotate` affordance on every heading, YAML key, and line-range pick.
+- Annotation-mode affordances for headings and YAML keys, plus a line-range picker for code and plain text.
 - `GET /api/annotations/<repo>/<path>` with `?state=` filter.
-- `POST /api/annotations/<repo>/<path>` to create.
-- `PATCH /api/annotations/<repo>/<path>/<id>` to claim, resolve, or reply.
+- `POST /api/annotations/<repo>/<path>` to create (requires `write`).
+- `PATCH /api/annotations/<repo>/<path>` to claim, resolve, reopen, reply, or redact (requires `write`).
 - `bin/lookie-annotations.js` CLI shim.
 - `enableAnnotations: true` config flag, default off, parallel to `enableEditing`.
 
@@ -218,7 +220,7 @@ Phase 1 closes the loop: human leaves a note, agent fetches it on next pass.
 | Nested YAML key anchors | Adopt | Prerequisite — YAML annotations are second-class without it. |
 | Flat-file pickup as default agent contract | Adopt | Matches Lookie-Link's many-repo, many-agent, intermittent-presence reality. |
 | Live polling endpoint | Defer | Adds session and lifetime complexity; only valuable for sub-heartbeat reactivity. Add in phase 3, scoped per path. |
-| Element-level HTML annotations | Defer | High value, ship after phase 1 proves the transport. |
+| Deliberate authored-HTML targets | Adopted | `data-lookie-annotation-anchor="anchor-id"` enables stable element targets; arbitrary selection and generated selectors remain deferred. |
 | Text-range annotations | Defer | Strong differentiator, more brittle anchoring. Ship in phase 2 with quote-plus-offset fallback. |
 | Artifact-preserving render-time injection | Adopt-modified | Extend the existing post-processing pipeline; do not mutate source bytes in default mode. |
 | `bin/lookie-annotations.js` CLI shim | Adopt | Mirrors the existing `bin/lookie-read.js` pattern, gives agent-ergonomic JSON output. |
@@ -234,7 +236,7 @@ Each becomes its own issue against this repo.
 
 1. **Nested YAML key anchors** — extend the anchor generator and `Annotate` affordance to nested YAML paths so YAML files are first-class.
 2. **Annotation sidecar storage and read API** — `.lookie-link/annotations/...` layout, schema, `GET/POST/PATCH /api/annotations/...`, `enableAnnotations` config flag, access-control parity with `/view` and `/edit`.
-3. **Viewer-side annotation UX (phase 1)** — `Annotate` affordances, inline rendering of stored annotations, line-range picker for un-anchored files.
+3. **Viewer-side annotation UX (phase 1)** — annotation-mode affordances, collapsed inline cards, stale-anchor preservation, and a line-range picker for unanchored files.
 4. **`bin/lookie-annotations.js` CLI shim** — list/get/claim/resolve/add/replies subcommands, JSON-first output, env-token auth parity with `lookie-read.js`.
 5. **HTML element + text-range annotations (phase 2)** — element selector, quote-plus-offset, selection gesture, anchor-survival on minor re-render.
 6. **Inline-in-source opt-in mode (phase 3)** — `enableAnnotations: inline` flag, markdown HTML-comment markers, YAML `_lookie_link_annotations` block, `lookie annotations migrate` CLI, integration with `safeResolve` + mtime + temp+rename write path.

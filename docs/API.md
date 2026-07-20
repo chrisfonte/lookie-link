@@ -3,7 +3,7 @@
 | Route | Description |
 |-------|-------------|
 | `GET /` | Repository index |
-| `GET /healthz` | Health check (returns `{"status":"ok","editingEnabled":bool}`) |
+| `GET /healthz` | Health check, including `editingEnabled`, `annotationsEnabled`, and `rawHtmlEnabled` booleans |
 | `GET /api/repos` | Discover served repos as JSON (filtered by grant scope when a token is presented) |
 | `GET /view/<repo>/<path>` | Rendered file or directory listing |
 | `GET /asset/<repo>/<path>` | Raw asset serving. Supports `Range` requests so `<audio>` can seek, backs the embedded PDF viewer page, and is the agent-facing read path for text/source files (see `lookie-read` CLI in the repo `bin/`). MIME types: images (`.png`/`.jpg`/`.gif`/`.webp`/`.svg`/`.jpeg`), audio (`.m4a`/`.mp3`/`.wav`/`.ogg`/`.oga`/`.opus`/`.flac`/`.aac`), PDF (`.pdf`), markdown (`.md`/`.markdown`/`.mdown` → `text/markdown`), YAML (`.yaml`/`.yml` → `text/yaml`), JSON (`.json`), XML (`.xml`), and the editable text/source set (shell, Python, JS/TS, Go, Rust, C/C++, etc.) returned as `text/plain; charset=utf-8`. Anything else returns `415 Unsupported asset type`. |
@@ -11,8 +11,8 @@
 | `POST /api/save/<repo>/<path>` | Save updated file content (JSON body) |
 | `POST /api/preview/<repo>/<path>` | Render preview HTML from draft content (JSON body) |
 | `GET /api/annotations/<repo>/<path>` | Read sidecar annotations for a file. Supports repeatable `?state=open|claimed|resolved`. Returns an empty schema document when no sidecar exists. |
-| `POST /api/annotations/<repo>/<path>` | Create an annotation. Requires only `view` access and `enableAnnotations: true`. |
-| `PATCH /api/annotations/<repo>/<path>` | Apply `claim`, `resolve`, `reopen`, or `reply` to an annotation with stale-write protection. Requires only `view` access and `enableAnnotations: true`. |
+| `POST /api/annotations/<repo>/<path>` | Create an annotation. Requires `write` access and `enableAnnotations: true`. |
+| `PATCH /api/annotations/<repo>/<path>` | Apply `claim`, `resolve`, `reopen`, `reply`, or `redact` with stale-write protection. Requires `write` access and `enableAnnotations: true`. |
 | `GET /api/grants` | List managed grants (`Authorization: Bearer <admin-token>`) |
 | `POST /api/grants` | Create a managed grant and return token + issue comment helper |
 | `POST /api/grants/:grantId/renew` | Renew a managed grant and return issue comment helper |
@@ -33,9 +33,9 @@ Route enforcement in phase 1:
 
 - `/` and `/view/*` require `view` access when `access.humanDefault` is not `full`
 - `/asset/*` requires `view`
-- `/edit/*` and `/api/save/*` require `edit`
+- `/edit/*` and `/api/save/*` require `write` (`edit` remains a backward-compatible alias)
 - `/api/preview/*` requires `view` and still respects global editing mode
-- `/api/annotations/*` requires `view` and returns `404` when annotations are disabled
+- annotation reads require `view`; annotation creates and updates require `write`; all annotation routes return `404` when annotations are disabled
 
 Invalid tokens return `403`. Missing tokens return `401` when unauthenticated human access is restricted.
 
@@ -95,10 +95,12 @@ Returns `{"ok": true, "html": "rendered HTML"}`.
 
 - Requires `server.enableAnnotations: true`
 - Requires `view` access to the target file
-- Returns `{ "schema": 1, "file": "<repo>/<path>", "annotations": [] }` when no sidecar exists yet
+- Returns `{ "schema": 1, "file": "<repo>/<path>", "annotations": [], "mtimeMs": null }` when no sidecar exists yet
 - Optional `?state=` filter can be repeated, for example `?state=open&state=claimed`
 
 `POST /api/annotations/<repo>/<path>`
+
+- Requires `write` access to the target file
 
 Request body:
 
@@ -118,6 +120,8 @@ Request body:
 
 `PATCH /api/annotations/<repo>/<path>`
 
+- Requires `write` access to the target file
+
 Request body:
 
 ```json
@@ -131,8 +135,9 @@ Request body:
 }
 ```
 
-- Supported `op` values: `claim`, `resolve`, `reopen`, `reply`
+- Supported `op` values: `claim`, `resolve`, `reopen`, `reply`, `redact`
 - `reply` payload requires `author` and `body`
+- `redact` payload requires `redactedBy` (or `author`). It replaces the annotation and reply bodies with placeholders, marks the item resolved, and preserves authorship and timestamp metadata for audit history.
 - Stale `expectedMtimeMs` returns `409` with the current annotation document in `current`
 
 ## Managed Grant Lifecycle
