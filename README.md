@@ -11,7 +11,7 @@ Lookie-Link solves this by giving every file a URL. The agent modifies a documen
 ## Features
 
 - **File browser + renderer** — directory listings, rendered markdown/code/YAML views
-- **HTML rendering** — `.html` and `.htm` render as sanitized documents with a Raw toggle back to source view
+- **HTML rendering** — `.html` and `.htm` render as sanitized documents with a Raw toggle back to source view; `?validate=1` reports local asset and document-reference health as JSON
 - **PDF rendering** — `.pdf` files open in an embedded viewer page with browser-open and download actions
 - **Opt-in editable mode** — edit any non-binary file, then save back to disk
 - **Managed Paperclip grants** — issue time-limited repo/path tokens with audit history

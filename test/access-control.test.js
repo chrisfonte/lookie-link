@@ -22,7 +22,14 @@ async function makeFixture() {
   await fs.mkdir(betaRoot, { recursive: true });
 
   await fs.writeFile(path.join(alphaRoot, 'README.md'), '# Alpha\n');
-  await fs.writeFile(path.join(alphaRoot, 'docs', 'guide.md'), '# Guide\n![Diagram](diagram.png)\n');
+  await fs.writeFile(path.join(alphaRoot, 'docs', 'guide.md'), [
+    '# Guide',
+    '![Diagram](diagram.png)',
+    '[Beta relative](../../beta/notes.md#beta)',
+    `[Beta absolute](${path.join(betaRoot, 'notes.md')}#beta)`,
+    '[[beta-notes#beta|Beta wiki]]',
+    '',
+  ].join('\n'));
   await fs.writeFile(path.join(alphaRoot, 'docs', 'landing.htm'), htmlFixture);
   await fs.writeFile(
     path.join(alphaRoot, 'docs', 'settings.yaml'),
@@ -40,6 +47,7 @@ async function makeFixture() {
   await fs.writeFile(path.join(alphaRoot, 'docs', 'diagram.png'), 'png-bytes');
   await fs.writeFile(path.join(alphaRoot, 'secret', 'hidden.md'), '# Hidden\n');
   await fs.writeFile(path.join(betaRoot, 'notes.md'), '# Beta\n');
+  await fs.writeFile(path.join(betaRoot, 'beta-notes.md'), '# Beta Notes\n');
 
   return {
     root,
@@ -131,9 +139,10 @@ test('query token scopes repo listings and preserves tokenized navigation', asyn
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: '# Preview\n' }),
     });
-    assert.equal(previewResponse.status, 200);
+    assert.equal(previewResponse.status, 400);
     const previewPayload = await previewResponse.json();
-    assert.equal(previewPayload.ok, true);
+    assert.equal(previewPayload.ok, false);
+    assert.equal(JSON.stringify(previewPayload).includes('viewer-token'), false);
   } finally {
     await server.close();
     await fs.rm(fixture.root, { recursive: true, force: true });
@@ -171,6 +180,26 @@ test('GET /api/repos returns repo discovery payload for unrestricted humans', as
       assert.equal(typeof entry.viewUrl, 'string');
       assert.equal(typeof entry.assetUrl, 'string');
     }
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('rendered views resolve authorized cross-repo and wiki links without disclosing roots', async () => {
+  const fixture = await makeFixture();
+  const server = await startTestServer({ mappings: fixture.mappings });
+
+  try {
+    const response = await server.request('/view/alpha/docs/guide.md');
+    assert.equal(response.status, 200);
+    const html = await response.text();
+
+    assert.match(html, /href="\/view\/beta\/notes\.md#beta">Beta relative<\/a>/);
+    assert.match(html, /href="\/view\/beta\/notes\.md#beta">Beta absolute<\/a>/);
+    assert.match(html, /href="\/view\/beta\/beta-notes\.md#beta" class="cross-link">Beta wiki<\/a>/);
+    assert.doesNotMatch(html, new RegExp(fixture.root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.doesNotMatch(html, /rootPath|repoMappings/);
   } finally {
     await server.close();
     await fs.rm(fixture.root, { recursive: true, force: true });
@@ -257,6 +286,7 @@ test('edit-scoped token can save while restricted humans and invalid tokens are 
   const server = await startTestServer({
     mappings: fixture.mappings,
     editingEnabled: true,
+    annotationsEnabled: true,
     accessConfig: {
       humanDefault: 'restricted',
       tokens: {
@@ -284,12 +314,74 @@ test('edit-scoped token can save while restricted humans and invalid tokens are 
     const editPage = await server.request('/edit/alpha/docs/guide.md?token=editor-token');
     assert.equal(editPage.status, 200);
     const editHtml = await editPage.text();
-    assert.match(editHtml, /"saveHref":"\/api\/save\/alpha\/docs\/guide\.md\?token=editor-token"/);
+    assert.match(editHtml, /"saveHref":"\/api\/save\/alpha\/docs\/guide\.md"/);
+    assert.match(editHtml, /"previewHref":"\/api\/preview\/alpha\/docs\/guide\.md"/);
+    assert.doesNotMatch(editHtml, /api\/save[^"\\]*token=/);
+    assert.doesNotMatch(editHtml, /api\/preview[^"\\]*token=/);
 
     const beforeStat = await fs.stat(targetFile);
-    const saveResponse = await server.request('/api/save/alpha/docs/guide.md?token=editor-token', {
+    const originalContent = await fs.readFile(targetFile, 'utf8');
+    const annotationSidecar = path.join(
+      fixture.mappings.alpha,
+      '.lookie-link',
+      'annotations',
+      'alpha',
+      'docs',
+      'guide.md.json'
+    );
+    const rejectedMutations = [
+      ['/api/save/alpha/docs/guide.md?token=editor-token', {
+        content: '# Lowercase query-token write\n',
+        expectedMtimeMs: Math.trunc(beforeStat.mtimeMs),
+      }],
+      ['/API/SAVE/alpha/docs/guide.md?token=editor-token', {
+        content: '# Uppercase query-token write\n',
+        expectedMtimeMs: Math.trunc(beforeStat.mtimeMs),
+      }],
+      ['/api/annotations/alpha/docs/guide.md?token=editor-token', {
+        anchor: '#guide',
+        anchorKind: 'heading',
+        author: 'query-token-writer',
+        body: 'Lowercase annotation mutation',
+      }],
+      ['/API/ANNOTATIONS/alpha/docs/guide.md?token=editor-token', {
+        anchor: '#guide',
+        anchorKind: 'heading',
+        author: 'query-token-writer',
+        body: 'Mixed-case annotation mutation',
+      }],
+    ];
+
+    for (const [requestPath, body] of rejectedMutations) {
+      const response = await server.request(requestPath, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      assert.equal(response.status, 400, requestPath);
+      assert.equal(await fs.readFile(targetFile, 'utf8'), originalContent);
+      await assert.rejects(fs.stat(annotationSidecar), (error) => error && error.code === 'ENOENT');
+    }
+
+    for (const requestPath of [
+      '/api/preview/alpha/docs/guide.md?token=editor-token',
+      '/API/PREVIEW/alpha/docs/guide.md?token=editor-token',
+    ]) {
+      const response = await server.request(requestPath, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: '# Query token must not be echoed: editor-token\n' }),
+      });
+      assert.equal(response.status, 400, requestPath);
+      assert.equal((await response.text()).includes('editor-token'), false);
+    }
+
+    const saveResponse = await server.request('/api/save/alpha/docs/guide.md', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: 'Bearer editor-token',
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         content: '# Updated\n',
         expectedMtimeMs: Math.trunc(beforeStat.mtimeMs),
@@ -646,6 +738,10 @@ test('managed grant API creates issue-linked grants and enforces grant tokens', 
     const projectionRaw = await fs.readFile(fixture.grantPaths.projection, 'utf8');
     assert.match(projectionRaw, /id:/);
     assert.doesNotMatch(projectionRaw, /Cross-company review requested in issue/);
+    assert.doesNotMatch(projectionRaw, /tokenHash/);
+    assert.equal((await fs.stat(fixture.grantPaths.store)).mode & 0o777, 0o600);
+    assert.equal((await fs.stat(fixture.grantPaths.projection)).mode & 0o777, 0o600);
+    assert.equal(Object.hasOwn(createPayload.grant, 'tokenHash'), false);
 
     const listResponse = await server.request('/api/grants?state=active&includeAudit=1', {
       headers: {
@@ -655,6 +751,7 @@ test('managed grant API creates issue-linked grants and enforces grant tokens', 
     assert.equal(listResponse.status, 200);
     const listPayload = await listResponse.json();
     assert.equal(listPayload.grants.length, 1);
+    assert.equal(Object.hasOwn(listPayload.grants[0], 'tokenHash'), false);
     assert.ok(Array.isArray(listPayload.auditEvents));
 
     const renewResponse = await server.request(`/api/grants/${createPayload.grant.id}/renew`, {
