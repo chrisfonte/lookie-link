@@ -1,35 +1,26 @@
 # Contributing
 
-Issues and PRs welcome.
-
-## Renderer Pipeline
-
-If you're adding a new post-processing step to the renderer, note the execution order in `postProcessHtml()`:
-
-1. `rewriteHybridCrossLinks()` — wiki-link patterns → clickable links
-2. `rewriteTildeLinks()` — plain `~/path` references → clickable links
-3. `rewriteImageSources()` — image paths → `/asset/` endpoint
-4. `addHeadingAnchorLinks()` — heading anchors + copy buttons
-5. `addYamlAnchorLinks()` — YAML key anchors + copy buttons
-6. `sanitizeHtml()` — DOMPurify (always last — never add steps after this)
+Changes are welcome. Describe only behavior implemented by the current tree, and update [CAPABILITIES.md](CAPABILITIES.md) whenever a route, permission gate, config key, discovery field/template, CLI command, or store capability changes. The discovery test parses that document and checks advertised templates against registered routes.
 
 ## Validation
 
-Run editable-mode validation coverage (route-level checks + real temp-file writes):
+Run:
 
 ```bash
+npm test
+npm run validate:raw-html
 npm run validate:editable
+npm run check:skill-packages
 ```
 
-## Smoke Testing
+If `docs/SKILL-SPEC.md` changes, run `npm run generate:skill-packages` before the checks.
 
-For local visual smoke testing, run Lookie-Link on a temporary port with a known repo mapping and open a real `/view/...` URL:
+## Renderer work
 
-```bash
-PORT=9987 ROOT_MAPPINGS='demo=/absolute/path/to/lookie-link' npm start
-# then open /view/demo/
-```
+Preserve the renderer's security order: rewrite/decoration steps occur before DOMPurify, and sanitization remains the final untrusted-content step. Raw/transformed HTML is a separate opt-in trusted-content surface. Add route-level tests for any new viewer or MIME type, including access denial and host-path redaction.
 
-## Design History
+## Stores and routes
 
-See the `prompts/` directory for the original build prompts and feature design documents that shaped this project.
+Use `safeResolve` or the store's stronger realpath/symlink containment. Preserve uniform not-found behavior for managed resources, reject query credentials for mutations, keep secrets out of errors/output, and retain optimistic concurrency/atomic-write behavior.
+
+For local smoke testing, use a temporary port and a disposable repository mapping. Do not add workstation-specific hosts, roots, repo names, or credentials to tracked files.

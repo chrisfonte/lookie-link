@@ -1,59 +1,29 @@
-<!-- File: docs/NOTEBOOKLM-ARTIFACT-MANIFEST.md -->
-
----
-Title: NotebookLM Artifact Display Manifest
-Owner: Lookie-Link Maintainers
-Created: 2026-06-09
-Last Updated: 2026-06-09
-Version: 1.1.0
-Status: Active
-Tags: #notebooklm #artifacts #lookie-link #display
-Document URL: docs/NOTEBOOKLM-ARTIFACT-MANIFEST.md
-Related: [NOTEBOOKLM-ARTIFACT-COVERAGE.md](NOTEBOOKLM-ARTIFACT-COVERAGE.md), external issue chrisfonte/lookie-link#64
----
-
 # NotebookLM Artifact Display Manifest
 
-This manifest exists so the NotebookLM artifact set is easy to review in Lookie-Link, not just downloadable from the filesystem. It is the contract that the [Coverage Audit](NOTEBOOKLM-ARTIFACT-COVERAGE.md) verifies against.
+This manifest defines a portable review bundle that uses only implemented Lookie-Link behavior. See the [coverage audit](NOTEBOOKLM-ARTIFACT-COVERAGE.md) and the authoritative [capability matrix](CAPABILITIES.md).
 
-## Display Rule
+## Display rules
 
-- Prefer browser-displayable export formats when NotebookLM offers a choice.
-- Keep a markdown index or manifest alongside the artifacts so a human reviewer can understand what each file is before opening it.
-- For binary or raw-structured outputs, preserve the original file but add enough markdown context that the artifact set remains navigable in Lookie-Link.
+- Prefer browser-displayable exports when multiple formats are available.
+- Keep a Markdown index beside binary or structured artifacts.
+- Preserve original machine-readable exports when useful, but explain their role in the index.
+- Use relative links so Lookie-Link can rewrite them inside any configured repo.
 
-## Canonical Artifact Set
+## Reference bundle
 
-This is the reference bundle the audit runs against. Files live under `operations-research/ai-tools/notebooklm/` in the user's local repo set.
+| Example artifact | Format | Implemented display behavior |
+|---|---|---|
+| `briefing.md` | Markdown | Sanitized document viewer with anchors and TOC |
+| `study-guide.md` | Markdown | Sanitized document viewer |
+| `quiz.md` | Markdown | Sanitized document viewer |
+| `data-table.csv` | CSV | Structured table and raw toggle |
+| `audio-overview.m4a` | Audio | Dedicated/inline audio player |
+| `video-overview.mp4` | Video | Dedicated/inline video player |
+| `slide-deck.pdf` | PDF | Dedicated browser PDF viewer |
+| `infographic.png` | PNG | Dedicated/inline image viewer |
+| `flashcards.json` | JSON | Structured JSON and raw toggle |
+| `interactive-export.html` | HTML | Sanitized by default; opt-in trusted transformed/verbatim runtime |
 
-| Artifact | Format | Lookie-Link display behavior | Purpose |
-|---|---|---|---|
-| `notebooklm-briefing-doc.md` | Markdown | Native markdown render | First-party NotebookLM summary doc |
-| `notebooklm-study-guide.md` | Markdown | Native markdown render | Study-guide style synthesis |
-| `notebooklm-blog-post.md` | Markdown | Native markdown render | Blog-post style synthesis |
-| `notebooklm-qa-log.md` | Markdown | Native markdown render | Query log and artifact provenance |
-| `notebooklm-audio-customization-prompt.md` | Markdown | Native markdown render | Reusable source-citing audio prompt |
-| `notebooklm-quiz.md` | Markdown | Native markdown render | Quiz output in readable text form |
-| `notebooklm-data-table.csv` | CSV | Dedicated table viewer at `/view`; `text/csv` at `/asset` | Structured extracted table |
-| `notebooklm-capabilities-table.csv` | CSV | Dedicated table viewer at `/view`; `text/csv` at `/asset` | Capabilities/limits table |
-| `notebooklm-audio-overview.m4a` | Audio | Inline audio player in Lookie-Link | NotebookLM audio overview |
-| `notebooklm-slide-deck.pdf` | PDF | Browser-viewable PDF | Slide-deck artifact in reviewable format |
-| `notebooklm-infographic.png` | PNG | Inline image render | Infographic artifact |
-| `notebooklm-flashcards.json` | JSON | Raw JSON view | Flashcards export preserved in original machine-readable form |
-| `notebooklm-mind-map-mismatch-flashcards.json` | JSON | Raw JSON view | Original mismatch artifact preserved as returned by NotebookLM |
+## Handoff contract
 
-## Format Preference Notes
-
-- Reports should stay in markdown when possible because markdown renders cleanly in Lookie-Link and remains diffable in git.
-- Slide decks should prefer PDF export over PPTX when the goal is human review in a browser.
-- Infographics should prefer PNG when available because they display inline.
-- Audio should be linked as `.m4a` or similar browser-playable media so Lookie-Link can render inline controls.
-- JSON artifacts may still be worth keeping in original form, but they should be accompanied by a markdown manifest or explanation file like this one.
-
-## Operational Implication
-
-For future agentic NotebookLM runs, artifact pull-back should optimize for:
-
-1. A browser-displayable primary artifact when NotebookLM offers multiple download formats.
-2. A markdown companion or manifest when the original export is binary or raw structured data.
-3. A handoff path that works cleanly inside Lookie-Link without requiring the reviewer to inspect local paths manually.
+A bundle should contain a Markdown landing page, use repo-relative links, avoid absolute workstation paths, and identify any HTML that requires the trusted raw/transformed feature. Forms, templates, and submission handling are not part of the current display contract.

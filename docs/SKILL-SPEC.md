@@ -6,6 +6,8 @@
 
 This document defines the common agent instructions used by each generated package. Runtime wrappers may differ, but their command guidance must describe only behavior implemented by the unified `lookie` CLI.
 
+The command-to-route and authorization inventory is maintained in [CAPABILITIES.md](CAPABILITIES.md#unified-cli-inventory). If this spec and that inventory disagree, correct this spec and regenerate the packages.
+
 The generated packages target these runtime-native formats:
 
 | Runtime | Package format |
@@ -66,7 +68,7 @@ lookie repos
 lookie read knowledge/notes/topic.md
 lookie --json read knowledge/notes/topic.md
 lookie tree knowledge --path notes --max-depth 3
-lookie changes knowledge --since 2026-01-01T00:00:00Z
+lookie changes knowledge --since 1767225600000
 ```
 
 The read command first uses the managed-repository file API. A 404 falls back to the compatible asset endpoint so the same command can read mounted repositories.

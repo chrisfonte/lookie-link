@@ -1,108 +1,38 @@
-<!-- File: docs/NOTEBOOKLM-ARTIFACT-COVERAGE.md -->
+# NotebookLM Artifact Coverage
 
----
-Title: Lookie-Link NotebookLM Artifact Coverage Audit
-Owner: Lookie-Link Maintainers
-Created: 2026-06-09
-Last Updated: 2026-06-09
-Version: 1.1.0
-Status: Active
-Tags: #notebooklm #lookie-link #audit #artifacts
-Document URL: docs/NOTEBOOKLM-ARTIFACT-COVERAGE.md
-External Issue: https://github.com/chrisfonte/lookie-link/issues/64
-Related components: Paperclip integration and the asset MIME allowlist
----
+This audit maps a representative NotebookLM export bundle to implemented Lookie-Link viewers. The authoritative route and MIME behavior is [CAPABILITIES.md](CAPABILITIES.md); the companion [artifact manifest](NOTEBOOKLM-ARTIFACT-MANIFEST.md) describes preferred export formats.
 
-# Lookie-Link NotebookLM Artifact Coverage Audit
+## Coverage
 
-This audit verifies how the Lookie-Link feature surface handles every artifact type produced by an agentic NotebookLM bundle. It pairs with the [NotebookLM Artifact Display Manifest](NOTEBOOKLM-ARTIFACT-MANIFEST.md) and external issue [`chrisfonte/lookie-link#64`](https://github.com/chrisfonte/lookie-link/issues/64).
+| Artifact | Extension | Rendered review behavior | Asset MIME |
+|---|---|---|---|
+| Briefing, study guide, quiz, or report | `.md` | Sanitized Markdown, anchors, TOC, portable links | `text/markdown; charset=utf-8` |
+| Audio overview | `.m4a` | Dedicated and inline audio player | `audio/mp4` |
+| Video overview | `.mp4` | Dedicated and inline video player | `video/mp4` |
+| Slide deck | `.pdf` | Dedicated embedded PDF viewer | `application/pdf` |
+| Infographic | `.png` | Dedicated image page and inline images | `image/png` |
+| Extracted table | `.csv` | Structured table with raw toggle and dimensions | `text/csv; charset=utf-8` |
+| Flashcards or structured export | `.json` | Structured expandable JSON with raw toggle | `application/json; charset=utf-8` |
+| Interactive trusted export | `.html` / `.htm` | Sanitized view by default; optional transformed and verbatim trusted runtimes | `text/plain; charset=utf-8` on asset route |
 
-## Method
+The asset route intentionally serves HTML as plain text. Executable HTML is available only through the opt-in raw/transformed routes and requires trusted authored content.
 
-Each artifact type is probed against a running Lookie-Link instance on two routes:
+## Verification approach
 
-- `GET /view/<repo>/<path>` — the rendered review page humans land on.
-- `GET /asset/<repo>/<path>` — the raw byte path used by inline players, image tags, the PDF embed, and the `lookie-read` agent CLI.
+For each fixture under a configured test repo:
 
-Reference fixtures live under `operations-research/ai-tools/notebooklm/`. Each row reports the actual HTTP status, Content-Type, and review UX observed in-browser.
+1. Request its rendered review URL and verify `200` plus the expected viewer marker.
+2. Request its asset URL and verify `200` plus the MIME above.
+3. Verify an out-of-scope caller cannot resolve the file or its referenced local assets.
+4. For HTML, request `?validate=1` and verify the response contains repo-relative references without absolute host paths.
 
-## Results
+The automated test suite covers CSV/JSON/text MIME behavior, image/audio/video/PDF rendering, HTML validation, path scoping, and host-path redaction. No live workstation repository is required for this audit.
 
-| Artifact | Extension | `/view` UX | `/asset` Content-Type | Markdown-link UX | Coverage verdict |
-|---|---|---|---|---|---|
-| Briefing doc, study guide, blog post, Q&A log, manifest, etc. | `.md` | Native markdown render with anchors, TOC, theme toggle | `text/markdown; charset=utf-8` | Standard `<a>` link → rendered view | Supported |
-| Audio overview | `.m4a` | Dedicated audio player page with controls, download, file metadata | `audio/mp4` (Range requests honored) | Inline `<audio>` player auto-rendered from markdown link | Supported |
-| Slide deck | `.pdf` | Dedicated viewer page with embedded PDF frame, "Open in browser", download | `application/pdf` | Markdown links to `.pdf` open the viewer page | Supported |
-| Infographic | `.png` | Dedicated image page; inline images get a lightbox when referenced from markdown | `image/png` | `![alt](path.png)` renders inline; click → lightbox | Supported |
-| Capabilities / data tables | `.csv` | Dedicated CSV viewer page — first row becomes header, rest becomes table body, with View raw / Download actions | `text/csv; charset=utf-8` | Standard `<a>` link → table viewer | Supported |
-| Flashcards, mind-map mismatches | `.json` | JSON syntax-highlighted via highlight.js, with theme + anchor support | `application/json; charset=utf-8` | Standard `<a>` link → highlighted JSON view | Supported (documented behavior: highlighted raw view, no special viewer) |
+## Export guidance
 
-> Historical note: during initial audit (2026-06-09) the live process predated commit `b460e5e`, so `/asset/<…>.csv` returned `415` and the text-MIME allowlist commit (`e2d3e88`) was not yet running. The live server has since been restarted and all six types return the table-listed Content-Type.
-
-## Recommended Agent Export Format
-
-When the NotebookLM source side offers a choice of export formats, agents should pull back the variant that maps cleanly onto the supported review path above:
-
-- Reports, briefings, study guides, blog posts → markdown (`.md`).
-- Slide decks → PDF (`.pdf`), not PPTX. PDF renders in-browser; PPTX is a binary download.
-- Audio overviews → `.m4a`, `.mp3`, or another browser-playable codec. Avoid raw WAV when an encoded option exists.
-- Infographics → PNG. SVG is also fine; both render inline. Avoid PDF for single-image infographics because the PDF path is dedicated to deck-style review.
-- Tabular data → CSV is the canonical interchange format. CSVs render in the dedicated table viewer at `/view/<path>.csv` with header row + body rows + row × column count.
-- Raw structured exports (flashcards, mind maps) → JSON. JSON renders as highlighted raw text — keep the markdown companion (qa log / manifest) so a reviewer knows what they are looking at before opening the file.
-
-## Live Coverage Test
-
-The fastest way to confirm coverage is to open each artifact type in a browser against the live instance. The URLs below use the canonical NotebookLM topic hub as fixtures.
-
-Replace `<host>` with your reachable Lookie-Link host (e.g., `localhost:9876`).
-
-| Type | `/view` (rendered review page) | `/asset` (raw byte path) |
-|---|---|---|
-| `.md` | `/view/operations-research/ai-tools/notebooklm/notebooklm-briefing-doc.md` | `/asset/operations-research/ai-tools/notebooklm/notebooklm-briefing-doc.md` |
-| `.m4a` | `/view/operations-research/ai-tools/notebooklm/notebooklm-audio-overview.m4a` | `/asset/operations-research/ai-tools/notebooklm/notebooklm-audio-overview.m4a` |
-| `.pdf` | `/view/operations-research/ai-tools/notebooklm/notebooklm-slide-deck.pdf` | `/asset/operations-research/ai-tools/notebooklm/notebooklm-slide-deck.pdf` |
-| `.png` | `/view/operations-research/ai-tools/notebooklm/notebooklm-infographic.png` | `/asset/operations-research/ai-tools/notebooklm/notebooklm-infographic.png` |
-| `.csv` | `/view/operations-research/ai-tools/notebooklm/notebooklm-data-table.csv` | `/asset/operations-research/ai-tools/notebooklm/notebooklm-data-table.csv` |
-| `.json` | `/view/operations-research/ai-tools/notebooklm/notebooklm-flashcards.json` | `/asset/operations-research/ai-tools/notebooklm/notebooklm-flashcards.json` |
-
-A passing pass means every `/view` URL returns a sane review page and every `/asset` URL returns HTTP 200 with the Content-Type listed in the Results table.
-
-The audit landing page also lives at `/view/lookie-link/docs/NOTEBOOKLM-ARTIFACT-COVERAGE.md`, with the companion manifest at `/view/lookie-link/docs/NOTEBOOKLM-ARTIFACT-MANIFEST.md`.
-
-## Identified Gaps
-
-### Gap 1 — CSV asset path returned 415 (CLOSED on `main`)
-
-`text/csv` was missing from the `/asset/` MIME allowlist, so:
-
-- `GET /asset/<repo>/<path>.csv` returned `415 Unsupported Media Type`.
-- The `lookie-read` agent CLI could not fetch CSV bytes through the normal asset path.
-- Any markdown that intentionally linked via `/asset/` (rather than `/view/`) for a raw download broke for CSV.
-
-Closed by PR #68 (commit `2e74a57`) — `'.csv': 'text/csv; charset=utf-8'` added to `TEXT_MIME_TYPES` in `server.js`. The earlier held branch `fix/csv-asset-mime-allowlist` (`b460e5e`) is now superseded.
-
-### Gap 2 — CSV table viewer (CLOSED on `main`)
-
-Originally `.csv` review was "auto-highlighted text in the document page" — no `<table>` layout, just highlight.js auto-detected raw source.
-
-Closed by PR #68 — `lib/renderer.js` gained `parseCsv()` (RFC4180-ish parser handling quoted commas, escaped doubled-quotes, CRLF/LF/CR, and a BOM strip) and `renderCsvPage()` (first row → `<thead>`, the rest → `<tbody>`, row × column count, View raw / Download actions). `server.js` routes `.csv` through the new viewer in the `/view/` handler ahead of the generic document path.
-
-**Possible future enhancement (not blocking):** sortable column headers, basic schema preview, or numeric alignment heuristics.
-
-### Gap 3 — JSON review path under-documented
-
-JSON renders correctly as highlight.js-formatted source, but the `docs/FEATURES.md` page does not say so explicitly. A reviewer landing on a flashcards JSON expects either a fancy viewer or an explicit "this is the raw highlighted view, by design" note.
-
-**Recommendation:** add a short "Structured Data Rendering" section to [`FEATURES.md`](FEATURES.md) covering both JSON and CSV behavior, including the recommendation to keep a markdown companion alongside structured exports.
-
-## Closing-the-Loop Checklist
-
-When all gaps above are closed, the artifact coverage doc and Lookie-Link docs jointly state:
-
-- [x] Every artifact type in the NotebookLM bundle has a single defined review path.
-- [x] `/asset/<repo>/<path>` works for every artifact type, including CSV.
-- [x] For each type, the docs state whether the review path is inline render, dedicated viewer, or formatted raw source.
-- [x] The recommended agent export format is named for every type that offers a choice.
-- [x] At least one CSV and one JSON fixture is covered by automated tests so the asset path cannot regress silently (`test/access-control.test.js`).
-- [x] CSV table viewer at `/view/<path>.csv` (Gap 2 closed by PR #68).
-- [ ] JSON/CSV "Structured Data Rendering" callout added to `FEATURES.md` (Gap 3 follow-up).
+- Prefer Markdown for text reports and study material.
+- Prefer CSV for tabular interchange, with a Markdown companion explaining the columns.
+- Prefer PDF for browser review of slides and PNG for infographics.
+- Keep machine-readable JSON, but provide a Markdown index for navigation.
+- Use browser-playable audio/video formats.
+- Treat interactive HTML as trusted code; leave raw HTML disabled when provenance is uncertain.

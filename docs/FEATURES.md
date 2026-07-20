@@ -1,5 +1,7 @@
 # Features
 
+This document explains implemented viewer behavior. The authoritative inventory of routes, authorization gates, configuration switches, stores, discovery fields, and CLI commands is [CAPABILITIES.md](CAPABILITIES.md).
+
 ## Markdown Link Rendering
 
 Three forms of markdown link all render as clickable `<a>` tags:
@@ -90,6 +92,10 @@ Notes:
 - Audio links inside fenced ` ``` ` code blocks are left as code, not rewritten to a player.
 - The image lightbox does not apply to `<audio>` (it's a separate, non-binary widget).
 
+## Video Playback
+
+Browsing `.mp4`, `.webm`, `.mov`, or `.m4v` files renders a dedicated video player backed by the scoped asset route. Markdown links and authored video sources that resolve to authorized local files are rewritten to playable asset URLs. Video is binary and is not editable.
+
 ## PDF Rendering
 
 Browsing a PDF directly at `/view/<repo>/<path>.pdf` renders a dedicated viewer page with:
@@ -105,7 +111,7 @@ Notes:
 
 ## HTML Rendering
 
-Standalone `.html` and `.htm` files render as sanitized document content instead of raw source by default.
+Standalone `.html` and `.htm` files render as sanitized document content instead of raw source when raw HTML is disabled.
 
 Example:
 
@@ -125,6 +131,7 @@ Behavior:
 - Local `<img src="./file.png">` references are rewritten through `/asset/<repo>/<path>` so images still load from the repo
 - Heading anchors and TOC generation apply to rendered HTML headings the same way they do for markdown
 - Agents can inspect a local HTML bundle without launching a browser by requesting `/view/<repo>/<path>.html?validate=1`. The JSON response checks stylesheet, script, image/source, and local HTML navigation references, reports missing/unsupported counts, and contains repo-relative URLs only. Reference checks enforce the caller's view scope; unreadable and absent targets use the same not-found result.
+- When raw HTML is enabled, the viewer uses the transformed `/embed` runtime for the rendered pane and exposes separate transformed and byte-preserving `/raw` actions. Both preserve authored scripts and therefore share the trusted-content requirement. `/embed` rewrites local navigation/assets, injects theme synchronization, redacts sensitive host values, and can inject the annotation client; `/raw` returns authored bytes unchanged.
 
 ## Annotations
 
@@ -161,6 +168,12 @@ text formats; `GET /api/search/suggest` performs bounded path suggestions.
 Both prune traversal using the caller's repository and path scopes, silently
 exclude requested scopes the caller cannot see, cap work and result counts, and
 report when a response was truncated.
+
+## Immutable Publishing and Discovery
+
+An optional publish store creates slug-addressed, immutable numbered bundles without modifying mounted source repositories. Updating requires the current revision, historical revisions remain readable, public metadata cannot contain absolute host paths, and revocation disables current and historical readback. Publish lifecycle authorization is a separate repo-level `publish` permission.
+
+Caller discovery reports only capabilities and endpoint templates available under the current flags, registered routes, enabled stores, and repo/path permissions. Repo discovery returns opaque URL prefixes rather than host roots. See [CAPABILITIES.md](CAPABILITIES.md#discovery-field-inventory) and [PUBLISHING.md](PUBLISHING.md).
 
 ## Themes
 

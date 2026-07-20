@@ -1,126 +1,80 @@
 # Lookie-Link
 
-A web file viewer for browsing local directories over your network, with an opt-in editable mode for trusted environments. Point it at your documentation repos, knowledge bases, or project files and get rendered markdown, syntax-highlighted code, clickable cross-links, and in-browser save-back when editing is enabled.
+Lookie-Link is a lightweight private-network viewer for local directories. Map a short repository name to a directory and browse rendered documents, highlighted source, structured data, images, audio, video, and PDFs through predictable URLs.
 
-## Why This Exists
+## Implemented features
 
-If you work with AI agents that read and write files — Claude Code, OpenClaw, Codex, or anything similar — you know the problem: the agent modifies a file, and now you need to see what it did. Your options are bad. The agent dumps the entire file into Telegram or Slack (unreadable on a phone). You SSH in and `cat` it. You open your laptop and find it in your editor. None of these work well when you're reviewing from a phone or tablet.
+- Sanitized Markdown and authored-HTML rendering, source toggles, heading/YAML anchors, portable cross-repo links, and local asset rewriting
+- Dedicated image, audio, video, PDF, CSV, and JSON viewers
+- Caller-scoped static tokens, hashed managed API keys, expiring managed grants, and repo/path permissions
+- Caller-safe runtime discovery through `/.well-known/agent.json`, `/api/whoami`, and `/api/repos`
+- Opt-in editing of existing non-binary files with atomic saves and mtime conflicts
+- Opt-in sidecar annotations with inline viewer UI and heading, YAML-key, or line-range anchors
+- Mutable managed repositories with bounded trees, change lists, scoped search, atomic writes, and recoverable deletion
+- Immutable published revisions with optimistic updates, historical readback, and revocation
+- Opt-in verbatim and transformed HTML execution for trusted content
+- Ten built-in dark/light themes plus custom YAML themes
+- A unified `lookie` CLI for authentication, discovery, managed content, search, and publishing
 
-Lookie-Link solves this by giving every file a URL. The agent modifies a document, drops a link in chat, and you tap it. You're reading the rendered file in your browser — formatted markdown, syntax-highlighted code, deep-linked to the exact section that changed. You can review, comment back, and the agent makes another pass. The whole loop works from a phone over Tailscale without ever touching a terminal.
+The complete source-checked surface is the [capability and route matrix](docs/CAPABILITIES.md). It is the single authoritative list of routes, auth gates, configuration switches, discovery fields, CLI commands, and stores.
 
-## Features
-
-- **File browser + renderer** — directory listings, rendered markdown/code/YAML views
-- **HTML rendering** — `.html` and `.htm` render as sanitized documents with a Raw toggle back to source view; `?validate=1` reports local asset and document-reference health as JSON
-- **PDF rendering** — `.pdf` files open in an embedded viewer page with browser-open and download actions
-- **Opt-in editable mode** — edit any non-binary file, then save back to disk
-- **Managed Paperclip grants** — issue time-limited repo/path tokens with audit history
-- **Grant projection writer** — optionally export active managed grants to a read-only private projection for Paperclip/runtime wiring
-- **Cross-company grant guardrail** — rejects managed grants that fall outside the Paperclip adapter's allowed filesystem roots
-- **Runtime capability discovery** — `/.well-known/agent.json` and `/api/whoami` report only the live routes, repos, path scopes, and mutations available to the current caller
-- **Markdown rendering** — full CommonMark with syntax-highlighted code blocks
-- **Cross-link rendering** — `[[name]] (~/repo/path.md#anchor)` becomes a clickable link
-- **Anchor linking** — every heading and YAML key gets a copy-link button
-- **Image lightbox** — click any inline image for a full-screen view
-- **Audio playback** — `.m4a`, `.mp3`, `.wav`, `.ogg`, `.opus`, `.flac`, `.aac` get an inline `<audio>` player when linked in markdown (relative path, `~/repo` path, or fully-qualified `/view/...` URL), plus a dedicated player page when browsed directly. See [FEATURES.md](docs/FEATURES.md#audio-playback) for examples.
-- **PDF viewer** — `.pdf` files get a dedicated `/view/...` page with an embedded browser viewer backed by the `/asset/...` route.
-- **Auto-linkified URLs** — bare URLs (`https://example.com`) in markdown text render as clickable links without needing `[label](url)` syntax. Useful for `## Sources` bullet lists. URLs inside code blocks stay literal. See [FEATURES.md](docs/FEATURES.md#markdown-link-rendering).
-- **10 built-in themes** — Slate, Teal, Nord, Rosé Pine, Monokai, Solarized, GitHub, Ember, Noir, Indigo (dark + light)
-- **Custom themes** — define your own in the YAML config
-- **YouTube iframe embeds** — sandboxed security via DOMPurify
-- **URL format** — `/view/<repo>/<path>#<anchor>` — predictable, shareable, deep-linkable
-
-## Themes
-
-10 built-in color themes, each with full dark and light variants. Switch themes from the dropdown in the toolbar; toggle dark/light mode with the sun/moon button. Both preferences persist in localStorage.
-
-| Theme | Style |
-|-------|-------|
-| **Slate** | Cool grey editorial — default |
-| **Teal** | Deep teal accents |
-| **Nord** | Arctic blue-grey |
-| **Rosé Pine** | Warm purple/mauve |
-| **Monokai** | Classic warm syntax palette |
-| **Solarized** | Precision color science |
-| **GitHub** | GitHub's code view colors |
-| **Ember** | Warm amber/orange |
-| **Noir** | High-contrast monochrome |
-| **Indigo** | Deep navy/violet |
-
-### Add your own theme
-
-Define custom themes in `~/.config/lookie-link/lookie-link.yaml`:
-
-```yaml
-themes:
-  Lava:
-    dark:
-      bg: "#1a0a00"
-      text: "#f0d0b0"
-      accent: "#ff4400"
-      border: "#5a2000"
-    light:
-      bg: "#fff8f0"
-      text: "#2a1500"
-      accent: "#cc3300"
-      border: "#ffb090"
-```
-
-Custom themes appear in the theme dropdown alongside built-in themes. See [CONFIGURATION.md](docs/CONFIGURATION.md) for all config options.
-
-## Quick Start
+## Quick start
 
 ```bash
-git clone https://github.com/chrisfonte/lookie-link.git
-cd lookie-link
 npm install
+cp lookie-link.yaml.example ~/.config/lookie-link/lookie-link.yaml
 npm start
 ```
 
-Open `http://localhost:9876` in your browser.
+Then open `http://localhost:9876`. The default port is `9876`; configured repository keys become `/view/<repo>/...` URL prefixes.
 
-## Agent read-side shim (`lookie-read`)
+Minimal configuration:
 
-`bin/lookie-read.js` is a small CLI shim for agents (Claude Code, Codex, OpenClaw, etc.) that need to fetch files from a Lookie-Link host without writing their own `/api/repos` + `/asset/` plumbing.
+```yaml
+server:
+  port: 9876
+  hostname: localhost
+  enableEditing: false
+  enableAnnotations: false
+  enableRawHtml: false
 
-```bash
-# install the shim on PATH
-npm install -g .
-
-# stream a file to stdout through /asset/
-lookie-read operations/README.md
-
-# byte-range fetch over HTTP
-lookie-read --range 0-99 operations/README.md
-
-# what does this host serve?
-lookie-read --list-repos
+repositories:
+  docs: ~/Documents/docs
 ```
 
-It caches `/api/repos` at `~/.cache/lookie-link/repos.json` (5-min TTL), forwards `LOOKIE_LINK_TOKEN` as `Authorization: Bearer <token>` for path-scoped access grants, and exits non-zero on usage / not-found / forbidden / transport errors. Repository discovery returns opaque URLs rather than host filesystem roots. See [`docs/API.md`](docs/API.md) for the underlying endpoints and agent-side contract.
+Editing, annotations, and raw HTML are off by default. Raw HTML executes unsanitized same-origin scripts and should only be enabled for trusted files on a trusted network.
 
-## Network Model
+## Unified CLI
 
-Lookie-Link is designed for private networks — specifically [Tailscale](https://tailscale.com) or similar mesh VPNs. It runs on a machine with access to your repos and serves files to any device on your tailnet.
+```bash
+secret-command | lookie auth login --instance http://localhost:9876 --token-stdin
+lookie capabilities
+lookie whoami
+lookie repos
+lookie read docs/README.md
+lookie tree shared --path notes
+lookie search "release notes" --scope shared
+```
 
-This is **not** a public-facing web server. By default, human access still comes from your network, but you can now add token-scoped agent access in config so a single instance does not expose every repo to every agent on the tailnet.
+Run `lookie --help` for the implemented command grammar. The generated agent packages follow [the skill spec](docs/SKILL-SPEC.md). The older `lookie-read` and `lookie-annotations` executables remain available as compatibility shims; they are not unified CLI subcommands.
+
+## Network and trust model
+
+Lookie-Link binds for private-network use and is not hardened as a public multi-tenant service. `access.humanDefault` defaults to `full`, preserving unauthenticated browser access. Set it to `restricted` or `none` before enabling a mixed-user instance, then issue least-privilege credentials.
+
+Read requests may use a bearer header or query token so browser links can remain navigable. Mutations reject query credentials. Agent and CLI usage should always prefer `Authorization: Bearer`.
 
 ## Documentation
 
-- [Configuration](docs/CONFIGURATION.md) — YAML config, env vars, custom themes
-- [Editing](docs/EDITING.md) — editable mode, safety behaviors
-- [Agent Access Control](docs/AGENT-ACCESS-CONTROL.md) — token-scoped repo/path access for agents
-- [Paperclip Grant Workflow](docs/PAPERCLIP-GRANT-WORKFLOW.md) — managed cross-company access contract
-- [Features](docs/FEATURES.md) — cross-links, anchors, images, themes, YouTube embeds
-- [API](docs/API.md) — endpoint reference
-- [NotebookLM Artifact Coverage](docs/NOTEBOOKLM-ARTIFACT-COVERAGE.md) — audit of markdown / m4a / pdf / png / csv / json review paths, paired with the [Artifact Display Manifest](docs/NOTEBOOKLM-ARTIFACT-MANIFEST.md)
-- [Contributing](docs/CONTRIBUTING.md) — renderer pipeline, validation, design history
-
-## Inspiration
-
-The idea for Lookie-Link came from watching Brian Castle's video ["How to Create JOBS for OpenClaw Agents"](https://www.youtube.com/watch?v=uUN1oy2PRHo) (February 2026). Castle built **Brainown**, a markdown viewer that syncs via Dropbox and lets him tap links from Telegram to jump straight to rendered documentation on his phone. Lookie-Link takes the same concept and builds it as a self-hosted web server for Tailscale networks, eliminating the Dropbox dependency.
-
-The HTML-file rendering path was additionally nudged by the demo at https://www.youtube.com/watch?v=S9EGx6ik-18, which showed the value of previewing standalone HTML artifacts inside the same mobile-friendly review loop.
+- [Capability and route matrix](docs/CAPABILITIES.md) — authoritative implemented surface
+- [Configuration](docs/CONFIGURATION.md) — setup and security guidance
+- [API](docs/API.md) — payload and workflow details
+- [Features](docs/FEATURES.md) — rendering and viewer behavior
+- [Agent access control](docs/AGENT-ACCESS-CONTROL.md) — current authorization model
+- [Publishing](docs/PUBLISHING.md) — immutable artifact contract
+- [Annotations](docs/ANNOTATIONS-SPEC.md) — implemented sidecar contract
+- [Agent shims](docs/AGENT-SHIM.md) — legacy compatibility executables
+- [Contributing](docs/CONTRIBUTING.md)
 
 ## License
 

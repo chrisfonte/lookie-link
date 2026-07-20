@@ -17,6 +17,7 @@ server:
   hostname: localhost  # e.g., my-server.local or my-host.tailnet.ts.net
   enableEditing: false # opt-in: set true only on trusted private networks
   enableAnnotations: false # opt-in: enables sidecar annotation API routes
+  enableRawHtml: false # opt-in: executes trusted authored HTML on this origin
 
 # Repository mappings
 # Each key becomes a URL prefix: /view/<key>/<path>
@@ -65,10 +66,12 @@ repositories:
 #       local_operator:
 #         secretEnv: LOOKIE_LINK_AGENT_KEY_ADMIN_TOKEN
 #   grants:
-#     storePath: ~/.local/share/lookie-link/grants.yaml
-#     projectionPath: ~/.local/share/lookie-link/grants-projection.yaml
+#     storePath: /srv/lookie-link/grants.yaml
+#     projectionPath: /srv/lookie-link/grants-projection.yaml
 #     repoOwners:
 #       docs: source-company-id
+#     repoRoots:
+#       docs: /srv/lookie-link/repos/docs
 #     adminTokens:
 #       paperclip:
 #         secretEnv: LOOKIE_LINK_GRANT_ADMIN_TOKEN
@@ -113,7 +116,9 @@ repositories:
 #       toolbar_bg: "rgba(18, 18, 42, 0.94)"
 #       toolbar_btn_bg: "#1a1a3a"
 #       toolbar_btn_hover: "#2a2a4a"
+#       toolbar_btn_text: "#c8c8ff"
 #       toc_active_bg: "rgba(124, 106, 255, 0.18)"
+#       heading_font: "system-ui, sans-serif"
 #     light:
 #       bg: "#f0f0ff"
 #       bg_elev: "#ffffff"
@@ -127,4 +132,6 @@ repositories:
 #       toolbar_bg: "rgba(255, 255, 255, 0.94)"
 #       toolbar_btn_bg: "#e8e8f8"
 #       toolbar_btn_hover: "#d8d8ee"
+#       toolbar_btn_text: "#1a1a3a"
 #       toc_active_bg: "rgba(74, 58, 217, 0.15)"
+#       heading_font: "system-ui, sans-serif"
