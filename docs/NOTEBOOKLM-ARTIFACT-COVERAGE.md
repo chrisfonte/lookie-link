@@ -54,7 +54,7 @@ When the NotebookLM source side offers a choice of export formats, agents should
 
 The fastest way to confirm coverage is to open each artifact type in a browser against the live instance. The URLs below use the canonical NotebookLM topic hub as fixtures.
 
-Replace `<host>` with your reachable Lookie-Link host (e.g., `localhost:9876` or `mac-mini-2.bobcat-tetra.ts.net:9876`).
+Replace `<host>` with your reachable Lookie-Link host (e.g., `localhost:9876`).
 
 | Type | `/view` (rendered review page) | `/asset` (raw byte path) |
 |---|---|---|

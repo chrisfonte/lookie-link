@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 
-const DEFAULT_BASE_URL = process.env.LOOKIE_LINK_BASE_URL || 'http://mac-mini-2.bobcat-tetra.ts.net:9876';
+const DEFAULT_BASE_URL = process.env.LOOKIE_LINK_BASE_URL || 'http://localhost:9876';
 
 const EXIT_OK = 0;
 const EXIT_USAGE = 2;
@@ -45,7 +45,7 @@ const TOP_HELP = [
   '  -v, --version        Print version',
   '',
   'Env:',
-  '  LOOKIE_LINK_BASE_URL  Base URL (default http://mac-mini-2.bobcat-tetra.ts.net:9876)',
+  '  LOOKIE_LINK_BASE_URL  Base URL (default http://localhost:9876)',
   '  LOOKIE_LINK_TOKEN     Bearer token forwarded to the server',
   '  LOOKIE_LINK_AUTHOR    Default author/agent name',
   '',

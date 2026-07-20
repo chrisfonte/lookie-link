@@ -76,8 +76,8 @@ All three of these link forms render as a player:
 
 ```markdown
 [NotebookLM overview](./notebooks/2026-05-12-cruz-meeting.m4a)
-[NotebookLM overview](~/operations-chris-fonte/notebooks/2026-05-12-cruz-meeting.m4a)
-[NotebookLM overview](http://<tailscale-host>:9876/view/operations-chris-fonte/notebooks/2026-05-12-cruz-meeting.m4a)
+[NotebookLM overview](~/my-repo/notebooks/2026-05-12-cruz-meeting.m4a)
+[NotebookLM overview](http://<your-lookie-host>/view/my-repo/notebooks/2026-05-12-cruz-meeting.m4a)
 ```
 
 Browsing an audio file directly at `/view/<repo>/<path>.<audio-ext>` renders a dedicated player page with the same controls plus a **Download** link and file metadata (size, mtime).

@@ -50,7 +50,7 @@ Lets agents discover served repos at runtime without parsing the HTML index or r
   "repos": [
     {
       "repo": "operations",
-      "rootPath": "/Users/chrisfonte/operations",
+      "rootPath": "~/notes",
       "viewUrl": "/view/operations/",
       "assetUrl": "/asset/operations/"
     }

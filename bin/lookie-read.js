@@ -17,7 +17,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { pipeline } = require('node:stream/promises');
 
-const DEFAULT_BASE_URL = process.env.LOOKIE_LINK_BASE_URL || 'http://mac-mini-2.bobcat-tetra.ts.net:9876';
+const DEFAULT_BASE_URL = process.env.LOOKIE_LINK_BASE_URL || 'http://localhost:9876';
 const CACHE_DIR = path.join(os.homedir(), '.cache', 'lookie-link');
 const CACHE_FILE = path.join(CACHE_DIR, 'repos.json');
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -50,7 +50,7 @@ function printUsage(stream = process.stdout) {
       '  -v, --version       Print version',
       '',
       'Env:',
-      '  LOOKIE_LINK_BASE_URL  Base URL (default http://mac-mini-2.bobcat-tetra.ts.net:9876)',
+      '  LOOKIE_LINK_BASE_URL  Base URL (default http://localhost:9876)',
       '  LOOKIE_LINK_TOKEN     Bearer token forwarded to the server (optional)',
       '',
       'Exit codes:',
