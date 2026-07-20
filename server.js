@@ -81,6 +81,13 @@ const AUDIO_MIME_TYPES = {
   '.aac': 'audio/aac',
 };
 
+const VIDEO_MIME_TYPES = {
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.m4v': 'video/mp4',
+};
+
 const PDF_MIME_TYPES = {
   '.pdf': 'application/pdf',
 };
@@ -149,11 +156,13 @@ const TEXT_MIME_TYPES = {
 const ASSET_MIME_TYPES = {
   ...IMAGE_MIME_TYPES,
   ...AUDIO_MIME_TYPES,
+  ...VIDEO_MIME_TYPES,
   ...PDF_MIME_TYPES,
   ...TEXT_MIME_TYPES,
 };
 const IMAGE_EXTENSIONS = new Set(Object.keys(IMAGE_MIME_TYPES));
 const AUDIO_EXTENSIONS = new Set(Object.keys(AUDIO_MIME_TYPES));
+const VIDEO_EXTENSIONS = new Set(Object.keys(VIDEO_MIME_TYPES));
 const PDF_EXTENSIONS = new Set(Object.keys(PDF_MIME_TYPES));
 const EDITABLE_EXTENSIONS = new Set([
   '.md', '.markdown', '.mdown',
@@ -195,7 +204,7 @@ function isEditableFile(relativePath) {
     return false;
   }
 
-  if (IMAGE_EXTENSIONS.has(extension) || AUDIO_EXTENSIONS.has(extension) || PDF_EXTENSIONS.has(extension)) {
+  if (IMAGE_EXTENSIONS.has(extension) || AUDIO_EXTENSIONS.has(extension) || VIDEO_EXTENSIONS.has(extension) || PDF_EXTENSIONS.has(extension)) {
     return false;
   }
 
