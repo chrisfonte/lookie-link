@@ -2,6 +2,14 @@
 
 # User-Defined Forms Platform Plan Changelog
 
+## 0.4.0 - 2026-07-19
+
+- Wave-0 execution artifacts added (authored by codex 5.6 workers, adversarially reviewed by Opus reviewers, revisions applied; process per the public headless-fleet orchestration standard):
+  - `adr-92-forms-ownership-permissions-draft.md` (rev 2) — ownership, permissions, CSRF, raw-HTML boundary; all review code-claims verified against source; operator decision recorded 2026-07-19: `/raw` sandbox profile is `allow-scripts allow-forms allow-popups`, never `allow-same-origin`; zero open operator questions.
+  - `adr-93-versioned-contracts-draft.md` (rev 2) — versioned template/form/submission/direct-file contracts incl. fsync durability (B2) and the full deletion/tombstone/purge contract (B5); rev 2 pins canonical serialization grammar, splits tombstone create/update, adds discriminated supersession with fork detection.
+  - `issue-91-reconciliation-plan.md` (rev 2, sanitized copy) — 13-step preservation-first reconciliation; Step 1 (preservation) EXECUTED 2026-07-19: 12 GC-safe keep refs, dual checksum-verified archives, per-stash object verification, throwaway restore reproducing all 44 dirty paths. Private evidence record retained in the operator's system repo.
+- Baseline sanitization PR #140 opened and extended (private hostnames, personal paths, internal ticket IDs, private repo/client names — fix-forward; history handling recorded as operator accepted-risk decision).
+
 ## 0.3.1 - 2026-07-15
 
 - Recorded six operator decisions from the post-review co-design Q&A (sidecar `operator_decisions_2026_07_15`; full text on the referenced issues): multi-user principal contract from day one (#92); storage roots as deployment properties behind the adapter, SaaS-compatible (#93); purge tooling deferred with a tombstone purge-status seam (#93); webhook as the first dispatcher adapter (#102); documents-are-content/agents-are-principals confirmation clearing #106; workstreams v1 reads todos + plan sidecars (#136).
