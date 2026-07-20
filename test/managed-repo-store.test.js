@@ -59,6 +59,11 @@ test('managed repo store provides atomic CRUD, mtime conflicts, recovery, and bo
   const softDeleted = await setup.store.deleteFile(repo, 'notes/topic.md');
   assert.equal(softDeleted.deleted, 'soft');
   await assert.rejects(setup.store.readFile(repo, 'notes/topic.md'), { code: 'ENOENT' });
+  await assert.rejects(setup.store.listTree(repo, repo.policy.trashDirName), { code: 'ENOENT' });
+  await assert.rejects(
+    setup.store.listTree(repo, `${repo.policy.trashDirName}/${softDeleted.trashId}`),
+    { code: 'ENOENT' }
+  );
   await assert.rejects(
     setup.store.readFile(repo, `${repo.policy.trashDirName}/${softDeleted.trashId}/payload`),
     { code: 'EACCES' }

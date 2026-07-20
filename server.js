@@ -701,7 +701,11 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
     const repo = managedRepoStore && managedRepoStore.getRepo(req.params.repo);
     const relativePath = typeof req.query.path === 'string' ? req.query.path : '';
-    if (!repo || !canAccessPath(accessContext, 'view', repo.id, relativePath, 'directory')) {
+    if (
+      !repo
+      || isManagedInternalPath(repo.id, relativePath)
+      || !canAccessPath(accessContext, 'view', repo.id, relativePath, 'directory')
+    ) {
       managedNotFound(res);
       return;
     }
@@ -830,7 +834,10 @@ function createApp(options = {}) {
   app.post('/api/managed-repos/:repo/trash/:trashId/restore', async (req, res) => {
     const accessContext = resolveAccessContext(req);
     const repo = managedRepoStore && managedRepoStore.getRepo(req.params.repo);
-    if (!repo) { managedNotFound(res); return; }
+    if (!repo || !canAccessPath(accessContext, 'write', repo.id, '', 'directory')) {
+      managedNotFound(res);
+      return;
+    }
     try {
       const { metadata } = await managedRepoStore.getTrashMetadata(repo, req.params.trashId);
       if (!canAccessPath(accessContext, 'write', repo.id, metadata.originalPath, 'file')) {
@@ -848,7 +855,10 @@ function createApp(options = {}) {
   app.delete('/api/managed-repos/:repo/trash/:trashId', async (req, res) => {
     const accessContext = resolveAccessContext(req);
     const repo = managedRepoStore && managedRepoStore.getRepo(req.params.repo);
-    if (!repo) { managedNotFound(res); return; }
+    if (!repo || !canAccessPath(accessContext, 'write', repo.id, '', 'directory')) {
+      managedNotFound(res);
+      return;
+    }
     try {
       const { metadata } = await managedRepoStore.getTrashMetadata(repo, req.params.trashId);
       if (!canAccessPath(accessContext, 'write', repo.id, metadata.originalPath, 'file')) {

@@ -32,6 +32,11 @@ async function startFixture() {
           repos: { 'shared-notes': { paths: ['notes/'] } },
           permissions: { view: true },
         },
+        rootReader: {
+          secret: 'root-reader-placeholder',
+          repos: ['shared-notes'],
+          permissions: { view: true },
+        },
         maintainer: {
           secret: 'maintainer-placeholder',
           repos: ['shared-notes'],
@@ -143,6 +148,28 @@ test('managed repo HTTP CRUD is scoped, conflict-aware, non-leaking, and recover
   const deleted = await softDelete.json();
   assert.equal(deleted.deleted, 'soft');
 
+  for (const trashPath of [
+    '.lookie-link-trash',
+    `.lookie-link-trash/${deleted.trashId}`,
+  ]) {
+    const hiddenTree = await fixture.request(
+      `/api/managed-repos/shared-notes/tree?path=${encodeURIComponent(trashPath)}`,
+      { headers: auth('root-reader-placeholder') }
+    );
+    assert.equal(hiddenTree.status, 404);
+    const hiddenTreeText = await hiddenTree.text();
+    assert.deepEqual(JSON.parse(hiddenTreeText), { ok: false, error: 'Not found.' });
+    assert.equal(hiddenTreeText.includes(deleted.trashId), false);
+    assert.equal(hiddenTreeText.includes('metadata'), false);
+  }
+
+  const pathScopedTrashTree = await fixture.request(
+    '/api/managed-repos/shared-notes/tree?path=.lookie-link-trash',
+    { headers: auth('reader-placeholder') }
+  );
+  assert.equal(pathScopedTrashTree.status, 404);
+  assert.deepEqual(await pathScopedTrashTree.json(), { ok: false, error: 'Not found.' });
+
   const hiddenTrash = await fixture.request(`/asset/shared-notes/.lookie-link-trash/${deleted.trashId}/payload`, {
     headers: auth('maintainer-placeholder'),
   });
@@ -160,6 +187,22 @@ test('managed repo HTTP CRUD is scoped, conflict-aware, non-leaking, and recover
     headers: auth('writer-placeholder'),
   });
   const discarded = await softDeleteAgain.json();
+
+  const missingTrashId = '00000000-0000-4000-8000-000000000000';
+  for (const [method, suffix] of [['POST', '/restore'], ['DELETE', '']]) {
+    const unauthorizedExisting = await fixture.request(
+      `/api/managed-repos/shared-notes/trash/${discarded.trashId}${suffix}`,
+      { method, headers: auth('root-reader-placeholder') }
+    );
+    const unauthorizedMissing = await fixture.request(
+      `/api/managed-repos/shared-notes/trash/${missingTrashId}${suffix}`,
+      { method, headers: auth('root-reader-placeholder') }
+    );
+    assert.equal(unauthorizedExisting.status, 404);
+    assert.equal(unauthorizedMissing.status, 404);
+    assert.deepEqual(await unauthorizedExisting.json(), await unauthorizedMissing.json());
+  }
+
   const hardDeleteTrash = await fixture.request(`/api/managed-repos/shared-notes/trash/${discarded.trashId}`, {
     method: 'DELETE',
     headers: auth('writer-placeholder'),
