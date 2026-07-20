@@ -20,7 +20,7 @@ const path = require('node:path');
 
 const { createApp } = require('../server');
 
-function fetchText(server, urlPath) {
+function fetchResponse(server, urlPath) {
   return new Promise((resolve, reject) => {
     const { port } = server.address();
     const req = http.request(
@@ -29,10 +29,12 @@ function fetchText(server, urlPath) {
         const chunks = [];
         res.on('data', (chunk) => chunks.push(chunk));
         res.on('end', () => {
+          const body = Buffer.concat(chunks);
           resolve({
             status: res.statusCode,
             contentType: res.headers['content-type'] || '',
-            body: Buffer.concat(chunks).toString('utf8'),
+            body,
+            text: body.toString('utf8'),
           });
         });
       }
@@ -61,11 +63,17 @@ const FLASHCARDS_HTML = [
   '</body></html>',
 ].join('\n');
 
+const ODD_ENCODING_HTML = Buffer.from([
+  0x3c, 0x21, 0x64, 0x6f, 0x63, 0x74, 0x79, 0x70, 0x65, 0x20, 0x68, 0x74, 0x6d, 0x6c, 0x3e,
+  0x0d, 0x0a, 0x3c, 0x70, 0x3e, 0x63, 0x61, 0x66, 0xe9, 0xff, 0x3c, 0x2f, 0x70, 0x3e,
+]);
+
 async function run() {
   const repoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lookie-raw-html-validate-'));
 
   try {
     await fs.writeFile(path.join(repoDir, 'flashcards.html'), FLASHCARDS_HTML, 'utf8');
+    await fs.writeFile(path.join(repoDir, 'odd-encoding.htm'), ODD_ENCODING_HTML);
     await fs.writeFile(path.join(repoDir, 'notes.md'), '# Notes\n', 'utf8');
 
     const appDisabled = createApp({ mappings: { docs: repoDir }, rawHtmlEnabled: false });
@@ -76,56 +84,60 @@ async function run() {
 
     try {
       // 1. Disabled instance: /raw/* returns 404.
-      const disabledResp = await fetchText(disabledServer, '/raw/docs/flashcards.html');
+      const disabledResp = await fetchResponse(disabledServer, '/raw/docs/flashcards.html');
       assert.equal(disabledResp.status, 404, '/raw/* should 404 when disabled');
-      assert.match(disabledResp.body, /disabled/i, 'disabled body should say disabled');
+      assert.match(disabledResp.text, /disabled/i, 'disabled body should say disabled');
 
-      // 2. Enabled instance: /raw/<.html> serves verbatim text/html.
-      const enabledResp = await fetchText(enabledServer, '/raw/docs/flashcards.html');
+      // 2. /raw exact-byte contract: UTF-8 and odd-encoding fixtures are unchanged.
+      const enabledResp = await fetchResponse(enabledServer, '/raw/docs/flashcards.html');
       assert.equal(enabledResp.status, 200, '/raw/<.html> should 200 when enabled');
       assert.match(enabledResp.contentType, /^text\/html/, 'content-type should be text/html');
-      assert.equal(enabledResp.body, FLASHCARDS_HTML, 'raw body should equal file bytes verbatim');
-      assert.match(enabledResp.body, /<script>document.getElementById/, 'inline <script> must survive raw mode');
+      assert.deepEqual(enabledResp.body, Buffer.from(FLASHCARDS_HTML), 'raw body should equal file bytes verbatim');
+      assert.match(enabledResp.text, /<script>document.getElementById/, 'inline <script> must survive raw mode');
+
+      const oddEncodingResp = await fetchResponse(enabledServer, '/raw/docs/odd-encoding.htm');
+      assert.equal(oddEncodingResp.status, 200, '/raw odd-encoding HTML should 200');
+      assert.deepEqual(oddEncodingResp.body, ODD_ENCODING_HTML, '/raw must not decode or normalize invalid UTF-8 bytes');
 
       // 3. Enabled instance: /raw rejects non-html extensions.
-      const notMdResp = await fetchText(enabledServer, '/raw/docs/notes.md');
+      const notMdResp = await fetchResponse(enabledServer, '/raw/docs/notes.md');
       assert.equal(notMdResp.status, 415, '/raw rejects non-html extensions with 415');
 
       // 4. Enabled instance: unknown repo returns 404.
-      const unknownResp = await fetchText(enabledServer, '/raw/missing/flashcards.html');
+      const unknownResp = await fetchResponse(enabledServer, '/raw/missing/flashcards.html');
       assert.equal(unknownResp.status, 404, 'unknown repo returns 404');
 
       // 5. Enabled instance: directory traversal blocked.
-      const traversalResp = await fetchText(enabledServer, '/raw/docs/../../../etc/passwd');
+      const traversalResp = await fetchResponse(enabledServer, '/raw/docs/../../../etc/passwd');
       assert.notEqual(traversalResp.status, 200, 'directory traversal must not return 200');
 
       // 6. /view/<.html> still wraps + sanitises on both disabled and enabled.
-      const viewDisabled = await fetchText(disabledServer, '/view/docs/flashcards.html');
+      const viewDisabled = await fetchResponse(disabledServer, '/view/docs/flashcards.html');
       assert.equal(viewDisabled.status, 200);
       assert.match(viewDisabled.contentType, /^text\/html/);
-      assert.match(viewDisabled.body, /<title>docs\/flashcards\.html<\/title>/, '/view wraps with viewer title');
+      assert.match(viewDisabled.text, /<title>docs\/flashcards\.html<\/title>/, '/view wraps with viewer title');
       assert.doesNotMatch(
-        viewDisabled.body,
+        viewDisabled.text,
         /<script>document\.getElementById\("root"\)\.textContent = "flipped";<\/script>/,
         '/view must strip inline <script> from rendered output'
       );
 
-      const viewEnabled = await fetchText(enabledServer, '/view/docs/flashcards.html');
+      const viewEnabled = await fetchResponse(enabledServer, '/view/docs/flashcards.html');
       assert.equal(viewEnabled.status, 200);
       assert.doesNotMatch(
-        viewEnabled.body,
+        viewEnabled.text,
         /<script>document\.getElementById\("root"\)\.textContent = "flipped";<\/script>/,
         '/view must strip inline <script> even when raw mode is enabled'
       );
 
       // 7. "Open raw" toolbar appears only when raw HTML is enabled.
-      assert.doesNotMatch(viewDisabled.body, /Open raw/, 'disabled /view should not advertise raw mode');
-      assert.match(viewEnabled.body, /Open raw/, 'enabled /view should advertise raw mode');
-      assert.match(viewEnabled.body, /href="\/raw\/docs\/flashcards\.html"/, 'Open raw button should link to /raw/');
+      assert.doesNotMatch(viewDisabled.text, /Open raw/, 'disabled /view should not advertise raw mode');
+      assert.match(viewEnabled.text, /Open raw/, 'enabled /view should advertise raw mode');
+      assert.match(viewEnabled.text, /href="\/raw\/docs\/flashcards\.html"/, 'Open raw button should link to /raw/');
 
       // 8. healthz reflects rawHtmlEnabled.
-      const healthDisabled = JSON.parse((await fetchText(disabledServer, '/healthz')).body);
-      const healthEnabled = JSON.parse((await fetchText(enabledServer, '/healthz')).body);
+      const healthDisabled = JSON.parse((await fetchResponse(disabledServer, '/healthz')).text);
+      const healthEnabled = JSON.parse((await fetchResponse(enabledServer, '/healthz')).text);
       assert.equal(healthDisabled.rawHtmlEnabled, false);
       assert.equal(healthEnabled.rawHtmlEnabled, true);
 

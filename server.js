@@ -270,6 +270,10 @@ function sendAccessError(res, accessContext, asJson = false) {
   res.status(accessContext.denialStatus).type('text/plain').send(accessContext.denialMessage);
 }
 
+function sendRawHtmlResponse(res, sourceBuffer) {
+  res.status(200).type(RAW_HTML_MIME_TYPE).send(sourceBuffer);
+}
+
 function parseBooleanQuery(value) {
   if (typeof value !== 'string') {
     return false;
@@ -1444,16 +1448,16 @@ function createApp(options = {}) {
       return;
     }
 
-    res.type(RAW_HTML_MIME_TYPE).sendFile(resolved, (error) => {
-      if (!error) {
-        return;
-      }
+    let sourceBuffer;
+    try {
+      sourceBuffer = await fs.readFile(resolved);
+    } catch (error) {
+      console.error('Failed to read raw HTML', { resolved, error });
+      res.status(500).type('text/plain').send('Failed to read file.');
+      return;
+    }
 
-      console.error('Failed to serve raw HTML', { resolved, error });
-      if (!res.headersSent) {
-        res.status(500).type('text/plain').send('Failed to read file.');
-      }
-    });
+    sendRawHtmlResponse(res, sourceBuffer);
   });
 
   app.get('/view', (req, res) => {
