@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "source": "docs/SKILL-SPEC.md",
+  "sourceHash": "ce6950c68365af5d62f44d078eef1fb10709ce0539dee809c7f445ff7f6be4d1",
+  "generator": "scripts/generate-skill-packages.js",
+  "outputs": [
+    "claude-code/lookie-link/SKILL.md",
+    "codex/lookie-link/SKILL.md",
+    "cursor/lookie-link/.cursorrules"
+  ]
+}
