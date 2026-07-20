@@ -1104,7 +1104,10 @@ function createApp(options = {}) {
           ? [req.query.state]
           : [];
       const filtered = filterAnnotationsByState(result.document, states);
-      res.status(200).json(filtered);
+      res.status(200).json({
+        ...filtered,
+        mtimeMs: result.mtimeMs,
+      });
     } catch (error) {
       if (error instanceof SyntaxError) {
         res.status(500).json({ ok: false, error: 'Annotation sidecar contains invalid JSON.' });
