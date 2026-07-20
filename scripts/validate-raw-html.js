@@ -8,7 +8,7 @@
 //   * /raw/<path>.txt returns 415 (only .html/.htm allowed)
 //   * /embed/<path>.html injects base/theme/navigation without changing /raw
 //   * /embed rejects binary and invalid UTF-8 input
-//   * /view/<path>.html still wraps + sanitises (no inline <script> survives)
+//   * /view uses the sanitised renderer when disabled and frames /embed when enabled
 //   * /view exposes an "Open raw" toolbar link only when raw HTML is enabled
 //
 // Runs the real `createApp` against a tmp repo so the route/middleware wiring
@@ -136,7 +136,7 @@ async function run() {
       const traversalResp = await fetchResponse(enabledServer, '/raw/docs/../../../etc/passwd');
       assert.notEqual(traversalResp.status, 200, 'directory traversal must not return 200');
 
-      // 7. /view/<.html> still wraps + sanitises on both disabled and enabled.
+      // 7. /view sanitises when disabled and frames /embed when enabled.
       const viewDisabled = await fetchResponse(disabledServer, '/view/docs/flashcards.html');
       assert.equal(viewDisabled.status, 200);
       assert.match(viewDisabled.contentType, /^text\/html/);
@@ -162,7 +162,7 @@ async function run() {
       assert.doesNotMatch(
         viewEnabled.text,
         /<script>document\.getElementById\("root"\)\.textContent = "flipped";<\/script>/,
-        '/view must strip inline <script> even when raw mode is enabled'
+        '/view wrapper must not copy authored inline scripts when embed mode is enabled'
       );
 
       // 8. "Open raw" toolbar appears only when raw HTML is enabled.
