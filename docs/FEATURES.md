@@ -143,6 +143,25 @@ When `server.enableAnnotations: true`, the document viewer adds an inline annota
 
 See `docs/ANNOTATIONS-SPEC.md` for the full sidecar schema, phase split, and the agent-feedback loop the API enables. The HTTP transport and viewer UX are both available.
 
+## Managed Repositories
+
+Operators can register mutable repository roots beneath existing configured
+allow-roots. Managed callers can read and atomically write files, inspect a
+bounded tree or mtime-based change list, and use optimistic `expectedMtimeMs`
+conflict detection. File mutations require `write` capability.
+
+Deletes are recoverable by default: the response returns a `trashId` that can
+be restored or permanently deleted. Realpath checks cover both existing paths
+and the nearest existing ancestor of a new path, preventing symlink-ancestor
+escapes. Missing and unauthorized managed paths have the same not-found
+response, and registry responses omit host filesystem roots.
+
+`GET /api/search` performs bounded path and full-text matching over supported
+text formats; `GET /api/search/suggest` performs bounded path suggestions.
+Both prune traversal using the caller's repository and path scopes, silently
+exclude requested scopes the caller cannot see, cap work and result counts, and
+report when a response was truncated.
+
 ## Themes
 
 10 built-in color themes, each with dark and light variants:

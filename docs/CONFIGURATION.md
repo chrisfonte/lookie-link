@@ -19,6 +19,24 @@ Each key under `repositories` becomes a URL prefix: `/view/docs/...`, `/view/not
 
 A sample config is included: `lookie-link.yaml.example`.
 
+## Managed Repositories
+
+```yaml
+managedRepos:
+  storePath: ~/.local/share/lookie-link/managed-repos.yaml
+  allowRoots:
+    - ~/shared-workspaces
+  adminTokens:
+    local_operator:
+      secretEnv: LOOKIE_LINK_MANAGED_REPO_ADMIN_TOKEN
+```
+
+`storePath` enables the registry and mutable-content routes. Each `allowRoots`
+entry must be an existing directory. Registration resolves real paths and only
+creates a repository below a real, in-scope ancestor, so a symlink ancestor
+cannot redirect creation outside the allow-root. Keep admin secrets in the
+environment; normal file mutations use caller `write` capability.
+
 ## Access Tokens
 
 Phase 1 agent access control is config-driven under `access.tokens`. Secrets should come from environment variables when possible.
