@@ -100,18 +100,20 @@ test('embed annotations are opt-in and query credentials are limited to required
   const fixture = await makeFixture();
   try {
     const enabled = transformEmbedHtml(
-      '<h1>Annotate me</h1><img src="image.png"><script>window.credential = "bearer-example";</script>',
+      '<h1>Annotate me</h1><img src="image.png"><a href="guide.html?token=authored-token&mode=print">Guide</a><p data-secret="bearer&amp;example">Credential</p>',
       options(fixture, {
         annotationsEnabled: true,
         queryToken: 'query-example',
-        sensitiveValues: ['bearer-example'],
+        sensitiveValues: ['bearer&example'],
       })
     );
     assert.match(enabled, /<h1 id="annotate-me">Annotate me<a class="anchor-link"/);
     assert.match(enabled, /lookie-link-annotations-bootstrap/);
     assert.match(enabled, /"queryToken":"query-example"/);
     assert.match(enabled, /src="\/asset\/alpha\/docs\/image\.png\?token=query-example"/);
-    assert.doesNotMatch(enabled, /bearer-example/);
+    assert.match(enabled, /href="\/view\/alpha\/docs\/guide\.html\?mode=print&amp;token=query-example"/);
+    assert.doesNotMatch(enabled, /authored-token/);
+    assert.doesNotMatch(enabled, /bearer(?:&|&amp;)example/);
 
     const disabled = transformEmbedHtml('<h1>Plain</h1>', options(fixture, { annotationsEnabled: false }));
     assert.doesNotMatch(disabled, /lookie-link-annotations-bootstrap/);
