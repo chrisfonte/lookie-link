@@ -2,18 +2,18 @@
 # Wrapper around lookie-link-config-audit.sh for scheduled execution.
 #
 # Runs the audit; on a non-empty delta it posts a Paperclip comment to the
-# configured tracking issue (default FON-11521). Designed to be driven by
+# configured tracking issue. Designed to be driven by
 # launchd / cron on the Lookie-Link host.
 #
 # Environment variables:
-#   LOOKIE_LINK_AUDIT_ISSUE   Paperclip issue ID to comment on (default: FON-11521)
+#   LOOKIE_LINK_AUDIT_ISSUE   Paperclip issue ID to comment on
 #   LOOKIE_LINK_AUDIT_LOG     Log file path (default: ~/Library/Logs/lookie-link-config-audit.log)
 #   LOOKIE_LINK_CONFIG        Override config path (passed through to the audit)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AUDIT="${SCRIPT_DIR}/lookie-link-config-audit.sh"
-ISSUE_ID="${LOOKIE_LINK_AUDIT_ISSUE:-FON-11521}"
+ISSUE_ID="${LOOKIE_LINK_AUDIT_ISSUE:-ACME-1234}"
 LOG_PATH="${LOOKIE_LINK_AUDIT_LOG:-$HOME/Library/Logs/lookie-link-config-audit.log}"
 
 mkdir -p "$(dirname "$LOG_PATH")"

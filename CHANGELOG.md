@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-06-10 — Unreleased — Annotations Viewer UX (FON-11764)
+## 2026-06-10 — Unreleased — Annotations Viewer UX
 
 - When `server.enableAnnotations: true`, the document viewer now renders a 💬 button next to every anchored heading and YAML key path. Clicking it opens an inline form whose submission writes through `POST /api/annotations/<repo>/<path>`.
 - Stored annotations render inline next to their anchor as a card with author, body, state badge, claim metadata, replies, and per-state actions (Claim, Resolve, Reopen, Reply). Each action calls the API and refreshes inline; stale-mtime conflicts surface in an alert.
@@ -9,14 +9,14 @@
 - Author name is remembered in `localStorage` so repeat annotations don't re-prompt.
 - No source file mutation; sidecar is still the only on-disk surface. No new auth surface — the script uses the same `view` permission and query-token plumbing as the rest of the viewer.
 
-## 2026-06-09 — Unreleased — Annotations CLI Shim (FON-11765)
+## 2026-06-09 — Unreleased — Annotations CLI Shim
 
 - Added `bin/lookie-annotations.js` CLI shim, registered as the `lookie-annotations` bin. Mirrors `lookie-read.js` posture: env-based auth (`LOOKIE_LINK_BASE_URL`, `LOOKIE_LINK_TOKEN`, `LOOKIE_LINK_AUTHOR`), JSON-first stdout, shared exit-code grammar (`0/2/3/4/5`), and `--json-errors` for machine consumers.
 - Subcommands: `list`, `get`, `add`, `claim`, `resolve`, `replies` (with `--add`). `--state` is repeatable; `--pretty` prints a human-friendly form; body input accepts `--body STRING`, `--body-file PATH`, or `--body -` (stdin).
 - Extended `scripts/validate-editable-mode.js` to spawn the CLI against a real HTTP listener and cover every subcommand path, both body-input forms, state filtering, `--pretty`, no-token forbidden (exit 4), and scoped-token success.
 - Documented both shims in `docs/AGENT-SHIM.md`.
 
-## 2026-06-09 — Unreleased — Annotations Sidecar Transport (FON-11763)
+## 2026-06-09 — Unreleased — Annotations Sidecar Transport
 
 - Added sidecar-backed annotation storage at `<repoRoot>/.lookie-link/annotations/<repo>/<relative-path>.json` with atomic temp+rename writes, per-day annotation IDs, and stale-write protection via `expectedMtimeMs` on PATCH.
 - Added `GET | POST | PATCH /api/annotations/<repo>/<path>` behind a new `server.enableAnnotations` flag (and `LOOKIE_LINK_ENABLE_ANNOTATIONS` env var), independent of `enableEditing`. Routes reuse the existing token-scoped `view` permission for both reads and writes.
@@ -26,23 +26,22 @@
 
 ## 2026-06-09 — Unreleased — Annotations & Agent-Feedback Loop Spec
 
-- FON-11762 — Nested YAML key anchors. Anchor IDs now use full-path slugs like `database-connection-host`, with deterministic `-2`, `-3` suffixes for collisions. Existing top-level vs nested TOC styling is preserved; nested keys get their own anchor-link buttons. Adds an HTTP regression test through `/view` for nested YAML coverage.
+- Nested YAML key anchors now use full-path slugs like `database-connection-host`, with deterministic `-2`, `-3` suffixes for collisions. Existing top-level vs nested TOC styling is preserved; nested keys get their own anchor-link buttons. Adds an HTTP regression test through `/view` for nested YAML coverage.
 - Added `docs/ANNOTATIONS-SPEC.md` — draft planning doc for a structured annotation layer (sidecar by default, inline opt-in) and a flat-file pickup contract for agents. Lays out a verdict table, sidecar JSON schema, click-to-annotate UX on existing heading/YAML-key anchors, line-range fallback, a `bin/lookie-annotations.js` CLI shim, and a phase split. Establishes nested YAML key anchors as a phase-1 prerequisite. No code changes yet; basis for follow-up implementation issues.
 
-## 2026-06-08 — Unreleased — Agent-Facing Read/Write Standard (FON-11515)
+## 2026-06-08 — Unreleased — Agent-Facing Read/Write Standard
 
-- Added `GET /api/repos` JSON discovery endpoint so agents can enumerate served repos at runtime (`{repo, rootPath, viewUrl, assetUrl}`). Filtered by the same access-control logic as the home page. Closes FON-11515.
-- Added `bin/lookie-read.js` CLI shim (`lookie-read <repo>/<path>`) declared in `package.json#bin`. Encapsulates discovery, local-fallback, HTTP fetch with Range, and `LOOKIE_LINK_TOKEN` auth. Closes FON-11519.
+- Added `GET /api/repos` JSON discovery endpoint so agents can enumerate served repos at runtime (`{repo, rootPath, viewUrl, assetUrl}`). Filtered by the same access-control logic as the home page.
+- Added `bin/lookie-read.js` CLI shim (`lookie-read <repo>/<path>`) declared in `package.json#bin`. Encapsulates discovery, local-fallback, HTTP fetch with Range, and `LOOKIE_LINK_TOKEN` auth.
 - Extended `/asset/<repo>/<path>` mime allowlist to cover text/source extensions (markdown, yaml, json, sh/py/js/ts/go/rs/c/cpp/etc.) so the read shim can fetch source files. Source-code and HTML extensions are served as `text/plain; charset=utf-8` to prevent browser auto-rendering. Unknown extensions still return `415`.
-- Added `scripts/lookie-link-config-audit.sh` + `scripts/lookie-link-config-audit-cron.sh` and `scripts/launchd/com.lookie-link.config-audit.plist` to enumerate `~/operations-*` directories, classify them (served / worktree-skip / placeholder-skip / missing), and post deltas to Paperclip. Closes FON-11521.
-- Added test coverage for `/api/repos` in `scripts/validate-editable-mode.js`. Closes FON-11518.
-- Documented the convention upstream at `~/operations/docs/meta/lookie-link-for-agents/lookie-link-for-agents-best-practices.md` and `~/operations/ai-tools/knowledge/universal-methods.yaml#lookie-link-for-file-references`.
+- Added `scripts/lookie-link-config-audit.sh` + `scripts/lookie-link-config-audit-cron.sh` and `scripts/launchd/com.lookie-link.config-audit.plist` to enumerate configured operations directories, classify them (served / worktree-skip / placeholder-skip / missing), and post deltas to Paperclip.
+- Added test coverage for `/api/repos` in `scripts/validate-editable-mode.js`.
+- Documented repository discovery and agent file-reference conventions in the public API and shim documentation.
 
 ## 2026-05-16 — Unreleased — Linkify Bare URLs
 
 - Enabled `linkify: true` in markdown-it so bare URLs (e.g. `https://itflow.org` in a `## Sources` bullet list) render as clickable links. Verified YouTube iframe + sandbox flow still works and that URLs inside fenced/inline code remain literal.
 - Documented behavior in README feature list, `docs/FEATURES.md#markdown-link-rendering`, and as an informational comment in `lookie-link.yaml.example`.
-- Closes FON-7049
 
 ## 2026-05-14 — Unreleased — PDF Rendering
 
@@ -56,7 +55,6 @@
 - Render `.html` and `.htm` files as sanitized HTML documents with a Raw source toggle
 - Strip `<script>` tags and preserve local repo images through the existing DOMPurify + asset rewrite pipeline
 - Added integration coverage for direct `/view/.../.htm` rendering and `/edit/.../.htm` access
-- Closes FON-6175
 
 ## 2026-05-12 — Unreleased — Audio File Playback
 
@@ -66,8 +64,8 @@
 - Inline player also triggers for fully-qualified `http(s)://<host>:9876/view/<repo>/<path>.<audio-ext>` URLs — the Paperclip-style labeled-link form — not just `./relative` and `~/repo` paths
 - `/asset/<repo>/<path>` route serves audio with correct MIME types and Range requests for seeking
 - Audio files are excluded from editable mode (binary)
-- Documented in `docs/FEATURES.md` (new Audio Playback section) and `~/operations/ai-tools/knowledge/integrations/lookie-link.yaml` (v1.2)
-- Closes FON-5963, GH#54
+- Documented in `docs/FEATURES.md` (new Audio Playback section).
+- Closes GH#54
 
 ## 2026-05-03 — Unreleased — Phase 1 Token-Scoped Access
 

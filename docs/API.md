@@ -50,7 +50,7 @@ Lets agents discover served repos at runtime without parsing the HTML index or r
   "repos": [
     {
       "repo": "operations",
-      "rootPath": "/Users/chrisfonte/operations",
+      "rootPath": "~/notes",
       "viewUrl": "/view/operations/",
       "assetUrl": "/asset/operations/"
     }
@@ -146,7 +146,7 @@ Create request example:
 
 ```json
 {
-  "repoId": "operations-fontastic",
+  "repoId": "acme-co",
   "sourceCompanyId": "fontastic",
   "targetCompanyId": "target-company",
   "subject": {
@@ -157,8 +157,8 @@ Create request example:
     "view": true,
     "edit": false
   },
-  "paths": ["clients/rfc-media/briefs/"],
-  "sourceIssueId": "FON-3675",
+  "paths": ["clients/example-client/briefs/"],
+  "sourceIssueId": "ACME-1234",
   "reason": "Cross-company review requested in issue.",
   "expiresAt": "2026-05-10T00:00:00.000Z",
   "issuer": {

@@ -11,7 +11,7 @@ Both share the same env-based auth, the same exit-code grammar, and JSON-first s
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `LOOKIE_LINK_BASE_URL` | `http://mac-mini-2.bobcat-tetra.ts.net:9876` | Server base URL |
+| `LOOKIE_LINK_BASE_URL` | `http://localhost:9876` | Server base URL |
 | `LOOKIE_LINK_TOKEN` | _(unset)_ | Bearer token forwarded as `Authorization: Bearer <token>` |
 | `LOOKIE_LINK_AUTHOR` | `lookie-annotations` (annotations only) | Default author name for created annotations and replies |
 

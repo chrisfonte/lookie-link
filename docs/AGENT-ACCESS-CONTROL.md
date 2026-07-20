@@ -47,14 +47,14 @@ subject:
   company: moneymaking
   agents: all
 resource:
-  repo: operations-fontastic
+  repo: acme-co
   paths:
-    - clients/rfc-media/briefs/example.md
+    - clients/example-client/briefs/example.md
 permissions:
   view: true
   edit: false
 expiresAt: "2026-05-11T00:00:00-04:00"
-reason: "Cross-company review requested in Paperclip issue FON-xxxx"
+reason: "Cross-company review requested in tracking issue ACME-xxxx"
 issuedBy: fontastic
 ```
 
@@ -83,7 +83,7 @@ Practical rule:
 
 ## Paperclip Filesystem Boundary Audit
 
-Audit date: 2026-05-04 for [FON-3673](/FON/issues/FON-3673).
+Audit date: 2026-05-04 for the agent access-control review.
 
 Classification: the current Paperclip local-runtime boundary is not strong
 enough to treat Lookie-Link cross-company grants as routine. Lookie-Link can
@@ -317,9 +317,9 @@ Likely CLI shape:
 ```bash
 lookie whoami
 lookie repos
-lookie get operations-fontastic clients/rfc-media/briefs/example.md
-lookie put operations-fontastic clients/rfc-media/briefs/example.md --file draft.md
-lookie grant request operations-fontastic clients/rfc-media/briefs/example.md --reason FON-xxxx
+lookie get acme-co clients/example-client/briefs/example.md
+lookie put acme-co clients/example-client/briefs/example.md --file draft.md
+lookie grant request shared-docs briefs/example.md --reason ACME-xxxx
 ```
 
 Likely HTTP API shape:
@@ -383,9 +383,9 @@ Lazy-load rule:
 - Do not mechanically convert `AGENTS.md`, `TOOLS.md`, or lazy-load file
   references to Lookie-Link URLs.
 
-Implementation guidance for FON-3682 / FON-3671 coordination:
+Implementation guidance for coordinating filesystem access with managed grants:
 
-- Treat the grant lifecycle API already being added for FON-3671 as the control
+- Treat the managed grant lifecycle API as the control
   plane for explicit shared access.
 - Keep the proposed agent `whoami`/`repos`/`files` endpoints as a thin data
   plane over the same repo/path enforcement model rather than a second policy
@@ -424,7 +424,7 @@ Add a `tokens` section to `lookie-link.yaml`:
 tokens:
   ops-agent:
     secret: "randomly-generated-secret-1"
-    repos: [operations, operations-fontastic]
+    repos: [docs, acme-co]
     allowEditing: false
   research-agent:
     secret: "randomly-generated-secret-2"
@@ -456,7 +456,7 @@ Expose scoped base URLs like `/agent/<agent-name>/view/...` where the prefix det
 ```yaml
 agents:
   ops-agent:
-    repos: [operations, operations-fontastic]
+    repos: [docs, acme-co]
   research-agent:
     repos: [operations-research]
 ```
@@ -478,7 +478,7 @@ listeners:
   - port: 9876
     repos: all
   - port: 9877
-    repos: [operations, operations-fontastic]
+    repos: [docs, acme-co]
   - port: 9878
     repos: [operations-research]
 ```

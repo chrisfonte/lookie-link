@@ -76,8 +76,8 @@ All three of these link forms render as a player:
 
 ```markdown
 [NotebookLM overview](./notebooks/2026-05-12-cruz-meeting.m4a)
-[NotebookLM overview](~/operations-chris-fonte/notebooks/2026-05-12-cruz-meeting.m4a)
-[NotebookLM overview](http://<tailscale-host>:9876/view/operations-chris-fonte/notebooks/2026-05-12-cruz-meeting.m4a)
+[NotebookLM overview](~/my-repo/notebooks/2026-05-12-cruz-meeting.m4a)
+[NotebookLM overview](http://<your-lookie-host>/view/my-repo/notebooks/2026-05-12-cruz-meeting.m4a)
 ```
 
 Browsing an audio file directly at `/view/<repo>/<path>.<audio-ext>` renders a dedicated player page with the same controls plus a **Download** link and file metadata (size, mtime).
@@ -135,7 +135,7 @@ When `server.enableAnnotations: true`, the document viewer adds an inline annota
 - Annotation data lives at `<repoRoot>/.lookie-link/annotations/<repo>/<relative-path>.json` (sidecar). Source files are never mutated.
 - The flag is independent of `enableEditing` — annotations are available on the default safe configuration.
 
-See `docs/ANNOTATIONS-SPEC.md` for the full sidecar schema, phase split, and the agent-feedback loop the API enables. The HTTP transport landed in FON-11763; the viewer UX in FON-11764.
+See `docs/ANNOTATIONS-SPEC.md` for the full sidecar schema, phase split, and the agent-feedback loop the API enables. The HTTP transport and viewer UX are both available.
 
 ## Themes
 

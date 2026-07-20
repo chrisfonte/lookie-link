@@ -66,8 +66,8 @@ Minimum resource fields:
 
 ```json
 {
-  "repoId": "operations-fontastic",
-  "paths": ["clients/rfc-media/briefs/example.md"],
+  "repoId": "acme-co",
+  "paths": ["clients/example-client/briefs/example.md"],
   "permissions": {
     "view": true,
     "edit": false
@@ -89,7 +89,7 @@ Every grant must include at least one Paperclip issue link:
 
 Paperclip should add a comment to the source issue when a grant is issued,
 renewed, revoked, or expired early. Comments should link ticket IDs in markdown
-form, for example `[FON-3672](/FON/issues/FON-3672)`.
+form, for example `[ACME-1234](/ACME/issues/ACME-1234)`.
 
 ## Expiry Defaults
 
@@ -130,12 +130,12 @@ Each grant record should store:
   "sourceCompanyId": "source-company-id",
   "targetCompanyId": "target-company-id",
   "subjectAgentIds": ["agent-id"],
-  "repoId": "operations-fontastic",
-  "paths": ["clients/rfc-media/briefs/example.md"],
+  "repoId": "acme-co",
+  "paths": ["clients/example-client/briefs/example.md"],
   "permissions": { "view": true, "edit": false },
   "sourceIssueId": "issue-id",
   "approvalId": null,
-  "reason": "Cross-company review requested in FON-3672",
+  "reason": "Cross-company review requested in ACME-1234",
   "issuedByAgentId": "agent-id",
   "issuedByUserId": null,
   "createdAt": "2026-05-04T00:00:00Z",

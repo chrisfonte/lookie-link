@@ -38,7 +38,7 @@ repositories:
 #         agentIds: [agent-bob]
 #       issuer:
 #         system: paperclip
-#         issueId: FON-3671
+#         issueId: ACME-1234
 #       audit:
 #         grantId: static-phase1-docs-reader
 #       repos:

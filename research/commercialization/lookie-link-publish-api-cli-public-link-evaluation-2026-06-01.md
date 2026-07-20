@@ -2,7 +2,7 @@
 
 **Created**: 2026-06-01
 **Status**: Active — evaluation with recommendation, pending board confirmation on the phased plan
-**Source issue**: [FON-10180](/FON/issues/FON-10180)
+**Source**: Canonical content and publish API proposal
 **Purpose**: Decide whether Lookie-Link should grow beyond read-only local-repo viewing into a publish/storage API with a CLI and bounded public-link governance — and if so, what the right next step is (research, architecture, or a limited prototype). Connect the decision back to the three prior commercialization analyses and three prior Lookie-Link tickets named in the source issue.
 
 **Companions** (read in this order if cold):
@@ -15,50 +15,50 @@
 > **Addendum b** expands the storage model to include a multi-agent shared "managed repo" primitive alongside the slug-addressed publish primitive, and elevates search API + CLI to a load-bearing phase 1 item.
 > **Addendum c** expands the identity and auth model: first-class user identity (sessions, SSO via WorkOS) distinct from agent API keys, plus three public-share modes (anonymous / magic-link-lightweight / fully credentialed). Also records the commitment signal from Chris ("building this whether it becomes a public sellable thing or not") that removes commercialization as a gate on the build.
 > **Addendum d** evaluates whether managed repos should optionally back to a real GitHub remote with full bidirectional git-sync (`pull AND push`) and a configurable sync scheduler. Designs the feature with per-repo `syncMode` choice (`bidirectional` default + `canonical` opt-in) and per-repo `scheduling` choice (`built-in` default + `external` + `both`). Proposes a phase 1.5 slot between phase 1 and phase 2 if Chris wants to lock it in. Phase 1's content does not change either way. *Note: the initial draft of this addendum framed the design as canonical-only sync; corrected after Chris clarified that multi-writer is the general case and a SaaS-product default.*
-> **Addendum e** answers four questions Chris raised after addendum d: (1) cloud agents (OpenAI / cloud Claude / OpenClaw cloud) using the Lookie-Link API — reinforces existing design; flags FON-7058 as the transport that makes it reachable. (2) "Lookie-Link becomes the canonical location" — refactors the conceptual framing to "Lookie-Link as canonical content store with sync-to-other-systems as configurable plugins." (3) File versioning à la Syncthing for rollback, separate from git history — designs an optional `.versions/` sidecar layer per managed repo. (4) Database question and "are we over-complicating?" — direct answer: yes, SQLite (embedded, file-backed, no separate service), and no, this is the minimum for a serious product, not over-engineering.
+> **Addendum e** answers four questions Chris raised after addendum d: (1) cloud agents (OpenAI / cloud Claude / OpenClaw cloud) using the Lookie-Link API — reinforces existing design; flags the public-internet hosting work as the transport that makes it reachable. (2) "Lookie-Link becomes the canonical location" — refactors the conceptual framing to "Lookie-Link as canonical content store with sync-to-other-systems as configurable plugins." (3) File versioning à la Syncthing for rollback, separate from git history — designs an optional `.versions/` sidecar layer per managed repo. (4) Database question and "are we over-complicating?" — direct answer: yes, SQLite (embedded, file-backed, no separate service), and no, this is the minimum for a serious product, not over-engineering.
 > **Addendum f** addresses backup: (1) SaaS backup model — S3 / S3-compatible client-side-encrypted, per-tenant prefix, owned by the SaaS operator. (2) OSS backup — same mechanism exposed as operator-configurable: S3-compatible target (any vendor), local-rsync fallback for homelab. (3) "Is backup the versioning?" — partial yes, recommended design is complementary layers with unified API surface. (4) Phase slotting — proposes phase 1.7 (between phase 1.5 GitHub-backing and phase 2 CLI) for ~2–3 weeks of work, or defer to phase 4 if the operational stopgap (filesystem-level backup of the Lookie-Link host) is acceptable for the first months.
 > **Addendum g** responds to Chris's "maybe we use Syncthing FOR the backup since it has the versioning anyway?" Genuine insight. Promotes the Syncthing-peer sync plugin from "future" (Addendum e) to a first-class phase 1.7 target type alongside S3. Honest about the split: Syncthing is excellent for self-hosted operators (peer-to-peer, built-in versioning, free, mature) but doesn't fit the SaaS-hosted-by-us pattern where the operator manages backup centrally — so phase 1.7 ships both target types from one abstraction. Also addresses whether the `.versions/` sidecar is still needed (yes — default-on for operators without Syncthing or with snapshot-granularity backup).
 > The body of this document below is the original evaluation; the addenda are the current recommendation.
 
 ## TL;DR
 
-**Yes — this belongs in the Lookie-Link roadmap, and the right next step is a limited prototype, not more research or open-ended architecture work.** The strategic analysis was completed across three commercialization docs and a competitor doc in May 2026; all four converge on the same five-item roadmap (publish primitive, CLI, `agent.json` + OpenAPI, read/write token split, bounded public-share). FON-10180 supplies the concrete forcing function that elevates these items from "strategically endorsed" to "ship this": the machine-locality pain point ("research doc existed on one machine but Lookie-Link on another couldn't see it until git sync caught up") is exactly the failure mode a publish API to a single canonical Lookie-Link instance would eliminate.
+**Yes — this belongs in the Lookie-Link roadmap, and the right next step is a limited prototype, not more research or open-ended architecture work.** The strategic analysis was completed across three commercialization docs and a competitor doc in May 2026; all four converge on the same five-item roadmap (publish primitive, CLI, `agent.json` + OpenAPI, read/write token split, bounded public-share). The canonical content and publish API proposal supplies the concrete forcing function that elevates these items from "strategically endorsed" to "ship this": the machine-locality pain point ("research doc existed on one machine but Lookie-Link on another couldn't see it until git sync caught up") is exactly the failure mode a publish API to a single canonical Lookie-Link instance would eliminate.
 
 What is **not** changing:
 - Lookie-Link does **not** become a multi-tenant SaaS. The 6–9 month engineering build laid out in Path 4 of the SaaS options doc is still rejected.
 - Lookie-Link does **not** replace git as the version control layer. Publish artifacts live in a configured publish area on disk; the underlying tree is still git-trackable if the operator chooses.
-- Lookie-Link does **not** become public-by-default. Bounded public-share is opt-in per instance and per artifact, with expiry and optional password — the operator owns the public-internet exposure decision (the Pangolin path of [FON-7058](/FON/issues/FON-7058) handles "how does the instance reach the public internet" separately from "what does the instance expose").
+- Lookie-Link does **not** become public-by-default. Bounded public-share is opt-in per instance and per artifact, with expiry and optional password — the operator owns the public-internet exposure decision (the Pangolin path of the public-internet hosting work handles "how does the instance reach the public internet" separately from "what does the instance expose").
 
 What is **new** in this doc relative to the prior analyses:
 1. A concrete sequencing of the five roadmap items into three small, shippable phases (each independently mergeable).
-2. A specific resolution of the trust / auth / audit / versioning model questions from FON-10180.
-3. The connection back to the three prior tickets ([FON-7057](/FON/issues/FON-7057), [FON-7058](/FON/issues/FON-7058), [FON-3671](/FON/issues/FON-3671)) and an explicit statement of how each one slots in.
+2. A specific resolution of the trust / auth / audit / versioning model questions from the canonical content and publish API proposal.
+3. The connection back to the three prior workstreams (GitHub URL-to-local-path translation, public-internet hosting, and token-scoped access grants) and an explicit statement of how each one slots in.
 4. A proposed set of child issues, scoped so each is mergeable in days not weeks.
 
 ## Why the source issue raised this now
 
-The motivating pain in [FON-10180](/FON/issues/FON-10180) is specific and worth repeating:
+The motivating pain in the canonical content and publish API proposal is specific and worth repeating:
 
 > a research doc existed on one machine but Lookie-Link on another machine could not see it until repo synchronization caught up
 >
 > this created friction around local files, git synchronization, and machine locality
 
-This is **not really a publish-API problem on its own** — it is a "where does the canonical Lookie-Link instance live" problem. There are two structurally different solutions, and FON-10180 is implicitly asking about both:
+This is **not really a publish-API problem on its own** — it is a "where does the canonical Lookie-Link instance live" problem. There are two structurally different solutions, and the canonical content and publish API proposal is implicitly asking about both:
 
 | Solution | Problem it solves | Existing ticket |
 |---|---|---|
-| **A. Single canonical Lookie-Link instance** that every machine and every agent points at, reachable over the tailnet (or public internet for the public subset) | Eliminates the machine-locality question entirely. There is one Lookie-Link, and it shows what the authoritative repo state is. | [FON-7058](/FON/issues/FON-7058) (public-internet hosting via Pangolin) + a tailnet-internal equivalent |
-| **B. Publish API** that lets a local agent push files directly to that canonical instance without waiting for git push + git pull on the receiver machine | Eliminates the git-sync latency for artifacts that the receiver needs immediately, even when they are not yet committed (or never will be). | This issue (FON-10180) |
+| **A. Single canonical Lookie-Link instance** that every machine and every agent points at, reachable over the tailnet (or public internet for the public subset) | Eliminates the machine-locality question entirely. There is one Lookie-Link, and it shows what the authoritative repo state is. | Public-internet hosting via Pangolin + a tailnet-internal equivalent |
+| **B. Publish API** that lets a local agent push files directly to that canonical instance without waiting for git push + git pull on the receiver machine | Eliminates the git-sync latency for artifacts that the receiver needs immediately, even when they are not yet committed (or never will be). | The canonical content and publish API proposal |
 
 **(A) without (B)** still helps if every doc is committed and pushed by the time anyone wants to read it; the friction is only the sync window.
 **(B) without (A)** is incoherent — there is nowhere to publish to.
-**(A) + (B) together** is what FON-10180 actually wants.
+**(A) + (B) together** is what the canonical content and publish API proposal actually wants.
 
-The good news: the strategic analysis from May 2026 already endorsed (B) on independent grounds (the `here.now`-alternative positioning, the wiki play, the competitor analysis). FON-10180 supplies the operational reason to do it.
+The good news: the strategic analysis from May 2026 already endorsed (B) on independent grounds (the `here.now`-alternative positioning, the wiki play, the competitor analysis). The canonical content and publish API proposal supplies the operational reason to do it.
 
 The other motivating example — "for some outputs (for example public-safe research like the Planet Fitness teen summer pass doc), it would be valuable to generate a sendable public link with optional controls" — is the bounded public-share feature that the competitor doc already recommended. Same convergence.
 
-## Answering the six questions from FON-10180
+## Answering the six questions from the canonical content and publish API proposal
 
 The source issue lays out six explicit questions. Each is answered below with a reference to where the prior analysis grounded the answer.
 
@@ -99,7 +99,7 @@ Scope: thin wrapper over HTTP, no extra magic. Ships in a separate package (`loo
 - **Audit trail** — every share creation, password attempt (success / failure), and access logged with caller / referrer / timestamp.
 - **No payment gating, no fork/remix, no stablecoin** — explicitly out of scope, consistent with the competitor doc's recommendation.
 
-The public-share endpoint does **not** require the Lookie-Link instance to be publicly reachable. Operators who run instances only inside a tailnet still get the share-creation feature; the URL just isn't reachable from outside the tailnet. Operators who want true public reach pair this with [FON-7058](/FON/issues/FON-7058)'s Pangolin path.
+The public-share endpoint does **not** require the Lookie-Link instance to be publicly reachable. Operators who run instances only inside a tailnet still get the share-creation feature; the URL just isn't reachable from outside the tailnet. Operators who want true public reach pair this with the public-internet hosting work's Pangolin path.
 
 ### 4. Should Lookie-Link become a storage/control plane for some classes of files instead of relying only on GitHub-backed repos?
 
@@ -108,7 +108,7 @@ The public-share endpoint does **not** require the Lookie-Link instance to be pu
 | Class | Where it should live | Why |
 |---|---|---|
 | **Source-of-truth code / docs** | Git repo, mounted in Lookie-Link | Version control, code review, branch hygiene, multi-machine sync, blame. None of this is Lookie-Link's job. |
-| **Long-lived research artifacts** that belong with a project | Git repo (operations-research / operations-fontastic / etc.), mounted in Lookie-Link | Same as above. The machine-locality problem from FON-10180 is a *Lookie-Link-instance topology problem*, not a "git is the wrong layer" problem. |
+| **Long-lived research artifacts** that belong with a project | Git repo (a public research repo, a private company repo, etc.), mounted in Lookie-Link | Same as above. The machine-locality problem from the canonical content and publish API proposal is a *Lookie-Link-instance topology problem*, not a "git is the wrong layer" problem. |
 | **Transient agent outputs** that need a URL now and don't need to live in git forever | Lookie-Link publish area | This is exactly what the publish API is for. |
 | **Reviewable artifacts** that benefit from immutability + slug addressing (a one-time research bundle, a generated report, a screenshot set, a public-safe summary) | Lookie-Link publish area | Same. |
 | **Public-share content** for non-tailnet recipients | Lookie-Link publish area + the public-share extension | Same. |
@@ -125,7 +125,7 @@ What this issue proposes is consistent with that:
 - The bounded public-share is **the operator choosing, per-artifact, to expose one thing for a limited window**, the same way a homelabber chooses to expose a file from their NAS.
 - There is no signup flow, no multi-tenant account model, no Stripe.
 
-The line: Lookie-Link is **operator-controlled software** that can produce public links if its operator wants it to. It is not a **public service** that anyone-with-a-credit-card can use. That distinction is the entire commercialization framework from the May 2026 docs, and FON-10180's proposal sits cleanly inside it.
+The line: Lookie-Link is **operator-controlled software** that can produce public links if its operator wants it to. It is not a **public service** that anyone-with-a-credit-card can use. That distinction is the entire commercialization framework from the May 2026 docs, and the canonical content and publish API proposal sits cleanly inside it.
 
 ### 6. What trust, auth, audit, and versioning model is required?
 
@@ -141,7 +141,7 @@ Three categories of caller, each with a clear authentication path:
 2. **Local-tailnet agent** — bearer token from a managed Paperclip grant. The grant adds two new permissions beyond view/edit:
    - `publish: true` — may call `POST /api/publish` to create new slugs within an allowed publish-area subpath
    - `share: true` — may call `POST /api/publish/<slug>/share` to mint public shares
-3. **Token-only agent (no grant)** — static config token with explicit `publish` / `share` scopes, same shape as the existing view/edit tokens from [FON-3671](/FON/issues/FON-3671).
+3. **Token-only agent (no grant)** — static config token with explicit `publish` / `share` scopes, same shape as the existing view/edit tokens from the token-scoped access grant work.
 
 The **read/write token split** flagged in the competitor doc (roadmap item 2) becomes mandatory: a token that can publish should not implicitly be able to share publicly, and vice versa. Permissions are an array, not a tier.
 
@@ -171,9 +171,9 @@ The existing `expectedMtimeMs` stale-write guard extends naturally to slug-based
 
 | Ticket | Status | How it connects |
 |---|---|---|
-| [FON-7057](/FON/issues/FON-7057) — translate github.com URLs to local file paths | backlog | The github.com → local translation is a **reader-side** fix for the same machine-locality pain that motivated FON-10180. Both tickets address the same UX problem from different angles: FON-7057 lets the reader find local files by clicking github.com links; this issue lets the writer push files into a single canonical Lookie-Link instance so the reader doesn't need a local checkout at all. They are complementary; neither obviates the other. Pick FON-7057 up when the reader-side surface is the bottleneck (most github.com link clicks today). Pick this issue's prototype up when the writer-side surface is the bottleneck (machines that haven't yet synced via git). |
-| [FON-7058](/FON/issues/FON-7058) — public-internet hosting via Pangolin | backlog | This is the **transport** that makes bounded public-share usable beyond the tailnet. The two tickets are layered: FON-7058 decides "how does the instance reach the public internet"; this issue decides "what does the instance expose when it's exposed." Either ticket is useful on its own; together they give the full Planet Fitness-link use case. **Recommendation: pick up FON-7058 in parallel with phase 2 of this work** (the bounded public-share phase). The Pangolin decision is small (DNS + tunnel + repo-scope flag) and unblocks the public-share value proposition. |
-| [FON-3671](/FON/issues/FON-3671) — phase 1 token-scoped repo/path access | done | This is the **foundation** the publish API extends. The existing token model (`view` / `edit`) gains `publish` / `share` scopes. No rewrite required; the managed-grant model already handles per-token capability arrays. Phase 1 of the new work mostly inherits FON-3671's plumbing. |
+| Translate github.com URLs to local file paths | backlog | The github.com → local translation is a **reader-side** fix for the same machine-locality pain that motivated the canonical content and publish API proposal. Both workstreams address the same UX problem from different angles: URL translation lets the reader find local files by clicking github.com links; the publish prototype lets the writer push files into a single canonical Lookie-Link instance so the reader doesn't need a local checkout at all. They are complementary; neither obviates the other. Pick URL translation up when the reader-side surface is the bottleneck (most github.com link clicks today). Pick the publish prototype up when the writer-side surface is the bottleneck (machines that haven't yet synced via git). |
+| Public-internet hosting via Pangolin | backlog | This is the **transport** that makes bounded public-share usable beyond the tailnet. The two workstreams are layered: public-internet hosting decides "how does the instance reach the public internet"; the publish/share work decides "what does the instance expose when it's exposed." Either is useful on its own; together they give the full Planet Fitness-link use case. **Recommendation: pick up public-internet hosting in parallel with phase 2 of this work** (the bounded public-share phase). The Pangolin decision is small (DNS + tunnel + repo-scope flag) and unblocks the public-share value proposition. |
+| Phase 1 token-scoped repo/path access | done | This is the **foundation** the publish API extends. The existing token model (`view` / `edit`) gains `publish` / `share` scopes. No rewrite required; the managed-grant model already handles per-token capability arrays. Phase 1 of the new work mostly inherits the token-scoped access grant plumbing. |
 
 ## Phased plan
 
@@ -239,8 +239,8 @@ Out of scope:
 ### Reference / follow-on work (not in this plan)
 
 - **Read/write token split** as a standalone refactor — already on the table in the competitor doc; preferably landed before Phase 1 but not a hard blocker (the new `publish` / `share` permissions are additive and the split can land alongside).
-- **Pangolin / public-internet exposure** for instances that want public-share URLs to actually be public — covered by [FON-7058](/FON/issues/FON-7058).
-- **github.com URL translation** — orthogonal and complementary, covered by [FON-7057](/FON/issues/FON-7057).
+- **Pangolin / public-internet exposure** for instances that want public-share URLs to actually be public — covered by the public-internet hosting work.
+- **github.com URL translation** — orthogonal and complementary, covered by the GitHub URL-to-local-path translation work.
 - **Agent-native wiki extensions** (stable page identity, first-class backlinks query API, edit-history surface, agent-metadata schema) — deferred to a separate decision per [`./lookie-link-as-agent-native-wiki-2026-05-16.md`](./lookie-link-as-agent-native-wiki-2026-05-16.md). This issue's phased plan is compatible with that path but does not commit to it.
 
 ## Risks specific to this plan
@@ -257,9 +257,9 @@ Out of scope:
 2. **Skip more research / open-ended architecture work** — the strategic analysis from May 2026 plus this synthesis is sufficient grounding to begin implementation.
 3. **Start with Phase 1** (the publish primitive). Single small route group, file-backed, no public surface yet. 2–3 weeks of focused work.
 4. **Phase 2 follows immediately** if Phase 1 lands cleanly. The CLI + `agent.json` work is mostly mechanical once the publish primitive exists.
-5. **Phase 3 is gated on real demand for public-share.** Build it when the Planet Fitness-style use case becomes recurrent (or when [FON-7058](/FON/issues/FON-7058) lands a public-internet endpoint, which makes the feature actually useful).
-6. **In parallel with Phase 3**, pick up [FON-7058](/FON/issues/FON-7058) so the public-share URLs have a transport to reach non-tailnet recipients.
-7. **Leave [FON-7057](/FON/issues/FON-7057) (github.com URL translation) for a later separate decision.** Useful, complementary, but orthogonal to the publish/share workstream.
+5. **Phase 3 is gated on real demand for public-share.** Build it when the Planet Fitness-style use case becomes recurrent (or when the public-internet hosting work lands a public-internet endpoint, which makes the feature actually useful).
+6. **In parallel with Phase 3**, pick up the public-internet hosting work so the public-share URLs have a transport to reach non-tailnet recipients.
+7. **Leave the GitHub URL-to-local-path translation work (github.com URL translation) for a later separate decision.** Useful, complementary, but orthogonal to the publish/share workstream.
 
 If the recommendation is approved, the proposed child issues are:
 
@@ -290,8 +290,8 @@ These child issues are sized so each is mergeable independently in days, not wee
 
 - This repo's [`docs/AGENT-ACCESS-CONTROL.md`](../../docs/AGENT-ACCESS-CONTROL.md), [`docs/PAPERCLIP-GRANT-WORKFLOW.md`](../../docs/PAPERCLIP-GRANT-WORKFLOW.md), [`docs/API.md`](../../docs/API.md), and [`docs/FEATURES.md`](../../docs/FEATURES.md) as the grounding for the existing surface.
 - Companion analyses: the three commercialization docs and the competitor doc named at the top of this file.
-- Source issue: [FON-10180](/FON/issues/FON-10180).
-- Prior tickets cited inline: [FON-7057](/FON/issues/FON-7057), [FON-7058](/FON/issues/FON-7058), [FON-3671](/FON/issues/FON-3671).
+- Source issue: the canonical content and publish API proposal.
+- Prior workstreams cited inline: GitHub URL-to-local-path translation, public-internet hosting, and token-scoped access grants.
 
 ---
 
@@ -299,14 +299,14 @@ These child issues are sized so each is mergeable independently in days, not wee
 
 This addendum was added after Chris's first read of the original evaluation. He raised two load-bearing additions that the original analysis underweighted:
 
-1. **Multi-agent shared "repo" storage.** A Lookie-Link-hosted, mutable, file-tree-shaped storage area that **multiple agents read and write to as their canonical shared workspace**. Not the same as the slug-addressed publish primitive, which produces immutable artifacts. The shared workspace is **the better answer to the original FON-10180 machine-locality pain point** — instead of every agent publishing a new slug per doc, agents accumulate work into a known shared tree that lives in one place and is the canonical view from any machine.
+1. **Multi-agent shared "repo" storage.** A Lookie-Link-hosted, mutable, file-tree-shaped storage area that **multiple agents read and write to as their canonical shared workspace**. Not the same as the slug-addressed publish primitive, which produces immutable artifacts. The shared workspace is **the better answer to the original machine-locality pain point from the canonical content and publish API proposal** — instead of every agent publishing a new slug per doc, agents accumulate work into a known shared tree that lives in one place and is the canonical view from any machine.
 2. **Search API as a phase-1 must-have.** Agents need to search **before writing** to find what already exists, decide where to put new content, and read related context for their current task. Without search, the multi-agent shared workspace breaks: agent N+1 can't reliably find what agent N wrote, so the workspace devolves into duplicate copies of the same finding.
 
 Both additions are consistent with the original "stay in lane, don't become a multi-tenant SaaS" framing. They expand what a single-operator self-hosted instance can do for its own agents — not what it does for the public internet.
 
 ### What changes vs. the original document
 
-The original document framed Lookie-Link's write surface as a single primitive: slug-addressed publish artifacts. The revised model has **two write primitives** and **one read-augmentation primitive**, all sharing infrastructure (file-backed storage, the token model from [FON-3671](/FON/issues/FON-3671), the audit log, the existing edit pipeline):
+The original document framed Lookie-Link's write surface as a single primitive: slug-addressed publish artifacts. The revised model has **two write primitives** and **one read-augmentation primitive**, all sharing infrastructure (file-backed storage, the token model from the token-scoped access grant work, the audit log, the existing edit pipeline):
 
 | Primitive | Shape | Lifetime | Addressing | Use case |
 |---|---|---|---|---|
@@ -342,7 +342,7 @@ A **managed repo** is a configured directory on the Lookie-Link host (separate f
 
 A new permission on the token / grant model: `write` on a path scope inside a managed repo (different from the existing `edit` permission, which applies to mounted local-checkout repos). Operators allow `write` only on the managed repos / paths they explicitly want exposed.
 
-#### Why this is the better solution to the FON-10180 pain point
+#### Why this better solves the canonical content proposal's pain point
 
 The original machine-locality pain: *"research doc existed on one machine but Lookie-Link on another machine could not see it until repo synchronization caught up."* With slug-publish, the answer was: agents publish each doc as a new slug, the slug lives on the canonical Lookie-Link instance, every machine sees it. That works, but it converts a continuous workflow (research accumulates into folders over time) into a discrete one (each doc is a new published bundle).
 
@@ -420,7 +420,7 @@ The original three-phase plan grows to **four phases**, and phase 1 expands to i
 |---|---|---|---|
 | **1** | Managed-repo primitive (read/write/list/tree/changes), search API (`/api/search` + suggest), publish primitive (`POST /api/publish` + update), new token permissions (`write` / `publish`), audit + docs + validation | **4–5 weeks** | This confirmation |
 | **2** | `/.well-known/agent.json` + `/openapi.json` + `lookie-link-cli` npm package (`lookie write/read/list/search/publish`) + skill packages for Claude Code / Cursor / Codex | 1–2 weeks | Phase 1 lands cleanly |
-| **3** | Bounded public-share with expiry / password / rate limiting / audit, applied to both managed-repo paths and published slugs, `share` permission | 2 weeks | Real public-share demand AND/OR [FON-7058](/FON/issues/FON-7058) lands |
+| **3** | Bounded public-share with expiry / password / rate limiting / audit, applied to both managed-repo paths and published slugs, `share` permission | 2 weeks | Real public-share demand AND/OR the public-internet hosting work lands |
 | **4 (optional, deferred)** | Semantic / embedding search; managed-repo collaboration ergonomics (comments, locks, change subscriptions); migration importers | TBD | Observed demand |
 
 Phase 1 grew from 2–3 weeks to 4–5 weeks because managed-repo + search are real additions, not nice-to-haves. The trade-off is honest: a smaller phase 1 ships a less useful product. The managed-repo + search combination is what makes the publish surface load-bearing for actual multi-agent workflows.
@@ -449,7 +449,7 @@ Phase 1 grows from 5 issues to 9 issues:
 | Public-share: rate limiting + audit events | 3 | hardening | public-share routes |
 | Docs: `docs/PUBLIC-SHARES.md` + security model | 3 | documentation | public-share routes |
 
-### Revised answers to the FON-10180 questions
+### Revised answers to the canonical content and publish API proposal questions
 
 The two additions also sharpen the answers to questions 1 and 4 in the original body of this document. The revised answers:
 
@@ -468,7 +468,7 @@ The two additions also sharpen the answers to questions 1 and 4 in the original 
 
 The recommendation is the same as the original: **approve phase 1 and start the prototype**. The expansion does not change the verdict — it makes phase 1 more useful, somewhat larger (2–3 weeks → 4–5 weeks), and more aligned with the multi-agent workflows the source issue actually described. Phases 2 and 3 remain mechanical follow-ons; phase 4 (semantic search, collaboration ergonomics) is deferred.
 
-The fresh `request_confirmation` interaction created after this addendum targets the revised plan. The original confirmation (`confirmation:FON-10180:plan:cad6a3ed-29bc-4d9a-83d9-5e6e5ca78f85`) is superseded.
+The fresh `request_confirmation` interaction created after this addendum targets the revised plan. The original confirmation (`confirmation:canonical-content:plan:cad6a3ed-29bc-4d9a-83d9-5e6e5ca78f85`) is superseded.
 
 ---
 
@@ -483,7 +483,7 @@ This addendum was added after Chris's second-round comment. He raised two things
 
 The prior auth model (across the original document body and Addendum b) was:
 
-- Existing managed-grant model from [FON-3671](/FON/issues/FON-3671) handles tokens.
+- Existing managed-grant model from the token-scoped access grant work handles tokens.
 - New permissions `write` / `publish` / `share` extend the existing permissions array.
 - Public shares are anonymous + URL + optional password.
 - No user identity layer. No SSO. No differentiation between agent and user actions in the audit log.
@@ -515,7 +515,7 @@ The operator distinguishes between **internal users** (people on their team — 
 |---|---|---|---|---|
 | **Session cookie** | Operator + users + credentialed share recipients | Configurable (default 24h, sliding) | Yes (server-side session store) | Yes — all actions tagged with `user.id` and `session.id` |
 | **API key** | Agents | Long-lived; rotatable; no automatic expiry by default | Yes (revoke by id) | Yes — all actions tagged with `agent.id` and `key.id` |
-| **Managed grant token** | Cross-company Paperclip agents (existing model from [FON-3671](/FON/issues/FON-3671)) | Bounded expiry, renewable | Yes (revoke by id) | Yes — already audited via the existing grant audit log |
+| **Managed grant token** | Cross-company Paperclip agents (existing model from the token-scoped access grant work) | Bounded expiry, renewable | Yes (revoke by id) | Yes — already audited via the existing grant audit log |
 | **Share token** | Embedded in the public-share URL | Bounded expiry (matches share expiry); max 90 days | Yes (revoke by id, or auto-expire) | Yes — share access events |
 | **Magic-link token** | Single-use, email-issued, for verifying lightweight share recipients | Short (15 min default, configurable) | Single-use → consumed on first use | Yes — tied to the recipient email |
 | **MFA TOTP secret** | Users with MFA enabled (deferred to phase 4 unless asked sooner) | Permanent until rotated | Yes | Audited at MFA setup / change |
@@ -545,7 +545,7 @@ API keys are presented to the operator and to the agent **once at creation**; th
 
 #### Why not just use the existing token system?
 
-The existing static-config-tokens model from [FON-3671](/FON/issues/FON-3671) is a valid v0; the new model is a strict superset. Migration:
+The existing static-config-tokens model from the token-scoped access grant work is a valid v0; the new model is a strict superset. Migration:
 
 - Static config tokens continue to work in phase 1 (backwards-compatible).
 - Static tokens are tagged in the audit log as `kind: static-config`.
@@ -650,7 +650,7 @@ Phase 1 permissions, with identity-aware naming:
 | `share` | Repo / path / slug | Any identity | Mint public-share URLs (any mode) |
 | `manage_users` | Instance-wide | User with `operator` role only | CRUD on users table, SSO config |
 | `manage_agent_keys` | Per-agent scope | User with `operator` role, or users with the permission delegated | Mint / rotate / revoke API keys for an agent |
-| `manage_grants` | Instance-wide | User with `operator` role, or grant-admin token (existing FON-3671 model) | Existing grant lifecycle endpoints |
+| `manage_grants` | Instance-wide | User with `operator` role, or grant-admin token (existing token-scoped access grants model) | Existing grant lifecycle endpoints |
 | `manage_shares` | Per-scope | Any identity with `share` already | Revoke shares that the identity minted |
 
 The permission model is **uniform across credential types** — an API key with `view + write + share` permissions can do exactly what a user session with the same permissions can do, except the API key cannot access the browser UI's user-management surfaces.
@@ -664,7 +664,7 @@ Phase 1 grows to include a parallel auth-foundation track that lands alongside t
 | **1A — Identity & auth foundation** | Users table + sessions + WorkOS SSO + local password fallback + first-class agent API key model + audit log actor differentiation + permission model expansion | 2–3 weeks (overlapping with 1B) | This confirmation |
 | **1B — Storage & write surface** | Managed-repo primitive + search API + publish primitive + new permissions consumed by 1A's identity layer | 4–5 weeks (overlapping with 1A) | This confirmation |
 | **2** | `/.well-known/agent.json` + `/openapi.json` + `lookie-link-cli` + skill packages | 1–2 weeks | Phase 1 lands |
-| **3** | Bounded public-share with **three modes**: anonymous (URL + password), magic-link-lightweight (email verification), credentialed (must log in) | 3 weeks (up from 2 in v2) | Phase 1 + phase 2 land, and [FON-7058](/FON/issues/FON-7058) public-internet endpoint exists OR demand is real |
+| **3** | Bounded public-share with **three modes**: anonymous (URL + password), magic-link-lightweight (email verification), credentialed (must log in) | 3 weeks (up from 2 in v2) | Phase 1 + phase 2 land, and a public-internet endpoint exists OR demand is real |
 | **4 (deferred)** | MFA enforcement, multi-IdP SSO beyond WorkOS, semantic search, managed-repo collaboration ergonomics, migration importers | TBD | Observed demand |
 
 Phase 1 total: **5–6 weeks** of focused engineering with two tracks running concurrently. Tracks 1A and 1B land together as one prototype.
@@ -713,15 +713,15 @@ Phase 1 grows from 10 issues (v2) to **15 issues** (v3) with the auth-foundation
 
 ### Revised connections to prior tickets
 
-- [FON-3671](/FON/issues/FON-3671) **done** → token-scoped grant foundation; phase 1A promotes the concept to a first-class API key model with backwards-compatible coexistence. Existing managed grants continue to work; new API keys are the recommended path forward.
-- [FON-7057](/FON/issues/FON-7057) **backlog** → orthogonal; no change.
-- [FON-7058](/FON/issues/FON-7058) **backlog** → with Chris's commitment signal removing commercialization as a gate, the case for picking this up alongside phase 3 strengthens. The public-internet endpoint is the transport that makes credentialed shares with external collaborators actually reachable beyond the tailnet. Recommend explicitly: pick up FON-7058 in parallel with phase 3 (no longer "consider," now "do this").
+- **Token-scoped access grants — done** → grant foundation; phase 1A promotes the concept to a first-class API key model with backwards-compatible coexistence. Existing managed grants continue to work; new API keys are the recommended path forward.
+- **GitHub URL-to-local-path translation — backlog** → orthogonal; no change.
+- **Public-internet hosting — backlog** → with Chris's commitment signal removing commercialization as a gate, the case for picking this up alongside phase 3 strengthens. The public-internet endpoint is the transport that makes credentialed shares with external collaborators actually reachable beyond the tailnet. Recommend explicitly: pick up public-internet hosting in parallel with phase 3 (no longer "consider," now "do this").
 
 ### What the commitment signal changes
 
 Chris said: "this is something I want to build WHETHER it becomes a public sellable thing or not." This shifts three things:
 
-1. **Phase 3's gate.** Was "real public-share demand AND/OR FON-7058 lands." Becomes "phase 2 lands cleanly." Build for the operator's own needs; commercialization is downstream.
+1. **Phase 3's gate.** Was "real public-share demand AND/OR public-internet hosting work lands." Becomes "phase 2 lands cleanly." Build for the operator's own needs; commercialization is downstream.
 2. **The commercialization companion docs become optional reading.** They remain useful for the commercialization decision if and when Chris pursues it, but they no longer gate any phase.
 3. **The bias toward "minimum viable everything."** Builds for personal/team use get to be **good** — not minimum-viable. The phase 1 expansion to include first-class identity, real SSO, and three share modes is the build that supports a serious internal product; the v1 plan was the minimum-viable read on a commercialization-conditional build.
 
@@ -737,7 +737,7 @@ Chris said: "this is something I want to build WHETHER it becomes a public sella
 
 Same verdict, larger scope: **approve phase 1 (v3) and start the prototype**. The expansion is right-sized to Chris's commitment: build identity-and-auth as a real foundation (because it has to be right eventually, and refactoring auth later is painful), build the storage / search / publish surface alongside it, and ship them together. Phase 2 (discovery + CLI) and phase 3 (three share modes) follow.
 
-The fresh `request_confirmation` interaction created after this addendum targets the v3 plan revision. The v2 confirmation (`confirmation:FON-10180:plan:f4bee764-11ba-4657-8b9b-dd41ee291877`) is superseded.
+The fresh `request_confirmation` interaction created after this addendum targets the v3 plan revision. The v2 confirmation (`confirmation:canonical-content:plan:f4bee764-11ba-4657-8b9b-dd41ee291877`) is superseded.
 
 ---
 
@@ -776,7 +776,7 @@ periodic fetch (configurable; default 60s)
 
 Net effect: the managed repo on the Lookie-Link instance and the GitHub repo stay in sync via real bidirectional git semantics. Other machines can also push to the same GitHub repo (this is the multi-writer general case); Lookie-Link's sync engine reconciles by fetching + rebasing/merging according to the operator's chosen sync mode.
 
-This closes the loop on the original FON-10180 machine-locality pain point cleanly:
+This closes the loop on the original machine-locality pain point from the canonical content and publish API proposal cleanly:
 
 - Agent writes via Lookie-Link API → file is immediately visible from every machine through Lookie-Link.
 - Lookie-Link pushes to GitHub on its own schedule → other machines that prefer the local-checkout pattern can still `git pull` from GitHub on their own schedule.
@@ -832,7 +832,7 @@ managedRepos:
 | Mode | What it means | When to pick it |
 |---|---|---|
 | `bidirectional` (default) | Lookie-Link is one git peer among potentially many. Other machines may also push to the same GitHub repo independently. Lookie-Link fetches + rebases (or merges, depending on `pullPolicy`) and pushes on its own cadence. Standard multi-writer git workflow. | The general case. The right default for a public SaaS product. The right answer for any operator who has multiple machines (their laptop, a CI runner, a teammate's machine) independently writing to the same GitHub repo. |
-| `canonical` | The operator declares the Lookie-Link host as the sole writer for this repo. Anything that shows up on origin without going through Lookie-Link is treated as an exception. Default `pullPolicy` flips to `alert-on-divergence`; default conflict-resolution recommendation flips to `--to-local --force-push`. | Single-writer deployments where the operator has designated this Lookie-Link host as the only writer. Chris's Syncthing-replicated setup is the canonical example: Syncthing distributes state, only one machine talks to GitHub. Also the right pick for operators following the [FON-10193](/FON/issues/FON-10193) "Lookie-Link host is the authority" policy for a specific repo. |
+| `canonical` | The operator declares the Lookie-Link host as the sole writer for this repo. Anything that shows up on origin without going through Lookie-Link is treated as an exception. Default `pullPolicy` flips to `alert-on-divergence`; default conflict-resolution recommendation flips to `--to-local --force-push`. | Single-writer deployments where the operator has designated this Lookie-Link host as the only writer. Chris's Syncthing-replicated setup is the canonical example: Syncthing distributes state, only one machine talks to GitHub. Also the right pick for operators whose Syncthing and GitHub authority policy designates the Lookie-Link host as authoritative for a specific repo. |
 
 The sync mode is **per-repo**, not per-instance. A single Lookie-Link instance can have some repos in `bidirectional` mode (shared with other writers) and other repos in `canonical` mode (this instance is sole writer).
 
@@ -1046,7 +1046,7 @@ Total phase 1.5 child issues (4):
 
 **Option A — lock in phase 1.5** if Chris's "MIGHT" hardens into "yes" on first read of this addendum. The reasoning:
 
-- The feature closes the loop on the original FON-10180 machine-locality pain point. Without it, managed repos are Lookie-Link-local; the GitHub backing is what makes them durably canonical.
+- The feature closes the loop on the original machine-locality pain point from the canonical content and publish API proposal. Without it, managed repos are Lookie-Link-local; the GitHub backing is what makes them durably canonical.
 - 1–2 weeks is a small phase by current standards. It does not push phase 2 out meaningfully.
 - The design is straightforward — well-known git operations + a credential store + a queue + a conflict-state machine. No experimental tech.
 - Operators who don't want GitHub backing simply don't configure it; the feature is opt-in per repo. No tax on the no-backing path.
@@ -1060,7 +1060,7 @@ The deciding question: **does Chris want managed repos to be durably backed by G
 
 ### What this addendum does not change
 
-Phase 1's content is identical to v3. The v3 confirmation (`confirmation:FON-10180:plan:f1db5aff-7ced-4784-b834-790917773971`) remains alive and is the active approval path for phase 1. This addendum surfaces the phase-1.5 design and the decision; locking in phase 1.5 would require a separate plan update (v4) and a separate confirmation, both of which can wait until after phase 1 approval lands.
+Phase 1's content is identical to v3. The v3 confirmation (`confirmation:canonical-content:plan:f1db5aff-7ced-4784-b834-790917773971`) remains alive and is the active approval path for phase 1. This addendum surfaces the phase-1.5 design and the decision; locking in phase 1.5 would require a separate plan update (v4) and a separate confirmation, both of which can wait until after phase 1 approval lands.
 
 ### Risks specific to this feature
 
@@ -1069,33 +1069,33 @@ Phase 1's content is identical to v3. The v3 confirmation (`confirmation:FON-101
 - **Push batching latency surprises.** A 60-second push interval means GitHub doesn't see new content for up to 60 seconds. For operators who expect immediate GitHub-side visibility, this is a surprise. Documentation has to be clear; `pushOnCommit: immediate` mode is the override.
 - **GitHub rate limits.** A noisy managed repo with `pushOnCommit: immediate` can hit GitHub's per-installation rate limits. Batched mode is the default for this reason; phase 1.5 should monitor rate-limit headers and back off cleanly.
 
-### Relation to FON-10193 (Syncthing + GitHub authority model)
+### Relation to the Syncthing and GitHub authority policy
 
-This addendum is the **product-side mechanism** that supports any of the policy outcomes being decided in [FON-10193](/FON/issues/FON-10193) ("Decide Syncthing + GitHub authority model for git-backed repos"). The phase 1.5 design as currently written supports the full range of multi-machine sync architectures via the `syncMode` config (`bidirectional` vs `canonical`) and the `scheduling` config (`built-in` / `external` / `both`).
+This addendum is the **product-side mechanism** that supports any of the policy outcomes being decided in the Syncthing and GitHub authority policy ("Decide Syncthing + GitHub authority model for git-backed repos"). The phase 1.5 design as currently written supports the full range of multi-machine sync architectures via the `syncMode` config (`bidirectional` vs `canonical`) and the `scheduling` config (`built-in` / `external` / `both`).
 
-FON-10193's current hypothesis is:
+The Syncthing and GitHub authority policy's current hypothesis is:
 
 > for Lookie-served repos, the Lookie host should ideally be the same machine that acts as the authoritative git publisher or guaranteed up-to-date mirror
 
 The previous version of this addendum read that as "Lookie-Link is canonical, full stop" and tuned the defaults accordingly. That was wrong — Chris clarified in his follow-up comment that the canonical-only model is correct for **his** setup (because Syncthing handles state replication and only one machine talks to GitHub) but is **not** the right default for the product, where many operators will have multiple machines pushing to the same GitHub repo independently.
 
-**Updated mapping of FON-10193 outcomes to FON-10180 phase 1.5**:
+**Updated mapping of the authority-policy outcomes to phase 1.5 of the canonical content and publish API proposal**:
 
-| FON-10193 outcome | Recommended `syncMode` for Lookie-served repos | What changes in phase 1.5 |
+| Authority-policy outcome | Recommended `syncMode` for Lookie-served repos | What changes in phase 1.5 |
 |---|---|---|
 | **"Lookie-Link host is the authority for repos it serves (and other machines replicate via Syncthing or read-only)"** | `canonical` per repo where Lookie-Link is sole writer | Phase 1.5 ships unchanged; operators using this policy set `syncMode: canonical` and get the alert-on-divergence + force-push-reassert defaults. |
 | **"Multiple machines remain independent git authors"** | `bidirectional` per repo | Phase 1.5 ships unchanged; operators using this policy keep the product default (`bidirectional` + `auto-rebase`). |
 | **"Syncthing distributes among peers; one machine (the authority) talks to GitHub"** | `canonical` on the authority machine; managed repos without GitHub backing on the others | Phase 1.5 ships unchanged; same as the first outcome for the authority machine. |
 | **"Hybrid by repo class — some repos are canonical-only, others are multi-writer"** | Per-repo `syncMode` choice | Phase 1.5 already supports this — `syncMode` is per-repo, not per-instance. |
 
-In all four outcomes, phase 1.5's design is correct without modification. The policy choice in FON-10193 determines **which `syncMode` operators configure for which repos** — not whether the product supports either mode.
+In all four outcomes, phase 1.5's design is correct without modification. The policy choice in the Syncthing and GitHub authority policy determines **which `syncMode` operators configure for which repos** — not whether the product supports either mode.
 
 **Recommended sequencing**:
 
-1. **Resolve [FON-10193](/FON/issues/FON-10193)** — the policy question. It is in `in_review` and is a small focused decision. The policy outcome determines how operators (including Chris) will configure their own repos; it does not change what phase 1.5 of FON-10180 builds.
-2. **Decide FON-10180 phase 1.5 lock-in** — independent of FON-10193's outcome. Phase 1.5 either lands now (in which case operators get `syncMode` as a configurable choice) or it's deferred to phase 4 (in which case managed repos stay Lookie-Link-local with no GitHub backing).
+1. **Resolve the Syncthing and GitHub authority policy** — the policy question. It is in `in_review` and is a small focused decision. The policy outcome determines how operators (including Chris) will configure their own repos; it does not change what phase 1.5 of the canonical content and publish API proposal builds.
+2. **Decide the canonical content and publish API proposal phase 1.5 lock-in** — independent of the Syncthing and GitHub authority policy's outcome. Phase 1.5 either lands now (in which case operators get `syncMode` as a configurable choice) or it's deferred to phase 4 (in which case managed repos stay Lookie-Link-local with no GitHub backing).
 
-The two decisions are **no longer coupled in design**. They are still useful to make together because they answer related operator questions, but FON-10193's outcome no longer dictates phase 1.5's design.
+The two decisions are **no longer coupled in design**. They are still useful to make together because they answer related operator questions, but the Syncthing and GitHub authority policy's outcome no longer dictates phase 1.5's design.
 
 The phase 1.5 lock-in / defer decision is now standalone:
 - **Lock in**: get durable GitHub backing for managed repos in ~1–2 weeks, with operator-selectable sync mode per repo. Total timeline: phase 1 (5–6 wks) → 1.5 (1–2 wks) → 2 (1–2 wks) → 3 (3 wks) = ~10–13 weeks.
@@ -1122,15 +1122,15 @@ Cloud-hosted agents — OpenAI's hosted code-interpreter agents, ChatGPT custom 
 
 What does need to be in place for cloud agents to actually reach a Lookie-Link instance:
 
-- **Public HTTPS reachability**. The Lookie-Link instance has to be on a hostname the cloud agent can resolve and reach over the public internet. Tailnet-only deployments don't work for cloud-agent calling. This is the [FON-7058](/FON/issues/FON-7058) Pangolin work (or equivalent — Cloudflare Tunnel, ngrok, a public VPS, etc.).
+- **Public HTTPS reachability**. The Lookie-Link instance has to be on a hostname the cloud agent can resolve and reach over the public internet. Tailnet-only deployments don't work for cloud-agent calling. This is the Pangolin public-internet hosting work (or equivalent — Cloudflare Tunnel, ngrok, a public VPS, etc.).
 - **Valid TLS**. Cloud agent runtimes typically refuse self-signed certs. Let's Encrypt via the reverse proxy is the standard answer.
 - **CORS** if the cloud agent's runtime calls Lookie-Link from a browser-context environment. Phase 1A's session/auth design should set sensible CORS defaults (block by default, allow operator-configured origin allowlist).
 - **Inbound rate limiting** that's strict enough to not become a public DDoS target. Phase 1's existing rate-limiting plans (per IP / per API key / global) cover this.
 - **OpenAPI + agent.json discovery** so cloud agent runtimes that consume those formats (everyone moving in that direction) can self-configure against the instance. Phase 2 ships this.
 
-**No new phase scope is needed for cloud-agent support specifically.** What changes is the **operator's expected deployment topology**: instead of "Lookie-Link on the tailnet only," it's "Lookie-Link on the tailnet for human / local-agent calls, AND publicly reachable for cloud-agent calls." [FON-7058](/FON/issues/FON-7058)'s work is now strictly more strategic, because it's not only "credentialed-share recipients can reach the instance" but also "cloud agents can reach the instance to write."
+**No new phase scope is needed for cloud-agent support specifically.** What changes is the **operator's expected deployment topology**: instead of "Lookie-Link on the tailnet only," it's "Lookie-Link on the tailnet for human / local-agent calls, AND publicly reachable for cloud-agent calls." The public-internet hosting work is now strictly more strategic, because it's not only "credentialed-share recipients can reach the instance" but also "cloud agents can reach the instance to write."
 
-This further strengthens the prior recommendation to pick up [FON-7058](/FON/issues/FON-7058) in parallel with phase 3 — or even earlier if cloud-agent writes are an immediate need.
+This further strengthens the prior recommendation to pick up the public-internet hosting work in parallel with phase 3 — or even earlier if cloud-agent writes are an immediate need.
 
 ### 2. "Lookie-Link as canonical content store, sync-to-other-systems as configurable plugins"
 
@@ -1252,7 +1252,7 @@ Let me itemize what state the design needs to track and where it should live:
 | **Magic-link tokens** | SQLite or signed JWTs | Both work. SQLite means the token state is server-controllable (instant revoke); JWTs mean stateless but you can't instantly revoke. SQLite is the recommendation. |
 | **Push queue (persistent across restarts)** | SQLite | Operations queue with ordering, retry counts, transitions. Database-shaped. |
 | **Managed-repo sync state (conflict state, fetch cursor)** | SQLite | Multi-row state per repo; SQLite is the right answer. |
-| **Managed-grant records (existing from FON-3671)** | Currently file-backed (`access.grants.storePath`); can migrate to SQLite | Phase 1A is the right window to migrate this if migration is wanted; not required. |
+| **Managed-grant records (existing from token-scoped access grants)** | Currently file-backed (`access.grants.storePath`); can migrate to SQLite | Phase 1A is the right window to migrate this if migration is wanted; not required. |
 | **Operator-facing configuration** | YAML config files (existing) | Config is human-edited; stays in YAML. |
 | **Render output cache (if added)** | Filesystem or SQLite | Either works; phase 4 concern. |
 
@@ -1288,7 +1288,7 @@ Summary of what this addendum changes in phase 1:
 | Phase 1A scope | No change — SQLite was already implicit |
 | Phase 1B scope | **+1 week** if file versioning is locked in here; phase 1B becomes 5–6 weeks; phase 1 calendar time becomes 6–7 weeks |
 | Database choice | Explicit: SQLite, file-backed, embedded. Docs item to capture. |
-| Cloud-agent transport | No phase change; reinforces FON-7058's strategic weight |
+| Cloud-agent transport | No phase change; reinforces public-internet hosting work's strategic weight |
 | Conceptual framing | "Canonical content store with sync plugins" becomes the headline framing; README opener (in Addendum c's plan) should reflect this |
 
 Two new decisions for Chris (independent of the phase 1.5 GitHub-backing decision still open):
@@ -1301,7 +1301,7 @@ Two new decisions for Chris (independent of the phase 1.5 GitHub-backing decisio
 No. Each piece earns its place:
 
 - **Identity + SSO + API keys** (phase 1A) — the build is "good not minimum" per the commitment signal. You can't refactor auth in retrospect without pain.
-- **Managed repos + search + publish** (phase 1B) — solves the original FON-10180 pain point and powers the multi-agent canonical-store positioning.
+- **Managed repos + search + publish** (phase 1B) — solves the original pain point from the canonical content and publish API proposal and powers the multi-agent canonical-store positioning.
 - **GitHub backing** (phase 1.5, lock-in pending) — durability for content the operator cares about long-term.
 - **File versioning** (this addendum, lock-in pending) — closes the "agent overwrite is unrecoverable" hole that the canonical-store framing exposes.
 - **SQLite** — the right minimum for a real product. Not over-engineering.

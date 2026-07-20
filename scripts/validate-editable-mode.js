@@ -480,7 +480,7 @@ async function run() {
     assert(!res.body.includes('lookie-link-annotations-bootstrap'), 'annotations bootstrap leaked into view when disabled');
   }
 
-  // CLI shim coverage (FON-11765) — spawn the CLI against a real HTTP listener
+  // CLI shim coverage — spawn the CLI against a real HTTP listener
   // so we cover argv parsing, env-token auth, exit codes, and output formats.
   const cliServer = await startApp(appAnnotationsEnabled);
   const cliScopedServer = await startApp(appAnnotationsScoped);

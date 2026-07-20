@@ -10,7 +10,7 @@ Lookie-Link is a self-hosted Express.js server for browsing and editing local di
 
 - `npm start` — run the server (`node server.js`), default http://localhost:9876
 - `npm run validate:editable` — run the validation test suite (editable mode integration tests)
-- `npm run validate:raw-html` — validate `/raw/<path>.html` serving + `/view` sanitisation invariants (FON-11792)
+- `npm run validate:raw-html` — validate `/raw/<path>.html` serving + `/view` sanitisation invariants
 - `npm install` — install dependencies (no build step needed)
 
 There is no linter, formatter, or unit test framework. The test suites are `scripts/validate-editable-mode.js` and `scripts/validate-raw-html.js`.
