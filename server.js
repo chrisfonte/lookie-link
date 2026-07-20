@@ -47,6 +47,7 @@ const {
   renderDirectoryPage,
   renderImagePage,
   renderAudioPage,
+  renderVideoPage,
   renderPdfPage,
   renderCsvPage,
   renderJsonPage,
@@ -615,6 +616,24 @@ function createApp(options = {}) {
         parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
         audioHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
         mimeType: AUDIO_MIME_TYPES[extension],
+        mtime: formatMTime(stat.mtime),
+        size: formatFileSize(stat.size),
+        customThemeCss,
+        queryToken: accessContext.queryToken,
+      });
+
+      res.status(200).type('html').send(html);
+      return;
+    }
+
+    if (VIDEO_EXTENSIONS.has(extension)) {
+      const parentRel = parentPath(relativePath);
+      const html = renderVideoPage({
+        repo,
+        relativePath,
+        parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
+        videoHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
+        mimeType: VIDEO_MIME_TYPES[extension],
         mtime: formatMTime(stat.mtime),
         size: formatFileSize(stat.size),
         customThemeCss,
