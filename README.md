@@ -96,7 +96,7 @@ lookie-read --range 0-99 operations/README.md
 lookie-read --list-repos
 ```
 
-It caches `/api/repos` at `~/.cache/lookie-link/repos.json` (5-min TTL), prefers a local OS read when the resolved root is on the same host, forwards `LOOKIE_LINK_TOKEN` as `Authorization: Bearer <token>` for FON-3671 grants, and exits non-zero on usage / not-found / forbidden / transport errors. See [`docs/API.md`](docs/API.md) for the underlying endpoints and `~/operations/docs/meta/lookie-link-for-agents/lookie-link-for-agents-best-practices.md` for the agent-side contract.
+It caches `/api/repos` at `~/.cache/lookie-link/repos.json` (5-min TTL), prefers a local OS read when the resolved root is on the same host, forwards `LOOKIE_LINK_TOKEN` as `Authorization: Bearer <token>` for path-scoped access grants, and exits non-zero on usage / not-found / forbidden / transport errors. See [`docs/API.md`](docs/API.md) for the underlying endpoints and agent-side contract.
 
 ## Network Model
 

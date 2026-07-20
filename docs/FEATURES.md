@@ -135,7 +135,7 @@ When `server.enableAnnotations: true`, the document viewer adds an inline annota
 - Annotation data lives at `<repoRoot>/.lookie-link/annotations/<repo>/<relative-path>.json` (sidecar). Source files are never mutated.
 - The flag is independent of `enableEditing` — annotations are available on the default safe configuration.
 
-See `docs/ANNOTATIONS-SPEC.md` for the full sidecar schema, phase split, and the agent-feedback loop the API enables. The HTTP transport landed in FON-11763; the viewer UX in FON-11764.
+See `docs/ANNOTATIONS-SPEC.md` for the full sidecar schema, phase split, and the agent-feedback loop the API enables. The HTTP transport and viewer UX are both available.
 
 ## Themes
 

@@ -422,7 +422,7 @@ test('bearer auth is preferred for agent flows and preserves token metadata for 
           },
           issuer: {
             system: 'paperclip',
-            issueId: 'FON-3671',
+            issueId: 'ACME-3671',
           },
           audit: {
             grantId: 'static-phase1',
@@ -450,7 +450,7 @@ test('bearer auth is preferred for agent flows and preserves token metadata for 
           },
           issuer: {
             system: 'paperclip',
-            issueId: 'FON-3671',
+            issueId: 'ACME-3671',
           },
           audit: {
             grantId: 'static-phase1',
@@ -476,7 +476,7 @@ test('bearer auth is preferred for agent flows and preserves token metadata for 
     });
     assert.deepEqual(accessContext.issuer, {
       system: 'paperclip',
-      issueId: 'FON-3671',
+      issueId: 'ACME-3671',
     });
     assert.deepEqual(accessContext.audit, {
       grantId: 'static-phase1',
@@ -552,7 +552,7 @@ test('managed grant API creates issue-linked grants and enforces grant tokens', 
           edit: false,
         },
         paths: ['docs/'],
-        sourceIssueId: 'FON-3675',
+        sourceIssueId: 'ACME-3675',
         approvalId: 'APR-100',
         reason: 'Cross-company review requested in issue.',
         expiresAt: '2099-01-01T00:00:00.000Z',
@@ -567,8 +567,8 @@ test('managed grant API creates issue-linked grants and enforces grant tokens', 
     assert.equal(createResponse.status, 201);
     const createPayload = await createResponse.json();
     assert.equal(createPayload.ok, true);
-    assert.equal(createPayload.grant.sourceIssueId, 'FON-3675');
-    assert.match(createPayload.issueComment.markdown, /\[FON-3675\]\(\/FON\/issues\/FON-3675\)/);
+    assert.equal(createPayload.grant.sourceIssueId, 'ACME-3675');
+    assert.match(createPayload.issueComment.markdown, /\[ACME-3675\]\(\/ACME\/issues\/ACME-3675\)/);
     assert.ok(createPayload.token);
 
     const grantedView = await server.request('/view/alpha/docs/guide.md', {
@@ -718,7 +718,7 @@ test('managed grant API rejects issue-linked creates and renewals without explic
           edit: false,
         },
         paths: ['docs/'],
-        sourceIssueId: 'FON-3675',
+        sourceIssueId: 'ACME-3675',
         reason: 'Missing explicit expiry should fail.',
         issuer: {
           role: 'manager_agent',
@@ -750,7 +750,7 @@ test('managed grant API rejects issue-linked creates and renewals without explic
           edit: false,
         },
         paths: ['docs/'],
-        sourceIssueId: 'FON-3675',
+        sourceIssueId: 'ACME-3675',
         approvalId: 'APR-101',
         reason: 'Seed grant for renew validation.',
         expiresAt: '2099-01-01T00:00:00.000Z',
@@ -839,7 +839,7 @@ test('managed grant expiry emits a linked issue comment helper in audit events',
           edit: false,
         },
         paths: ['docs/'],
-        sourceIssueId: 'FON-3675',
+        sourceIssueId: 'ACME-3675',
         approvalId: 'APR-102',
         reason: 'Grant that will be force-expired for audit coverage.',
         expiresAt: '2099-01-01T00:00:00.000Z',
@@ -868,7 +868,7 @@ test('managed grant expiry emits a linked issue comment helper in audit events',
     const expiredEvent = listPayload.auditEvents.find((event) => event.grantId === created.grant.id && event.type === 'grant.expired');
     assert.ok(expiredEvent);
     assert.equal(expiredEvent.expiresAt, '2000-01-01T00:00:00.000Z');
-    assert.equal(expiredEvent.issueComment.issueId, 'FON-3675');
+    assert.equal(expiredEvent.issueComment.issueId, 'ACME-3675');
     assert.match(expiredEvent.issueComment.markdown, /Expired Lookie-Link grant/);
   } finally {
     await server.close();

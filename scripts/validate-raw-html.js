@@ -1,6 +1,6 @@
 'use strict';
 
-// Validates FON-11792 — raw HTML serving.
+// Validates raw HTML serving.
 //
 // Verifies:
 //   * /raw/<path>.html is 404 when disabled
@@ -129,7 +129,7 @@ async function run() {
       assert.equal(healthDisabled.rawHtmlEnabled, false);
       assert.equal(healthEnabled.rawHtmlEnabled, true);
 
-      console.log('OK — /raw HTML serving validates against FON-11792 acceptance criteria.');
+      console.log('OK — /raw HTML serving validates against the acceptance criteria.');
     } finally {
       await close(disabledServer);
       await close(enabledServer);

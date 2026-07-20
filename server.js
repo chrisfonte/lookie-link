@@ -1370,7 +1370,7 @@ function createApp(options = {}) {
     });
   });
 
-  // Serve trusted HTML files verbatim (FON-11792). See lib/config.js
+  // Serve trusted HTML files verbatim. See lib/config.js
   // `getRawHtmlEnabled` for the trust assumption — only HTML extensions, only
   // when enabled, only inside the configured roots. Inline <script> tags
   // execute because we do not run them through DOMPurify on this path.

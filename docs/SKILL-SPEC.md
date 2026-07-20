@@ -2,7 +2,7 @@
 
 **Status**: Draft spec — basis for the phase 2 skill packages (Claude Code, Cursor, Codex). The actual skill files (`SKILL.md`, `.cursorrules`, etc.) will be generated from this spec when phase 2 ships.
 
-**Source issue**: [FON-10180](/FON/issues/FON-10180)
+**Source**: Canonical content and public-link evaluation
 
 **Related**:
 - The strategic evaluation at `research/commercialization/lookie-link-publish-api-cli-public-link-evaluation-2026-06-01.md`, particularly Phase 2 (Addendum c) and the CLI section

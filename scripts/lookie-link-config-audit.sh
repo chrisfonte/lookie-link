@@ -3,13 +3,13 @@
 #
 # Audits `~/operations-*` directories on the Lookie-Link host against
 # `~/.config/lookie-link/lookie-link.yaml#repositories`, flagging real
-# working repos that are not yet served. Built for FON-11521.
+# working repos that are not yet served.
 #
 # Output is structured (machine-grep-able + human-readable). Use --json for
 # strict machine-readable output. Use --apply to mutate the config in place
 # (requires `yq` for safe YAML edits).
 #
-# See: ~/operations/docs/meta/lookie-link-for-agents/lookie-link-for-agents-best-practices.md#discovery--which-repos-does-lookie-link-serve
+# Repository discovery follows the `/api/repos` contract documented in docs/API.md.
 set -euo pipefail
 
 CONFIG_PATH="${LOOKIE_LINK_CONFIG:-$HOME/.config/lookie-link/lookie-link.yaml}"

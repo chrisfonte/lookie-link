@@ -10,7 +10,7 @@ Status: Active
 Tags: #notebooklm #lookie-link #audit #artifacts
 Document URL: docs/NOTEBOOKLM-ARTIFACT-COVERAGE.md
 External Issue: https://github.com/chrisfonte/lookie-link/issues/64
-Related: FON-11756 (Paperclip), FON-11519 (asset MIME allowlist)
+Related components: Paperclip integration and the asset MIME allowlist
 ---
 
 # Lookie-Link NotebookLM Artifact Coverage Audit
@@ -37,7 +37,7 @@ Reference fixtures live under `operations-research/ai-tools/notebooklm/`. Each r
 | Capabilities / data tables | `.csv` | Dedicated CSV viewer page — first row becomes header, rest becomes table body, with View raw / Download actions | `text/csv; charset=utf-8` | Standard `<a>` link → table viewer | Supported |
 | Flashcards, mind-map mismatches | `.json` | JSON syntax-highlighted via highlight.js, with theme + anchor support | `application/json; charset=utf-8` | Standard `<a>` link → highlighted JSON view | Supported (documented behavior: highlighted raw view, no special viewer) |
 
-> Historical note: during initial audit (2026-06-09) the live process predated commit `b460e5e`, so `/asset/<…>.csv` returned `415` and the text-MIME allowlist commit (`e2d3e88`, FON-11519) was not yet running. The live server has since been restarted and all six types return the table-listed Content-Type.
+> Historical note: during initial audit (2026-06-09) the live process predated commit `b460e5e`, so `/asset/<…>.csv` returned `415` and the text-MIME allowlist commit (`e2d3e88`) was not yet running. The live server has since been restarted and all six types return the table-listed Content-Type.
 
 ## Recommended Agent Export Format
 
