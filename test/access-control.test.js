@@ -320,6 +320,7 @@ test('edit-scoped token can save while restricted humans and invalid tokens are 
     assert.doesNotMatch(editHtml, /api\/preview[^"\\]*token=/);
 
     const beforeStat = await fs.stat(targetFile);
+    const originalContent = await fs.readFile(targetFile, 'utf8');
     const annotationSidecar = path.join(
       fixture.mappings.alpha,
       '.lookie-link',
@@ -358,7 +359,7 @@ test('edit-scoped token can save while restricted humans and invalid tokens are 
         body: JSON.stringify(body),
       });
       assert.equal(response.status, 400, requestPath);
-      assert.equal(await fs.readFile(targetFile, 'utf8'), '# Guide\n![Diagram](diagram.png)\n');
+      assert.equal(await fs.readFile(targetFile, 'utf8'), originalContent);
       await assert.rejects(fs.stat(annotationSidecar), (error) => error && error.code === 'ENOENT');
     }
 
