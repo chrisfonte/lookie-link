@@ -13,6 +13,15 @@
 | `GET /api/annotations/<repo>/<path>` | Read sidecar annotations for a file. Supports repeatable `?state=open|claimed|resolved`. Returns an empty schema document when no sidecar exists. |
 | `POST /api/annotations/<repo>/<path>` | Create an annotation. Requires `write` access and `enableAnnotations: true`. |
 | `PATCH /api/annotations/<repo>/<path>` | Apply `claim`, `resolve`, `reopen`, `reply`, or `redact` with stale-write protection. Requires `write` access and `enableAnnotations: true`. |
+| `GET /api/managed-repos` | List managed repositories visible to the caller |
+| `POST /api/managed-repos` | Register a root beneath an operator-configured allow-root |
+| `GET /api/managed-repos/:repo/tree` | Return a bounded, caller-filtered file tree |
+| `GET /api/managed-repos/:repo/changes` | Return bounded, mtime-based changes visible to the caller |
+| `GET /api/managed-repos/:repo/files/<path>` | Read a managed file |
+| `PUT /api/managed-repos/:repo/files/<path>` | Atomically create or update a managed file; accepts `expectedMtimeMs` |
+| `DELETE /api/managed-repos/:repo/files/<path>` | Soft-delete a file by default, or hard-delete with `?hard=1` |
+| `POST /api/managed-repos/:repo/trash/:trashId/restore` | Restore a soft-deleted file |
+| `DELETE /api/managed-repos/:repo/trash/:trashId` | Permanently remove a soft-deleted file |
 | `GET /api/grants` | List managed grants (`Authorization: Bearer <admin-token>`) |
 | `POST /api/grants` | Create a managed grant and return token + issue comment helper |
 | `POST /api/grants/:grantId/renew` | Renew a managed grant and return issue comment helper |
@@ -38,6 +47,17 @@ Route enforcement in phase 1:
 - annotation reads require `view`; annotation creates and updates require `write`; all annotation routes return `404` when annotations are disabled
 
 Invalid tokens return `403`. Missing tokens return `401` when unauthenticated human access is restricted.
+
+Managed file routes deliberately return the same `404 {"ok":false,"error":"Not found."}`
+for missing and out-of-scope repositories or paths. Registry responses do not
+include host filesystem roots. Managed mutations require `write`; operator
+registration requires a separate admin token in the `Authorization` header.
+
+Writes use a same-directory temporary file and rename. Passing `expectedMtimeMs`
+returns `409` if the file changed; passing `null` asserts that it does not exist.
+Tree and change responses accept `maxEntries` (capped at 5,000), and tree depth
+is capped at 10. Soft delete returns a `trashId` that can be restored or later
+hard-deleted.
 
 ## HTML Bundle Validation
 
@@ -75,6 +95,8 @@ Lets agents discover served repos at runtime without parsing the HTML index or r
 ```
 
 The list is filtered to the repos the caller can `view`: with a scoped token the response only contains repos that token can reach; unauthenticated callers see all mappings when `access.humanDefault` allows it and otherwise receive `401`. `viewUrl` and `assetUrl` are repo-rooted paths — append your own `?token=...` if you authenticate via query string.
+`rootPath` remains present for legacy static mappings but is omitted for managed
+repositories so registry additions do not disclose host filesystem paths.
 
 ## Save Endpoint
 

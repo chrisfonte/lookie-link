@@ -13,6 +13,7 @@ const {
   getAnnotationsEnabled,
   getRawHtmlEnabled,
   getAccessConfig,
+  getManagedReposConfig,
   loadCustomThemes,
   generateCustomThemeCss,
   BUILT_IN_THEMES,
@@ -31,6 +32,7 @@ const {
   buildIssueComment,
 } = require('./lib/grant-store');
 const { ApiKeyStore } = require('./lib/api-key-store');
+const { ManagedRepoStore } = require('./lib/managed-repo-store');
 const {
   safeResolve,
   toPosixPath,
@@ -292,6 +294,28 @@ function parseBooleanQuery(value) {
   return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
+function managedNotFound(res) {
+  res.status(404).json({ ok: false, error: 'Not found.' });
+}
+
+function publicManagedRepo(repo) {
+  return {
+    id: repo.id,
+    label: repo.label,
+    policy: repo.policy,
+    createdAt: repo.createdAt,
+    updatedAt: repo.updatedAt,
+    viewUrl: buildHref(repo.id, ''),
+  };
+}
+
+function managedErrorStatus(error) {
+  if (error && error.code === 'ECONFLICT') return 409;
+  if (error && (error.code === 'ENOENT' || error.code === 'EACCES')) return 404;
+  if (error && error.code === 'EINVAL') return 400;
+  return 500;
+}
+
 function buildAssetBaseHref(repo, relativePath, accessContext) {
   const normalized = toPosixPath(relativePath);
   const currentDir = path.posix.dirname(normalized) === '.' ? '' : path.posix.dirname(normalized);
@@ -509,12 +533,13 @@ function sendApiKeyJsonError(res, status, error) {
 
 function createApp(options = {}) {
   const app = express();
-  const mappings = options.mappings || loadRootMappings();
+  const mappings = { ...(options.mappings || loadRootMappings()) };
   const editingEnabled = options.editingEnabled === undefined ? getEditingEnabled() : Boolean(options.editingEnabled);
   const annotationsEnabled = options.annotationsEnabled === undefined ? getAnnotationsEnabled() : Boolean(options.annotationsEnabled);
   const rawHtmlEnabled = options.rawHtmlEnabled === undefined ? getRawHtmlEnabled() : Boolean(options.rawHtmlEnabled);
   const customThemeCss = options.customThemeCss || '';
   const rawAccessConfig = options.accessConfig === undefined ? getAccessConfig() : options.accessConfig;
+  const rawManagedReposConfig = options.managedReposConfig === undefined ? getManagedReposConfig() : options.managedReposConfig;
   const accessConfig = parseAccessConfig(rawAccessConfig);
   const apiKeyStore = options.apiKeyStore === undefined
     ? ApiKeyStore.fromAccessConfig(rawAccessConfig.apiKeys)
@@ -522,6 +547,21 @@ function createApp(options = {}) {
   const grantStore = options.grantStore === undefined
     ? GrantStore.fromAccessConfig(rawAccessConfig.grants)
     : options.grantStore;
+  const managedRepoStore = options.managedRepoStore === undefined
+    ? ManagedRepoStore.fromConfig(rawManagedReposConfig)
+    : options.managedRepoStore;
+  if (managedRepoStore && managedRepoStore.isEnabled()) {
+    for (const repo of managedRepoStore.listRepos().repos) {
+      if (!mappings[repo.id]) mappings[repo.id] = repo.rootPath;
+    }
+  }
+  const getManagedRepo = (repoId) => managedRepoStore && managedRepoStore.isEnabled()
+    ? managedRepoStore.getRepo(repoId)
+    : null;
+  const isManagedInternalPath = (repoId, relativePath) => {
+    const repo = getManagedRepo(repoId);
+    return Boolean(repo && managedRepoStore.isInternalPath(repo, relativePath));
+  };
   const resolveAccessContext = (req) => {
     if (req.accessContext) {
       return req.accessContext;
@@ -576,6 +616,18 @@ function createApp(options = {}) {
     return { ok: true, admin };
   };
 
+  const authenticateManagedRepoAdmin = (req) => {
+    if (!managedRepoStore || !managedRepoStore.isEnabled()) {
+      return { ok: false, status: 404, error: 'Managed repos are not configured.' };
+    }
+    const secret = extractBearerToken(req);
+    if (!secret) return { ok: false, status: 401, error: 'Managed repo admin authentication required.' };
+    const admin = managedRepoStore.authenticateAdminToken(secret);
+    return admin
+      ? { ok: true, admin }
+      : { ok: false, status: 403, error: 'Invalid managed repo admin token.' };
+  };
+
   const recordApiKeyAuditEvent = (type, accessContext, target, metadata) => {
     if (!apiKeyStore || !apiKeyStore.isEnabled()) {
       return null;
@@ -602,6 +654,204 @@ function createApp(options = {}) {
     etag: true,
     maxAge: '1h',
   }));
+
+  app.get('/api/managed-repos', (req, res) => {
+    if (!managedRepoStore || !managedRepoStore.isEnabled()) {
+      managedNotFound(res);
+      return;
+    }
+    const accessContext = resolveAccessContext(req);
+    const repos = managedRepoStore.listRepos().repos
+      .filter((repo) => canAccessPath(accessContext, 'view', repo.id, '', 'directory'))
+      .map(publicManagedRepo);
+    res.status(200).json({ ok: true, repos, count: repos.length });
+  });
+
+  app.post('/api/managed-repos', (req, res) => {
+    const auth = authenticateManagedRepoAdmin(req);
+    if (!auth.ok) {
+      res.status(auth.status).json({ ok: false, error: auth.error });
+      return;
+    }
+    try {
+      if (req.body && mappings[String(req.body.repoId || '').trim().toLowerCase()]) {
+        res.status(409).json({ ok: false, error: 'Repository id already exists.' });
+        return;
+      }
+      const result = managedRepoStore.createRepo(req.body || {}, auth.admin);
+      mappings[result.repo.id] = result.repo.rootPath;
+      res.status(201).json({ ok: true, repo: publicManagedRepo(result.repo) });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+    }
+  });
+
+  app.get('/api/managed-repos/:repo/tree', async (req, res) => {
+    const accessContext = resolveAccessContext(req);
+    const repo = managedRepoStore && managedRepoStore.getRepo(req.params.repo);
+    const relativePath = typeof req.query.path === 'string' ? req.query.path : '';
+    if (!repo || !canAccessPath(accessContext, 'view', repo.id, relativePath, 'directory')) {
+      managedNotFound(res);
+      return;
+    }
+    try {
+      const tree = await managedRepoStore.listTree(repo, relativePath, {
+        maxDepth: req.query.maxDepth,
+        maxEntries: req.query.maxEntries,
+        includeEntry: (entry) => canAccessPath(
+          accessContext,
+          'view',
+          repo.id,
+          entry.path,
+          entry.type === 'directory' ? 'directory' : 'file'
+        ),
+        shouldDescend: (entry) => canAccessPath(accessContext, 'view', repo.id, entry.path, 'directory'),
+      });
+      const entries = tree.entries;
+      res.status(200).json({
+        ok: true,
+        repo: repo.id,
+        path: toPosixPath(relativePath),
+        entries,
+        count: entries.length,
+        truncated: tree.truncated,
+        limits: { maxDepth: tree.maxDepth, maxEntries: tree.maxEntries },
+      });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+    }
+  });
+
+  app.get('/api/managed-repos/:repo/changes', async (req, res) => {
+    const accessContext = resolveAccessContext(req);
+    const repo = managedRepoStore && managedRepoStore.getRepo(req.params.repo);
+    if (!repo || !canAccessPath(accessContext, 'view', repo.id, '', 'directory')) {
+      managedNotFound(res);
+      return;
+    }
+    const since = req.query.since == null || req.query.since === '' ? null : Number(req.query.since);
+    if (since !== null && !Number.isFinite(since)) {
+      res.status(400).json({ ok: false, error: 'since must be a unix timestamp.' });
+      return;
+    }
+    try {
+      const tree = await managedRepoStore.listTree(repo, '', {
+        maxDepth: 10,
+        maxEntries: req.query.maxEntries,
+        includeEntry: (entry) => entry.type === 'file' && canAccessPath(accessContext, 'view', repo.id, entry.path, 'file'),
+        shouldDescend: (entry) => canAccessPath(accessContext, 'view', repo.id, entry.path, 'directory'),
+      });
+      const entries = tree.entries
+        .filter((entry) => since === null || entry.mtimeMs >= since)
+        .map((entry) => ({ path: entry.path, mtimeMs: entry.mtimeMs, size: entry.size, change: 'modified' }));
+      res.status(200).json({ ok: true, repo: repo.id, entries, count: entries.length, truncated: tree.truncated });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+    }
+  });
+
+  app.get('/api/managed-repos/:repo/files/*', async (req, res) => {
+    const accessContext = resolveAccessContext(req);
+    const repo = managedRepoStore && managedRepoStore.getRepo(req.params.repo);
+    const relativePath = req.params[0] || '';
+    if (!repo || !canAccessPath(accessContext, 'view', repo.id, relativePath, 'file')) {
+      managedNotFound(res);
+      return;
+    }
+    try {
+      const result = await managedRepoStore.readFile(repo, relativePath);
+      res.status(200).json({ ok: true, repo: repo.id, ...result, viewUrl: buildHref(repo.id, result.path) });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+    }
+  });
+
+  app.put('/api/managed-repos/:repo/files/*', async (req, res) => {
+    const accessContext = resolveAccessContext(req);
+    const repo = managedRepoStore && managedRepoStore.getRepo(req.params.repo);
+    const relativePath = req.params[0] || '';
+    if (!repo || !canAccessPath(accessContext, 'write', repo.id, relativePath, 'file')) {
+      managedNotFound(res);
+      return;
+    }
+    if (!req.body || typeof req.body.content !== 'string') {
+      res.status(400).json({ ok: false, error: 'content is required.' });
+      return;
+    }
+    try {
+      const result = await managedRepoStore.writeFile(repo, relativePath, req.body.content, req.body.expectedMtimeMs);
+      recordApiKeyAuditEvent('content.write', accessContext, { repo: repo.id, relativePath: result.path }, {
+        outcome: 'accepted',
+        byteCount: Buffer.byteLength(req.body.content, 'utf8'),
+      });
+      res.status(result.created ? 201 : 200).json({ ok: true, repo: repo.id, ...result });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      res.status(status).json({
+        ok: false,
+        error: status === 404 ? 'Not found.' : error.message,
+        ...(status === 409 ? { current: error.current } : {}),
+      });
+    }
+  });
+
+  app.delete('/api/managed-repos/:repo/files/*', async (req, res) => {
+    const accessContext = resolveAccessContext(req);
+    const repo = managedRepoStore && managedRepoStore.getRepo(req.params.repo);
+    const relativePath = req.params[0] || '';
+    if (!repo || !canAccessPath(accessContext, 'write', repo.id, relativePath, 'file')) {
+      managedNotFound(res);
+      return;
+    }
+    try {
+      const result = await managedRepoStore.deleteFile(repo, relativePath, { hard: parseBooleanQuery(req.query.hard) });
+      recordApiKeyAuditEvent('content.delete', accessContext, { repo: repo.id, relativePath: result.path }, { mode: result.deleted });
+      res.status(200).json({ ok: true, repo: repo.id, ...result });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+    }
+  });
+
+  app.post('/api/managed-repos/:repo/trash/:trashId/restore', async (req, res) => {
+    const accessContext = resolveAccessContext(req);
+    const repo = managedRepoStore && managedRepoStore.getRepo(req.params.repo);
+    if (!repo) { managedNotFound(res); return; }
+    try {
+      const { metadata } = await managedRepoStore.getTrashMetadata(repo, req.params.trashId);
+      if (!canAccessPath(accessContext, 'write', repo.id, metadata.originalPath, 'file')) {
+        managedNotFound(res);
+        return;
+      }
+      const result = await managedRepoStore.restoreTrash(repo, req.params.trashId);
+      res.status(200).json({ ok: true, repo: repo.id, ...result });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+    }
+  });
+
+  app.delete('/api/managed-repos/:repo/trash/:trashId', async (req, res) => {
+    const accessContext = resolveAccessContext(req);
+    const repo = managedRepoStore && managedRepoStore.getRepo(req.params.repo);
+    if (!repo) { managedNotFound(res); return; }
+    try {
+      const { metadata } = await managedRepoStore.getTrashMetadata(repo, req.params.trashId);
+      if (!canAccessPath(accessContext, 'write', repo.id, metadata.originalPath, 'file')) {
+        managedNotFound(res);
+        return;
+      }
+      const result = await managedRepoStore.hardDeleteTrash(repo, req.params.trashId);
+      res.status(200).json({ ok: true, repo: repo.id, ...result });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+    }
+  });
 
   app.get('/api/agent-keys', (req, res) => {
     const auth = authenticateApiKeyAdmin(req);
@@ -789,11 +1039,14 @@ function createApp(options = {}) {
       sendAccessError(res, accessContext);
       return;
     }
+    const managedRepoIds = new Set(managedRepoStore && managedRepoStore.isEnabled()
+      ? managedRepoStore.listRepos().repos.map((repo) => repo.id)
+      : []);
     const repos = Object.entries(mappings)
       .filter(([repo]) => canAccessPath(accessContext, 'view', repo, '', 'directory'))
       .map(([repo, rootPath]) => ({
         repo,
-        rootPath,
+        ...(managedRepoIds.has(repo) ? {} : { rootPath }),
         viewUrl: `/view/${encodeURIComponent(repo)}/`,
         assetUrl: `/asset/${encodeURIComponent(repo)}/`,
       }));
@@ -802,6 +1055,13 @@ function createApp(options = {}) {
 
   app.get('/view/*', async (req, res) => {
     const accessContext = resolveAccessContext(req);
+    const requested = splitViewPath(req.params[0] || '');
+    if (requested && getManagedRepo(requested.repo)
+      && !canAccessPath(accessContext, 'view', requested.repo, requested.relativePath, 'file')
+      && !canAccessPath(accessContext, 'view', requested.repo, requested.relativePath, 'directory')) {
+      res.status(404).type('text/plain').send('File or directory not found.');
+      return;
+    }
     let resolvedInput;
     try {
       resolvedInput = await resolveFromRequest(mappings, req.params[0] || '');
@@ -817,6 +1077,10 @@ function createApp(options = {}) {
     }
 
     const { repo, relativePath, rootPath, resolved } = resolvedInput;
+    if (isManagedInternalPath(repo, relativePath)) {
+      res.status(404).type('text/plain').send('File or directory not found.');
+      return;
+    }
 
     let stat;
     try {
@@ -1118,6 +1382,13 @@ function createApp(options = {}) {
       return;
     }
 
+    const requested = splitViewPath(req.params[0] || '');
+    if (requested && getManagedRepo(requested.repo)
+      && !canAccessPath(accessContext, 'write', requested.repo, requested.relativePath, 'file')) {
+      res.status(404).type('text/plain').send('File not found.');
+      return;
+    }
+
     let resolvedInput;
     try {
       resolvedInput = await resolveFromRequest(mappings, req.params[0] || '');
@@ -1133,6 +1404,10 @@ function createApp(options = {}) {
     }
 
     const { repo, relativePath, rootPath, resolved } = resolvedInput;
+    if (isManagedInternalPath(repo, relativePath)) {
+      res.status(404).type('text/plain').send('File not found.');
+      return;
+    }
     if (!relativePath) {
       res.status(400).type('text/plain').send('Edit requires a file path.');
       return;
@@ -1207,6 +1482,13 @@ function createApp(options = {}) {
       return;
     }
 
+    const requested = splitViewPath(req.params[0] || '');
+    if (requested && getManagedRepo(requested.repo)
+      && !canAccessPath(accessContext, 'write', requested.repo, requested.relativePath, 'file')) {
+      res.status(404).json({ ok: false, error: 'File not found.' });
+      return;
+    }
+
     let resolvedInput;
     try {
       resolvedInput = await resolveFromRequest(mappings, req.params[0] || '');
@@ -1222,6 +1504,10 @@ function createApp(options = {}) {
     }
 
     const { repo, relativePath, resolved } = resolvedInput;
+    if (isManagedInternalPath(repo, relativePath)) {
+      res.status(404).json({ ok: false, error: 'File not found.' });
+      return;
+    }
     if (!relativePath) {
       res.status(400).json({ ok: false, error: 'Save requires a file path.' });
       return;
@@ -1346,6 +1632,13 @@ function createApp(options = {}) {
       return;
     }
 
+    const requested = splitViewPath(req.params[0] || '');
+    if (requested && getManagedRepo(requested.repo)
+      && !canAccessPath(accessContext, 'view', requested.repo, requested.relativePath, 'file')) {
+      res.status(404).json({ ok: false, error: 'File not found.' });
+      return;
+    }
+
     let resolvedInput;
     try {
       resolvedInput = await resolveFromRequest(mappings, req.params[0] || '');
@@ -1361,6 +1654,10 @@ function createApp(options = {}) {
     }
 
     const { repo, relativePath, rootPath, resolved } = resolvedInput;
+    if (isManagedInternalPath(repo, relativePath)) {
+      res.status(404).json({ ok: false, error: 'File not found.' });
+      return;
+    }
     if (!relativePath) {
       res.status(400).json({ ok: false, error: 'Preview requires a file path.' });
       return;
@@ -1424,6 +1721,11 @@ function createApp(options = {}) {
     const rootPath = mappings[repo];
     const accessContext = resolveAccessContext(req);
 
+    if (isManagedInternalPath(repo, relativePath)) {
+      res.status(404).json({ ok: false, error: 'File not found.' });
+      return;
+    }
+
     if (!rootPath) {
       res.status(404).json({ ok: false, error: `Unknown repository: ${repo}` });
       return;
@@ -1435,7 +1737,8 @@ function createApp(options = {}) {
     }
 
     if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
-      sendAccessError(res, accessContext, true);
+      if (getManagedRepo(repo)) managedNotFound(res);
+      else sendAccessError(res, accessContext, true);
       return;
     }
 
@@ -1516,6 +1819,11 @@ function createApp(options = {}) {
     const rootPath = mappings[repo];
     const accessContext = resolveAccessContext(req);
 
+    if (isManagedInternalPath(repo, relativePath)) {
+      res.status(404).json({ ok: false, error: 'File not found.' });
+      return;
+    }
+
     if (!rootPath) {
       res.status(404).json({ ok: false, error: `Unknown repository: ${repo}` });
       return;
@@ -1527,7 +1835,8 @@ function createApp(options = {}) {
     }
 
     if (!canAccessPath(accessContext, 'write', repo, relativePath, 'file')) {
-      sendAccessError(res, accessContext, true);
+      if (getManagedRepo(repo)) managedNotFound(res);
+      else sendAccessError(res, accessContext, true);
       return;
     }
 
@@ -1598,6 +1907,11 @@ function createApp(options = {}) {
     const rootPath = mappings[repo];
     const accessContext = resolveAccessContext(req);
 
+    if (isManagedInternalPath(repo, relativePath)) {
+      res.status(404).json({ ok: false, error: 'File not found.' });
+      return;
+    }
+
     if (!rootPath) {
       res.status(404).json({ ok: false, error: `Unknown repository: ${repo}` });
       return;
@@ -1609,7 +1923,8 @@ function createApp(options = {}) {
     }
 
     if (!canAccessPath(accessContext, 'write', repo, relativePath, 'file')) {
-      sendAccessError(res, accessContext, true);
+      if (getManagedRepo(repo)) managedNotFound(res);
+      else sendAccessError(res, accessContext, true);
       return;
     }
 
@@ -1688,8 +2003,18 @@ function createApp(options = {}) {
     const relativePath = req.params[0] || '';
     const rootPath = mappings[repo];
 
+    if (isManagedInternalPath(repo, relativePath)) {
+      res.status(404).type('text/plain').send('Asset not found.');
+      return;
+    }
+
     if (!rootPath) {
       res.status(404).type('text/plain').send(`Unknown repository: ${repo}`);
+      return;
+    }
+
+    if (getManagedRepo(repo) && !canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
+      res.status(404).type('text/plain').send('Asset not found.');
       return;
     }
 
@@ -1770,8 +2095,18 @@ function createApp(options = {}) {
     const relativePath = req.params[0] || '';
     const rootPath = mappings[repo];
 
+    if (isManagedInternalPath(repo, relativePath)) {
+      res.status(404).type('text/plain').send('Raw HTML file not found.');
+      return;
+    }
+
     if (!rootPath) {
       res.status(404).type('text/plain').send(`Unknown repository: ${repo}`);
+      return;
+    }
+
+    if (getManagedRepo(repo) && !canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
+      res.status(404).type('text/plain').send('Raw HTML file not found.');
       return;
     }
 
@@ -1865,6 +2200,7 @@ function startServer() {
   const annotationsEnabled = getAnnotationsEnabled();
   const rawHtmlEnabled = getRawHtmlEnabled();
   const accessConfig = getAccessConfig();
+  const managedReposConfig = getManagedReposConfig();
 
   const customThemes = loadCustomThemes();
   const customThemeCss = generateCustomThemeCss(customThemes);
@@ -1876,7 +2212,7 @@ function startServer() {
   const allThemes = [...builtInThemes, ...customThemes.map((t) => ({ slug: t.slug, label: t.label }))];
   setThemeList(allThemes);
 
-  const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss, accessConfig });
+  const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss, accessConfig, managedReposConfig });
 
   app.listen(port, '0.0.0.0', () => {
     console.log(`Lookie Link listening on http://${hostname}:${port}`);

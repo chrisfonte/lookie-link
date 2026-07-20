@@ -73,6 +73,16 @@ repositories:
 #       paperclip:
 #         secretEnv: LOOKIE_LINK_GRANT_ADMIN_TOKEN
 
+# Optional mutable managed repositories. Every allow-root must already exist;
+# newly registered repositories may only be created beneath one of them.
+# managedRepos:
+#   storePath: ~/.local/share/lookie-link/managed-repos.yaml
+#   allowRoots:
+#     - ~/shared-workspaces
+#   adminTokens:
+#     local_operator:
+#       secretEnv: LOOKIE_LINK_MANAGED_REPO_ADMIN_TOKEN
+
 # Custom themes
 # Each theme needs dark and/or light variants.
 # CSS property names use underscores (bg_elev → --bg-elev).
