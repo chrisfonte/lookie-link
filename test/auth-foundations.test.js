@@ -94,7 +94,7 @@ test('managed grants normalize legacy edit to canonical write', async () => {
   }
 });
 
-test('publish is authorization vocabulary only and implies no write or endpoint', async () => {
+test('publish remains independent from write and is consumed by the publish endpoint', async () => {
   const config = parseAccessConfig({
     humanDefault: 'restricted',
     tokens: {
@@ -127,7 +127,11 @@ test('publish is authorization vocabulary only and implies no write or endpoint'
   const routePaths = app._router.stack
     .map((layer) => layer.route && layer.route.path)
     .filter(Boolean);
-  assert.equal(routePaths.some((routePath) => String(routePath).includes('publish')), false);
+  assert.deepEqual(routePaths.filter((routePath) => String(routePath).includes('publish')), [
+    '/api/publish',
+    '/api/publish/:slug',
+    '/api/publish/:slug/revoke',
+  ]);
 
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lookie-auth-publish-'));
   const repoRoot = path.join(root, 'docs');

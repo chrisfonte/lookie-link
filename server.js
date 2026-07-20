@@ -13,6 +13,7 @@ const {
   getAnnotationsEnabled,
   getRawHtmlEnabled,
   getAccessConfig,
+  getPublishConfig,
   loadCustomThemes,
   generateCustomThemeCss,
   BUILT_IN_THEMES,
@@ -31,6 +32,7 @@ const {
   buildIssueComment,
 } = require('./lib/grant-store');
 const { ApiKeyStore } = require('./lib/api-key-store');
+const { PublishStore } = require('./lib/publish-store');
 const {
   safeResolve,
   toPosixPath,
@@ -515,6 +517,7 @@ function createApp(options = {}) {
   const rawHtmlEnabled = options.rawHtmlEnabled === undefined ? getRawHtmlEnabled() : Boolean(options.rawHtmlEnabled);
   const customThemeCss = options.customThemeCss || '';
   const rawAccessConfig = options.accessConfig === undefined ? getAccessConfig() : options.accessConfig;
+  const rawPublishConfig = options.publishConfig === undefined ? getPublishConfig() : options.publishConfig;
   const accessConfig = parseAccessConfig(rawAccessConfig);
   const apiKeyStore = options.apiKeyStore === undefined
     ? ApiKeyStore.fromAccessConfig(rawAccessConfig.apiKeys)
@@ -522,6 +525,9 @@ function createApp(options = {}) {
   const grantStore = options.grantStore === undefined
     ? GrantStore.fromAccessConfig(rawAccessConfig.grants)
     : options.grantStore;
+  const publishStore = options.publishStore === undefined
+    ? PublishStore.fromConfig(rawPublishConfig)
+    : options.publishStore;
   const resolveAccessContext = (req) => {
     if (req.accessContext) {
       return req.accessContext;
@@ -583,9 +589,58 @@ function createApp(options = {}) {
     return apiKeyStore.recordAuditEvent(type, accessContext, target, metadata);
   };
 
+  const publishedRepo = publishStore ? publishStore.getRepoId() : 'published';
+  const canPublishTarget = (accessContext, slug = '') => canAccessPath(
+    accessContext,
+    'publish',
+    publishedRepo,
+    slug,
+    'directory'
+  );
+  const resolvePublishedTarget = async (repo, relativePath, version) => {
+    if (!publishStore || !publishStore.isEnabled() || repo !== publishedRepo) {
+      return null;
+    }
+    const parts = toPosixPath(relativePath).split('/').filter(Boolean);
+    if (parts.length === 0) {
+      return { error: { status: 404, message: 'Published artifact not found.' } };
+    }
+    const slug = parts.shift();
+    try {
+      const published = await publishStore.resolvePath(slug, parts.join('/'), version);
+      if (published.publication.revokedAt) {
+        return { error: { status: 410, message: 'Published artifact has been revoked.' } };
+      }
+      return {
+        repo,
+        relativePath,
+        rootPath: published.rootPath,
+        resolved: published.resolved,
+        published,
+      };
+    } catch (error) {
+      if (error && error.code === 'ENOENT') {
+        return { error: { status: 404, message: 'Published artifact not found.' } };
+      }
+      if (error && error.code === 'EINVAL') {
+        return { error: { status: 400, message: error.message } };
+      }
+      if (error && error.code === 'EACCES') {
+        return { error: { status: 403, message: 'Invalid path.' } };
+      }
+      throw error;
+    }
+  };
+
   app.disable('x-powered-by');
   app.set('trust proxy', true);
 
+  if (publishStore && publishStore.isEnabled()) {
+    const limits = publishStore.getLimits();
+    const encodedContentBudget = Math.ceil(limits.maxRevisionBytes * 4 / 3);
+    const manifestBudget = limits.maxMetadataBytes * 2 + limits.maxFiles * 1024 + 64 * 1024;
+    app.use('/api/publish', express.json({ limit: encodedContentBudget + manifestBudget }));
+  }
   app.use(express.json({ limit: '2mb' }));
   app.use((req, res, next) => {
     if (mutationUsesQueryToken(req)) {
@@ -602,6 +657,109 @@ function createApp(options = {}) {
     etag: true,
     maxAge: '1h',
   }));
+
+  app.post('/api/publish', async (req, res) => {
+    if (!publishStore || !publishStore.isEnabled()) {
+      sendPathJsonError(res, { status: 404, message: 'Publishing is not configured.' });
+      return;
+    }
+    const accessContext = resolveAccessContext(req);
+    const requestedSlug = req.body && typeof req.body.slug === 'string' ? req.body.slug : '';
+    if (!canPublishTarget(accessContext, requestedSlug)) {
+      sendAccessError(res, accessContext, true);
+      return;
+    }
+    try {
+      const result = await publishStore.createPublication(req.body || {});
+      const revision = result.publication.revisions.at(-1);
+      recordApiKeyAuditEvent('publish.create', accessContext, {
+        repo: publishedRepo,
+        relativePath: result.publication.slug,
+      }, { byteCount: revision.sizeBytes });
+      res.status(201).json({
+        ok: true,
+        slug: result.publication.slug,
+        revision: result.publication.currentRevision,
+        created: true,
+        publication: result.publication,
+        viewUrl: result.publication.viewUrl,
+      });
+    } catch (error) {
+      const status = error.code === 'ECONFLICT' ? 409 : 400;
+      res.status(status).json({
+        ok: false,
+        error: error.message,
+        current: error.current ? publishStore.serializePublication(error.current) : null,
+      });
+    }
+  });
+
+  app.post('/api/publish/:slug', async (req, res) => {
+    if (!publishStore || !publishStore.isEnabled()) {
+      sendPathJsonError(res, { status: 404, message: 'Publishing is not configured.' });
+      return;
+    }
+    const accessContext = resolveAccessContext(req);
+    if (!canPublishTarget(accessContext, req.params.slug)) {
+      sendAccessError(res, accessContext, true);
+      return;
+    }
+    try {
+      const result = await publishStore.updatePublication(req.params.slug, req.body || {});
+      const revision = result.publication.revisions.at(-1);
+      recordApiKeyAuditEvent('publish.update', accessContext, {
+        repo: publishedRepo,
+        relativePath: result.publication.slug,
+      }, { byteCount: revision.sizeBytes });
+      res.status(200).json({
+        ok: true,
+        slug: result.publication.slug,
+        revision: result.publication.currentRevision,
+        created: false,
+        publication: result.publication,
+        viewUrl: result.publication.viewUrl,
+      });
+    } catch (error) {
+      if (error.code === 'ECONFLICT') {
+        res.status(409).json({
+          ok: false,
+          error: error.message,
+          currentRevision: error.current ? error.current.currentRevision : null,
+          current: error.current ? publishStore.serializePublication(error.current) : null,
+        });
+        return;
+      }
+      const status = error.code === 'ENOENT' ? 404 : error.code === 'EREVOKED' ? 410 : 400;
+      sendPathJsonError(res, { status, message: error.message });
+    }
+  });
+
+  app.post('/api/publish/:slug/revoke', async (req, res) => {
+    if (!publishStore || !publishStore.isEnabled()) {
+      sendPathJsonError(res, { status: 404, message: 'Publishing is not configured.' });
+      return;
+    }
+    const accessContext = resolveAccessContext(req);
+    if (!canPublishTarget(accessContext, req.params.slug)) {
+      sendAccessError(res, accessContext, true);
+      return;
+    }
+    try {
+      const result = await publishStore.revokePublication(req.params.slug, req.body || {});
+      recordApiKeyAuditEvent('publish.revoke', accessContext, {
+        repo: publishedRepo,
+        relativePath: result.publication.slug,
+      });
+      res.status(200).json({
+        ok: true,
+        slug: result.publication.slug,
+        revokedAt: result.publication.revokedAt,
+      });
+    } catch (error) {
+      const status = error.code === 'ENOENT' ? 404 : error.code === 'EREVOKED' ? 410 : 400;
+      sendPathJsonError(res, { status, message: error.message });
+    }
+  });
 
   app.get('/api/agent-keys', (req, res) => {
     const auth = authenticateApiKeyAdmin(req);
@@ -802,9 +960,18 @@ function createApp(options = {}) {
 
   app.get('/view/*', async (req, res) => {
     const accessContext = resolveAccessContext(req);
+    const requestedVersion = req.query && Object.prototype.hasOwnProperty.call(req.query, 'version')
+      ? req.query.version
+      : null;
+    const requestedPath = splitViewPath(req.params[0] || '');
     let resolvedInput;
     try {
-      resolvedInput = await resolveFromRequest(mappings, req.params[0] || '');
+      resolvedInput = requestedPath
+        ? await resolvePublishedTarget(requestedPath.repo, requestedPath.relativePath, requestedVersion)
+        : null;
+      if (!resolvedInput) {
+        resolvedInput = await resolveFromRequest(mappings, req.params[0] || '');
+      }
     } catch (error) {
       console.error('Failed to resolve path', { error });
       res.status(500).type('text/plain').send('Failed to resolve path.');
@@ -1686,9 +1853,10 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
     const repo = req.params.repo;
     const relativePath = req.params[0] || '';
-    const rootPath = mappings[repo];
+    let rootPath = mappings[repo];
+    let resolved;
 
-    if (!rootPath) {
+    if (!rootPath && repo !== publishedRepo) {
       res.status(404).type('text/plain').send(`Unknown repository: ${repo}`);
       return;
     }
@@ -1705,9 +1873,18 @@ function createApp(options = {}) {
       return;
     }
 
-    let resolved;
     try {
-      resolved = await safeResolve(rootPath, relativePath);
+      const published = await resolvePublishedTarget(repo, relativePath, req.query && req.query.version);
+      if (published && published.error) {
+        sendPathError(res, published.error);
+        return;
+      }
+      if (published) {
+        rootPath = published.rootPath;
+        resolved = published.resolved;
+      } else {
+        resolved = await safeResolve(rootPath, relativePath);
+      }
     } catch (error) {
       if (error && error.code === 'EACCES') {
         res.status(403).type('text/plain').send('Invalid path.');
@@ -1768,9 +1945,10 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
     const repo = req.params.repo;
     const relativePath = req.params[0] || '';
-    const rootPath = mappings[repo];
+    let rootPath = mappings[repo];
+    let resolved;
 
-    if (!rootPath) {
+    if (!rootPath && repo !== publishedRepo) {
       res.status(404).type('text/plain').send(`Unknown repository: ${repo}`);
       return;
     }
@@ -1791,9 +1969,18 @@ function createApp(options = {}) {
       return;
     }
 
-    let resolved;
     try {
-      resolved = await safeResolve(rootPath, relativePath);
+      const published = await resolvePublishedTarget(repo, relativePath, req.query && req.query.version);
+      if (published && published.error) {
+        sendPathError(res, published.error);
+        return;
+      }
+      if (published) {
+        rootPath = published.rootPath;
+        resolved = published.resolved;
+      } else {
+        resolved = await safeResolve(rootPath, relativePath);
+      }
     } catch (error) {
       if (error && error.code === 'EACCES') {
         res.status(403).type('text/plain').send('Invalid path.');
