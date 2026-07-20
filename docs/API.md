@@ -1,292 +1,97 @@
-# API Endpoints
+# API
 
-| Route | Description |
-|-------|-------------|
-| `GET /` | Repository index |
-| `GET /healthz` | Health check, including `editingEnabled`, `annotationsEnabled`, and `rawHtmlEnabled` booleans |
-| `GET /.well-known/agent.json` | Caller-scoped runtime capability discovery |
-| `GET /api/whoami` | Caller identity, permissions, repo/path scopes, capabilities, and authorized endpoint templates |
-| `GET /api/repos` | Discover served repos as JSON (filtered by grant scope when a token is presented) |
-| `GET /view/<repo>/<path>` | Rendered file or directory listing. For `.html` and `.htm`, append `?validate=1` to inspect local asset and document references as JSON. |
-| `GET /asset/<repo>/<path>` | Raw asset serving. Supports `Range` requests so `<audio>` can seek, backs the embedded PDF viewer page, and is the agent-facing read path for text/source files (see `lookie-read` CLI in the repo `bin/`). MIME types: images (`.png`/`.jpg`/`.gif`/`.webp`/`.svg`/`.jpeg`), audio (`.m4a`/`.mp3`/`.wav`/`.ogg`/`.oga`/`.opus`/`.flac`/`.aac`), PDF (`.pdf`), markdown (`.md`/`.markdown`/`.mdown` → `text/markdown`), YAML (`.yaml`/`.yml` → `text/yaml`), JSON (`.json`), XML (`.xml`), and the editable text/source set (shell, Python, JS/TS, Go, Rust, C/C++, etc.) returned as `text/plain; charset=utf-8`. Anything else returns `415 Unsupported asset type`. |
-| `GET /edit/<repo>/<path>` | Edit page (only when editing enabled) |
-| `POST /api/save/<repo>/<path>` | Save updated file content (JSON body) |
-| `POST /api/preview/<repo>/<path>` | Render preview HTML from draft content (JSON body) |
-| `GET /api/annotations/<repo>/<path>` | Read sidecar annotations for a file. Supports repeatable `?state=open|claimed|resolved`. Returns an empty schema document when no sidecar exists. |
-| `POST /api/annotations/<repo>/<path>` | Create an annotation. Requires `write` access and `enableAnnotations: true`. |
-| `PATCH /api/annotations/<repo>/<path>` | Apply `claim`, `resolve`, `reopen`, `reply`, or `redact` with stale-write protection. Requires `write` access and `enableAnnotations: true`. |
-| `GET /api/managed-repos` | List managed repositories visible to the caller |
-| `POST /api/managed-repos` | Register a root beneath an operator-configured allow-root |
-| `GET /api/managed-repos/:repo/tree` | Return a bounded, caller-filtered file tree |
-| `GET /api/managed-repos/:repo/changes` | Return bounded, mtime-based changes visible to the caller |
-| `GET /api/managed-repos/:repo/files/<path>` | Read a managed file |
-| `PUT /api/managed-repos/:repo/files/<path>` | Atomically create or update a managed file; accepts `expectedMtimeMs` |
-| `DELETE /api/managed-repos/:repo/files/<path>` | Soft-delete a file by default, or hard-delete with `?hard=1` |
-| `POST /api/managed-repos/:repo/trash/:trashId/restore` | Restore a soft-deleted file |
-| `DELETE /api/managed-repos/:repo/trash/:trashId` | Permanently remove a soft-deleted file |
-| `GET /api/search?q=<text>` | Search path and text content across caller-visible managed files |
-| `GET /api/search/suggest?q=<text>` | Suggest caller-visible managed paths |
-| `POST /api/publish` | Create a publish slug and immutable revision 1 |
-| `POST /api/publish/:slug` | Create the next immutable revision with an `expectedRevision` guard |
-| `POST /api/publish/:slug/revoke` | Revoke current and historical readback for a publish slug |
-| `GET /raw/<repo>/<path>` | Byte-preserving authored HTML when raw HTML is enabled |
-| `GET /embed/<repo>/<path>` | Transformed HTML runtime when raw HTML is enabled |
-| `GET /api/grants` | List managed grants (`Authorization: Bearer <admin-token>`) |
-| `POST /api/grants` | Create a managed grant and return token + issue comment helper |
-| `POST /api/grants/:grantId/renew` | Renew a managed grant and return issue comment helper |
-| `POST /api/grants/:grantId/revoke` | Revoke a managed grant and return issue comment helper |
+The [capability and route matrix](CAPABILITIES.md) is the authoritative endpoint list, including methods, permissions, feature gates, discovery templates, and source anchors. This document adds payload and workflow details without duplicating that list.
 
-## Access Tokens
+## Authentication and authorization
 
-Agent requests can authenticate with either:
+Static tokens, managed API keys, and managed grants resolve to the same `view`, `write`, and `publish` permission model plus repo/path scopes. `edit` remains a legacy alias for `write` in stored credentials.
 
-- `Authorization: Bearer <secret>`
-- `?token=<secret>`
+Use `Authorization: Bearer <token>` for agents. Read requests also accept `?token=` so browser navigation can propagate a scoped token. Every mutation rejects query credentials with `400`, even if a bearer header is also present.
 
-Managed grant tokens use the same auth shape as static tokens. The server checks
-static `access.tokens` first, then falls back to the managed grant store when
-`access.grants.storePath` is configured.
+`access.humanDefault: full` grants an unauthenticated caller unrestricted permissions. `restricted` and `none` return `401` without a credential and `403` for an invalid one. Managed-repository handlers deliberately return uniform not-found responses for missing and unauthorized resources.
 
-Route enforcement in phase 1:
+## Discovery
 
-- `/` and `/view/*` require `view` access when `access.humanDefault` is not `full`
-- `/asset/*` requires `view`
-- `/edit/*` and `/api/save/*` require `write` (`edit` remains a backward-compatible alias)
-- `/api/preview/*` requires `view` and still respects global editing mode
-- annotation reads require `view`; annotation creates and updates require `write`; all annotation routes return `404` when annotations are disabled
-- `/api/publish*` mutations require repo-level `publish` access to the configured publish repo; path-scoped publish credentials are rejected. Readback under that repo requires normal path-aware `view` access.
-
-Invalid tokens return `403`. Missing tokens return `401` when unauthenticated human access is restricted.
-
-Managed file routes deliberately return the same `404 {"ok":false,"error":"Not found."}`
-for missing and out-of-scope repositories or paths. Registry responses do not
-include host filesystem roots. Managed mutations require `write`; operator
-registration requires a separate admin token in the `Authorization` header.
-
-Writes use a same-directory temporary file and rename. Passing `expectedMtimeMs`
-returns `409` if the file changed; passing `null` asserts that it does not exist.
-Tree and change responses accept `maxEntries` (capped at 5,000), and tree depth
-is capped at 10. Soft delete returns a `trashId` that can be restored or later
-hard-deleted.
-
-Search and suggest accept repeatable or comma-separated `scope=<repo>`, plus
-bounded `limit` and `maxEntries` parameters. Result limits are capped at 100,
-traversal at 5,000 entries, each searched file at 1 MiB, and aggregate content
-reads at 10 MiB. Responses report `truncated` and their effective limits.
-Traversal prunes directories outside the caller's path scopes before reading
-file contents; inaccessible repo names and paths never appear in results.
-
-## Publish Endpoints
-
-Publishing is available when `publish.areaPath` is configured and `publish.enabled` is not `false`.
-
-`POST /api/publish` accepts a non-empty `files` array and an optional slug, `entryPath`, public `metadata`, and non-projected `privateMetadata`. File content is UTF-8 by default; use `"encoding": "base64"` for binary data. It returns `201` with the slug, revision, publication projection, and view URL.
-
-`POST /api/publish/:slug` accepts the same complete-bundle payload plus a mandatory positive `expectedRevision`. Every successful call creates a new immutable numbered snapshot. A stale guard returns `409` with `currentRevision` and the safe current publication projection.
-
-`POST /api/publish/:slug/revoke` requires `{ "reason": "..." }`. After revocation, current and historical readback return `410`.
-
-Readback reuses the existing routes under a virtual repo namespace:
-
-- `/view/published/<slug>/<path>`
-- `/asset/published/<slug>/<path>`
-- `/raw/published/<slug>/<path>` when raw HTML is enabled
-- append `?version=<positive-integer>` to select a historical revision
-
-The configured `publish.repoId` replaces `published` in these paths when customized. Published metadata is never interpreted as an authorization grant or source-repository mapping, and public metadata containing absolute filesystem paths is rejected. `privateMetadata` and the publish area's control files are not reachable through published readback. See [PUBLISHING.md](PUBLISHING.md) for the complete contract and examples.
-
-## HTML Bundle Validation
-
-`GET /view/<repo>/<path>.html?validate=1`
-
-Returns the HTML source metadata, repo-relative view/asset URLs, local references
-from stylesheet, script, image, and source elements, and local HTML/directory
-navigation targets. Each reference includes its resolved repo-relative path,
-content type, existence, byte count, and rewritten view URL where applicable.
-The `summary` object provides missing and unsupported counts for automated checks.
-
-Validation uses the caller's normal `view` scope for every referenced target.
-An unreadable target is reported with the same `exists: false`, null metadata,
-and `not_found` error as an absent target. Responses never include filesystem
-paths from the host.
-
-## Repo Discovery Endpoint
-
-`GET /api/repos`
-
-Lets agents discover served repos at runtime without parsing the HTML index or reading the host's YAML config. Response shape:
+`GET /api/repos` returns caller-visible opaque mappings:
 
 ```json
 {
   "repos": [
     {
-      "repo": "operations",
-      "viewUrl": "/view/operations/",
-      "assetUrl": "/asset/operations/"
+      "repo": "docs",
+      "viewUrl": "/view/docs/",
+      "assetUrl": "/asset/docs/"
     }
   ],
   "count": 1
 }
 ```
 
-The list is filtered to the repos the caller can `view`: with a scoped token the response only contains repos that token can reach; unauthenticated callers see all mappings when `access.humanDefault` allows it and otherwise receive `401`. `viewUrl` and `assetUrl` are opaque repo-rooted URLs. The response never includes source roots, home-directory paths, or the server's repo mapping.
+`GET /api/whoami` reports sanitized caller auth, subject, effective permissions, repo scopes, live capabilities, and authorized endpoint templates. `GET /.well-known/agent.json` wraps the same caller state with schema, version, instance, authentication, and discovery metadata. Their exact fields and capability rules are in [CAPABILITIES.md](CAPABILITIES.md#discovery-field-inventory).
 
-## Caller and Agent Discovery
+Discovery never returns repository roots, home paths, store paths, credentials, token/admin names, grant audit data, or private publish metadata. Administrative APIs are not advertised.
 
-`GET /api/whoami` returns the presented caller's sanitized identity, effective permissions, visible repo/path scopes, capabilities, and endpoint templates. `GET /.well-known/agent.json` wraps the same caller-specific fields in a versioned runtime document. Both endpoints return `401` for a missing credential when `access.humanDefault` is restricted and `403` for an invalid credential.
+## Mounted content
 
-Capabilities are the intersection of runtime configuration, registered route availability, and caller authorization. A disabled feature has a `false` capability and no feature endpoint templates. A scoped caller never receives a repo, path scope, or mutation endpoint outside its grant. Grant-management and API-key-management routes are administrative surfaces and are not advertised through caller discovery.
+`GET /view/<repo>/<path>` renders a directory or supported file. HTML requests with `?validate=1` return a JSON report describing local asset/navigation references without exposing host paths. Published content additionally accepts `?version=<positive-integer>`.
 
-The discovery endpoint matrix is authoritative for the templates emitted in `endpoints`:
+`GET /asset/<repo>/<path>` returns only allowlisted image, audio, video, PDF, and text/source extensions with an explicit MIME type. HTML is served as plain text on this route. Unknown extensions return `415`.
 
-| Endpoint key | Template | Emitted when |
-|---|---|---|
-| `agentDiscovery` | `/.well-known/agent.json` | Caller is authenticated or unrestricted human access is enabled |
-| `whoami` | `/api/whoami` | Caller is authenticated or unrestricted human access is enabled |
-| `repos` | `/api/repos` | Caller is authenticated or unrestricted human access is enabled |
-| `view` | `/view/:repo/*path` | Caller has a visible `view` scope |
-| `assetRead` | `/asset/:repo/*path` | Caller has a visible `view` scope and the route is registered |
-| `edit` | `/edit/:repo/*path` | Editing is enabled and caller has a visible `write` scope |
-| `save` | `/api/save/:repo/*path` | Editing is enabled and caller has a visible `write` scope |
-| `preview` | `/api/preview/:repo/*path` | Editing is enabled and caller has a visible `view` scope |
-| `annotationRead` | `/api/annotations/:repo/*path` | Annotations are enabled and caller has a visible `view` scope |
-| `annotationCreate` | `/api/annotations/:repo/*path` | Annotations are enabled and caller has a visible `write` scope |
-| `annotationUpdate` | `/api/annotations/:repo/*path` | Annotations are enabled and caller has a visible `write` scope |
-| `rawHtml` | `/raw/:repo/*path` | Raw HTML is enabled and caller has a visible `view` scope |
-| `embeddedHtml` | `/embed/:repo/*path` | Raw HTML is enabled and caller has a visible `view` scope |
-| `managedRepoList` | `/api/managed-repos` | Managed repos and route are enabled and caller has a visible managed repo |
-| `managedFileRead` | `/api/managed-repos/:repo/files/*path` | Managed repos and route are enabled and caller has a visible managed repo |
-| `managedFileWrite` | `/api/managed-repos/:repo/files/*path` | Managed repos and route are enabled and caller has a visible `write` scope |
-| `managedTree` | `/api/managed-repos/:repo/tree` | Managed repos and route are enabled for the caller |
-| `managedChanges` | `/api/managed-repos/:repo/changes` | Managed repos and route are enabled for the caller |
-| `search` | `/api/search` | Managed search and route are enabled for the caller |
-| `searchSuggest` | `/api/search/suggest` | Managed search and route are enabled for the caller |
-| `publishCreate` | `/api/publish` | Publishing is enabled and caller has repo-level `publish` scope |
-| `publishUpdate` | `/api/publish/:slug` | Publishing is enabled and caller has repo-level `publish` scope |
-| `publishRevoke` | `/api/publish/:slug/revoke` | Publishing is enabled and caller has repo-level `publish` scope |
+When editing is enabled, `GET /edit/<repo>/<path>` loads an existing non-binary file. `POST /api/save/<repo>/<path>` accepts:
 
-Neither discovery response contains source roots, managed-store roots, publish-area paths, home directories, credentials, administrative token names, or private grant/audit metadata.
-
-## Save Endpoint
-
-`POST /api/save/<repo>/<path>`
-
-Request body:
 ```json
 {
-  "content": "file content here",
+  "content": "replacement UTF-8 content",
   "expectedMtimeMs": 1234567890
 }
 ```
 
-- `expectedMtimeMs` enables stale-write detection — if the file's mtime has changed since the editor loaded it, returns `409 Conflict`
-- Writes use a temp file + rename pattern for atomicity
+The mtime guard is optional; a stale value returns `409`. A successful save uses temp-file-plus-rename replacement. `POST /api/preview/<repo>/<path>` accepts `{ "content": "draft" }`, requires only `view` on the existing target, and returns rendered HTML without writing.
 
-## Preview Endpoint
+## Annotations
 
-`POST /api/preview/<repo>/<path>`
+Annotation routes require the annotation feature flag and an existing file. Reads require `view`; creates and updates require `write`.
 
-Request body:
-```json
-{
-  "content": "markdown or yaml content to preview"
-}
-```
-
-Returns `{"ok": true, "html": "rendered HTML"}`.
-
-## Annotation Endpoints
-
-`GET /api/annotations/<repo>/<path>`
-
-- Requires `server.enableAnnotations: true`
-- Requires `view` access to the target file
-- Returns `{ "schema": 1, "file": "<repo>/<path>", "annotations": [], "mtimeMs": null }` when no sidecar exists yet
-- Optional `?state=` filter can be repeated, for example `?state=open&state=claimed`
-
-`POST /api/annotations/<repo>/<path>`
-
-- Requires `write` access to the target file
-
-Request body:
+Create request:
 
 ```json
 {
   "anchor": "#design-decisions",
   "anchorKind": "heading",
   "body": "Please split this section.",
-  "author": "agent-bob"
+  "author": "review-agent"
 }
 ```
 
-- `anchorKind` must be `heading`, `yamlKey`, or `lineRange`
-- `lineRange` anchors must use `#L<start>-L<end>`
-- Server assigns `id`, `createdAt`, and `state: "open"`
-- Sidecars are written under `<repoRoot>/.lookie-link/annotations/<repo>/<path>.json`
+`anchorKind` is `heading`, `yamlKey`, or `lineRange`; line ranges use `#L<start>-L<end>`. Reads accept repeatable `state=open|claimed|resolved`. Updates accept `claim`, `resolve`, `reopen`, `reply`, or `redact`, plus an optional `expectedMtimeMs`; stale updates return `409` with the current document. See [ANNOTATIONS-SPEC.md](ANNOTATIONS-SPEC.md).
 
-`PATCH /api/annotations/<repo>/<path>`
+## Managed repositories
 
-- Requires `write` access to the target file
+Registration is an administrative operation constrained to configured existing allow-roots. Normal content operations use caller scope:
 
-Request body:
+- File reads return UTF-8 `content`, path, size, and mtime.
+- Writes require string `content`; optional `expectedMtimeMs` returns `409` on conflict.
+- Deletes are soft by default and return a `trashId`; `?hard=1` deletes immediately.
+- Restore and permanent-trash deletion re-check `write` on the original path.
+- Tree and change responses are bounded and caller-filtered. `changes?since=` expects a numeric Unix timestamp.
+- Search requires `q`, supports repeated `scope`, and bounds results, entries, file size, and total bytes. Suggestions match visible paths only.
 
-```json
-{
-  "id": "2026-06-09-001",
-  "expectedMtimeMs": 1749500000000,
-  "op": "claim",
-  "payload": {
-    "claimedBy": "agent-bob"
-  }
-}
-```
+## Publishing
 
-- Supported `op` values: `claim`, `resolve`, `reopen`, `reply`, `redact`
-- `reply` payload requires `author` and `body`
-- `redact` payload requires `redactedBy` (or `author`). It replaces the annotation and reply bodies with placeholders, marks the item resolved, and preserves authorship and timestamp metadata for audit history.
-- Stale `expectedMtimeMs` returns `409` with the current annotation document in `current`
+Publishing requires whole-repo `publish` scope on the configured virtual publish repo. A path-only scope is rejected.
 
-## Managed Grant Lifecycle
+Create payloads contain a non-empty `files` array and may include `slug`, `entryPath`, public `metadata`, and internal `privateMetadata`. File entries default to UTF-8 and may specify `encoding: base64`. Create returns `201` and immutable revision 1.
 
-When `access.grants` is configured, grant lifecycle endpoints are enabled and
-require a grant admin token from `access.grants.adminTokens`.
+Updates use the same complete-bundle payload plus a mandatory `expectedRevision`; stale updates return `409` with the safe current projection. Revoke requests require `{ "reason": "..." }`; revoked current and historical reads return `410`.
 
-Issue-linked create and renew requests require an explicit `expiresAt` value.
+Readback uses the normal `view`, `asset`, and optional `raw` routes beneath the configured virtual repo. Public metadata containing absolute filesystem paths is rejected; private metadata is never projected. See [PUBLISHING.md](PUBLISHING.md).
 
-Create request example:
+## Administrative stores
 
-```json
-{
-  "repoId": "acme-co",
-  "sourceCompanyId": "fontastic",
-  "targetCompanyId": "target-company",
-  "subject": {
-    "companyId": "target-company",
-    "agentIds": ["agent-bob"]
-  },
-  "permissions": {
-    "view": true,
-    "edit": false
-  },
-  "paths": ["clients/example-client/briefs/"],
-  "sourceIssueId": "ACME-1234",
-  "reason": "Cross-company review requested in issue.",
-  "expiresAt": "2026-05-10T00:00:00.000Z",
-  "issuer": {
-    "role": "manager_agent",
-    "companyId": "fontastic",
-    "agentId": "agent-manager"
-  },
-  "adapterAllowRoots": ["/absolute/repo/root"]
-}
-```
+API-key lifecycle routes require an API-key admin bearer token. Created and rotated secrets are returned once and stored only as hashes. Grant lifecycle routes require a grant admin token; mutation credentials must be bearer tokens. Grant requests also enforce issuer, subject, source-owner, expiry, approval, and cross-company allow-root policy.
 
-Create and renew responses include:
+These routes intentionally use store-specific admin credentials rather than the caller's `view`, `write`, or `publish` permissions.
 
-- `grant`: normalized grant record with computed `state`
-- `token`: opaque bearer secret for the new or rotated grant
-- `issueComment`: markdown payload Paperclip can post back to the linked issue
+## Error conventions
 
-`GET /api/grants?includeAudit=1` also returns one-time `grant.expired` audit
-events with an `issueComment` payload when Lookie-Link first observes an expired
-grant.
+JSON APIs generally return `{ "ok": false, "error": "..." }`. Common statuses are `400` invalid input, `401` missing required authentication, `403` denied, `404` missing/disabled/hidden, `409` optimistic conflict, `410` revoked publication, `415` unsupported type, and `500` internal failure.

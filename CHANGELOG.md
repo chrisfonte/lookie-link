@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-20 — Unreleased — Reconciled Runtime Surface
+
+- Added `docs/CAPABILITIES.md` as the test-checked source of truth for every registered route, auth requirement, feature gate, discovery field/template, configuration key, unified CLI command, and runtime library/store.
+- Reconciled public documentation with the merged access, API-key, grant, managed-repository/search, immutable publishing, caller discovery, unified CLI/skill packages, portable-link, annotation, HTML validation/embed, video, and asset-MIME behavior.
+- Removed proposed command and endpoint claims from current-behavior documentation, corrected annotation mutations to require `write`, documented the raw-HTML and preview gates precisely, and explicitly recorded that forms, templates, and submissions are not implemented.
+
 ## 2026-07-20 — Unreleased — Caller-Scoped Agent Discovery
 
 - Added `GET /.well-known/agent.json` and `GET /api/whoami`, deriving advertised capabilities and endpoint templates from enabled runtime configuration, registered routes, and the current caller's repo/path permissions.
@@ -25,7 +31,7 @@
 ## 2026-06-09 — Unreleased — Annotations Sidecar Transport
 
 - Added sidecar-backed annotation storage at `<repoRoot>/.lookie-link/annotations/<repo>/<relative-path>.json` with atomic temp+rename writes, per-day annotation IDs, and stale-write protection via `expectedMtimeMs` on PATCH.
-- Added `GET | POST | PATCH /api/annotations/<repo>/<path>` behind a new `server.enableAnnotations` flag (and `LOOKIE_LINK_ENABLE_ANNOTATIONS` env var), independent of `enableEditing`. Routes reuse the existing token-scoped `view` permission for both reads and writes.
+- Added `GET | POST | PATCH /api/annotations/<repo>/<path>` behind a new `server.enableAnnotations` flag (and `LOOKIE_LINK_ENABLE_ANNOTATIONS` env var), independent of `enableEditing`. Reads require `view`; creates and updates require `write` (including the legacy `edit` alias).
 - `GET` returns the sidecar (or an empty schema-1 document when no sidecar exists) and supports repeatable `?state=open|claimed|resolved` filters. `POST` accepts `anchor`, `anchorKind` (`heading`, `yamlKey`, `lineRange`), `body`, `author`. `PATCH` supports `claim`, `resolve`, `reopen`, and `reply` ops with 409 on stale mtime.
 - Extended `scripts/validate-editable-mode.js` to cover the annotation transport: disabled-gate 404, empty-doc read, create + sidecar placement, claim → resolve → reopen → reply state walk, state filters (including invalid filter rejection), stale-mtime conflict, cross-repo access-control parity (403 on read and write), and 404 on missing source files.
 - Documented the transport in `docs/API.md`, the flag in `docs/CONFIGURATION.md`, and the example in `lookie-link.yaml.example`.

@@ -1,52 +1,48 @@
 # Configuration
 
-Create `~/.config/lookie-link/lookie-link.yaml`:
+The authoritative inventory of recognized keys, defaults, and environment overrides is [CAPABILITIES.md](CAPABILITIES.md#configuration-key-inventory). Unknown YAML keys are not feature declarations; in particular, there are no implemented forms, templates, or submissions settings.
+
+## File lookup and precedence
+
+The server reads the first available file in this order:
+
+1. `LOOKIE_LINK_CONFIG`
+2. `~/.config/lookie-link/lookie-link.yaml`
+3. `lookie-link.yaml` in the project root
+
+For supported settings, direct environment overrides take precedence over the selected YAML file. Copy `lookie-link.yaml.example` to the user config directory as a starting point.
+
+## Core server and repositories
 
 ```yaml
 server:
   port: 9876
-  hostname: my-server.example.com
+  hostname: localhost
   enableEditing: false
   enableAnnotations: false
+  enableRawHtml: false
 
 repositories:
   docs: ~/Documents/docs
-  notes: ~/notes
-  project: ~/projects/my-project
+  notes: ~/Documents/notes
 ```
 
-Each key under `repositories` becomes a URL prefix: `/view/docs/...`, `/view/notes/...`, etc.
+Each repository key becomes `/view/<key>/...`. `ROOT_MAPPINGS` replaces the YAML map when it contains either JSON or comma-separated `repo=path` pairs.
 
-A sample config is included: `lookie-link.yaml.example`.
+The three feature flags are independent and default off. Raw HTML serves trusted authored HTML without sanitization on the application origin; do not enable it for untrusted content.
 
-## Managed Repositories
-
-```yaml
-managedRepos:
-  storePath: ~/.local/share/lookie-link/managed-repos.yaml
-  allowRoots:
-    - ~/shared-workspaces
-  adminTokens:
-    local_operator:
-      secretEnv: LOOKIE_LINK_MANAGED_REPO_ADMIN_TOKEN
-```
-
-`storePath` enables the registry and mutable-content routes. Each `allowRoots`
-entry must be an existing directory. Registration resolves real paths and only
-creates a repository below a real, in-scope ancestor, so a symlink ancestor
-cannot redirect creation outside the allow-root. Keep admin secrets in the
-environment; normal file mutations use caller `write` capability.
-
-## Access Tokens
-
-Phase 1 agent access control is config-driven under `access.tokens`. Secrets should come from environment variables when possible.
+## Caller access
 
 ```yaml
 access:
-  humanDefault: full # full | restricted | none
+  humanDefault: restricted
   tokens:
-    builder_read:
-      secretEnv: LOOKIE_TOKEN_BUILDER_READ
+    docs_reader:
+      secretEnv: LOOKIE_TOKEN_DOCS_READER
+      subject:
+        companyId: example-company
+        agentId: review-agent
+        label: Review Agent
       repos:
         docs:
           paths:
@@ -55,30 +51,51 @@ access:
       permissions:
         view: true
         write: false
-
-    builder_write:
-      secretEnv: LOOKIE_TOKEN_BUILDER_WRITE
-      repos:
-        docs:
-          paths:
-            - drafts/
-      permissions:
-        view: true
-        write: true
         publish: false
 ```
 
-Notes:
+`humanDefault: full` is the backward-compatible default and grants anonymous access. Use `restricted` or `none` for mixed-user instances. Paths ending in `/` grant a subtree; other paths grant one file. `repos: all` grants all repos. Prefer `secretEnv`; inline `secret` values should remain in private local config.
 
-- `humanDefault: full` preserves current unauthenticated browser behavior.
-- `humanDefault: restricted` or `none` requires a token for `/`, `/view/*`, `/asset/*`, `/edit/*`, and `/api/*`.
-- Paths ending in `/` grant a directory subtree. Paths without a trailing slash grant a single file.
-- Tokens can also use `secret:` directly for local development, but that should not be committed.
-- Static tokens still accept legacy `edit: true|false` and normalize it to `write` for backward compatibility.
-- Static tokens may carry optional `subject`, `issuer`, and `audit` metadata so future agent-facing `whoami/repos/grant` APIs can identify the Paperclip issue, agent, or projected grant behind a token without changing the phase 1 config shape.
-- Query-string tokens are preserved across rendered links so tokenized browser sessions can keep navigating.
+`write` is canonical. Existing `permissions.edit` and `allowEditing` values are accepted as aliases.
 
-## Publish Artifacts
+## Managed API keys and grants
+
+```yaml
+access:
+  apiKeys:
+    storePath: ~/.local/share/lookie-link/agent-api-keys.yaml
+    adminTokens:
+      operator:
+        secretEnv: LOOKIE_LINK_AGENT_KEY_ADMIN_TOKEN
+  grants:
+    storePath: /srv/lookie-link/grants.yaml
+    projectionPath: /srv/lookie-link/grants-projection.yaml
+    repoOwners:
+      docs: example-company
+    repoRoots:
+      docs: /srv/lookie-link/repos/docs
+    adminTokens:
+      issuer:
+        secretEnv: LOOKIE_LINK_GRANT_ADMIN_TOKEN
+```
+
+The store files enable their corresponding APIs. API keys and grant tokens are hashed at rest; admin secrets are resolved from config/env. A grant projection is optional and contains active safe projections only. Grant store, projection, and repo-root values are resolved with `path.resolve` but do not expand `~`, so use absolute paths. `repoRoots` is required to enforce cross-company API request `adapterAllowRoots` against real paths.
+
+## Managed repositories
+
+```yaml
+managedRepos:
+  storePath: ~/.local/share/lookie-link/managed-repos.yaml
+  allowRoots:
+    - ~/Documents/shared-workspaces
+  adminTokens:
+    operator:
+      secretEnv: LOOKIE_LINK_MANAGED_REPO_ADMIN_TOKEN
+```
+
+Every allow-root must already exist. The registry and all newly registered roots are contained by realpath checks. Registration uses the admin token; normal file operations use caller `view` or `write` scope.
+
+## Publishing
 
 ```yaml
 publish:
@@ -92,115 +109,37 @@ publish:
   maxRevisions: 20
 ```
 
-Notes:
+`areaPath` enables the store unless `enabled` is exactly `false`. The virtual repo ID must not collide with a mounted repository. All limits are positive integers. Enabling the store while leaving `humanDefault: full` permits anonymous publishing, so restricted access is strongly recommended.
 
-- `areaPath` enables the publish store unless `enabled` is explicitly `false`.
-- `repoId` is the virtual repo used by published `view`, `asset`, and `raw` URLs. It defaults to `published`.
-- `repoId` must not match a configured `repositories` key; Lookie-Link rejects that collision at startup so the virtual publish namespace cannot shadow a real repository.
-- The file, byte, metadata, and revision limits above are the defaults. All limit values must be positive integers.
-- `maxRevisions` rejects another update at the limit. It does not prune historical revisions.
-- Publish is a repo-level capability: a credential needs `publish: true` plus whole-repo scope for `repoId` (or `repos: all`) to create, update, or revoke. Path-scoped publish credentials are rejected rather than treated as slug-level grants. Readback still uses normal path-aware `view` scope.
-- Publish routes inherit `access.humanDefault`. Because the default is `full`, enabling publishing without explicit access control also enables anonymous publish, update, and revoke. Multi-user deployments should set `humanDefault: restricted` or `none` and issue explicit publish credentials.
-- Source paths belong in `privateMetadata`, which is stored internally but omitted from responses and artifact readback. Public `metadata` is descriptive and never changes authorization.
-- See [PUBLISHING.md](PUBLISHING.md) for immutability, atomicity, history, and revocation semantics.
-
-## Managed Grants
-
-Managed grants add a writable grant store, optional read-only projection, and
-admin-auth lifecycle API for Paperclip or another issuer workflow.
-
-```yaml
-access:
-  humanDefault: restricted
-  grants:
-    storePath: ~/.local/share/lookie-link/grants.yaml
-    projectionPath: ~/.local/share/lookie-link/grants-projection.yaml
-    repoOwners:
-      docs: fontastic
-    repoRoots:
-      docs: ~/Documents/docs
-    adminTokens:
-      paperclip:
-        secretEnv: LOOKIE_LINK_GRANT_ADMIN_TOKEN
-```
-
-Notes:
-
-- `storePath` enables the managed grant lifecycle and is required.
-- `projectionPath` is optional; when set, Lookie-Link writes active grants only,
-  without reasons or revocation metadata, for runtime projection use.
-- `repoOwners` maps each repo id to the company allowed to issue grants for it.
-- `repoRoots` should mirror the configured repository roots when you want
-  cross-company `adapterAllowRoots` enforcement.
-- Cross-company grant creation requires `adapterAllowRoots` in the API request
-  and rejects targets outside those absolute roots.
-
-## Config Priority
-
-Settings resolve in this order (first wins):
-
-1. **Environment variables** (`PORT`, `HOSTNAME`, `ROOT_MAPPINGS`, `LOOKIE_LINK_CONFIG`)
-2. **`~/.config/lookie-link/lookie-link.yaml`** (user config)
-3. **`lookie-link.yaml`** in project root (development fallback)
-4. **Built-in defaults** (port 9876)
-
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `PORT` | Port to listen on (default: 9876) |
-| `HOSTNAME` | Hostname shown in startup logs |
-| `ROOT_MAPPINGS` | Comma-separated `repo=path` pairs or JSON object |
-| `LOOKIE_LINK_CONFIG` | Path to a custom config file (overrides search) |
-| `LOOKIE_LINK_ENABLE_EDITING` | Boolean override for edit mode (`true/false`, `1/0`, `yes/no`) |
-| `LOOKIE_LINK_ENABLE_ANNOTATIONS` | Boolean override for annotation routes (`true/false`, `1/0`, `yes/no`) |
-
-## Annotation Transport
-
-`server.enableAnnotations` gates the JSON sidecar transport under `/api/annotations/*`.
-
-- Default: `false`
-- Precedence: `LOOKIE_LINK_ENABLE_ANNOTATIONS` env var, then user/project YAML, then default
-- Independent of `enableEditing`
-- When disabled, `GET|POST|PATCH /api/annotations/<repo>/<path>` return `404`
-- `GET` requires `view`; `POST` and `PATCH` require the write-class `write` permission (including legacy `edit` aliases)
-- Annotation sidecars live inside each served repo at `.lookie-link/annotations/<repo>/<relative-path>.json`
-
-## Custom Themes
-
-Define custom color themes in your config file. Each theme needs dark and/or light variants with CSS variable values (use underscores for property names):
+## Custom themes
 
 ```yaml
 themes:
   midnight:
     dark:
       bg: "#0a0a1a"
-      bg_elev: "#12122a"
-      bg_code: "#08081a"
-      text: "#c8c8ff"
-      text_soft: "#8888bb"
-      accent: "#7c6aff"
-      border: "#2a2a55"
-      link: "#9b8aff"
-      page_bg: "radial-gradient(circle at top right, #1a1a3a, #0a0a1a 50%)"
-      toolbar_bg: "rgba(18, 18, 42, 0.94)"
-      toolbar_btn_bg: "#1a1a3a"
-      toolbar_btn_hover: "#2a2a4a"
-      toc_active_bg: "rgba(124, 106, 255, 0.18)"
+      text: "#d8d8ff"
+      accent: "#8a7cff"
+      toolbar_btn_text: "#ffffff"
+      heading_font: "system-ui, sans-serif"
     light:
-      bg: "#f0f0ff"
-      bg_elev: "#ffffff"
-      bg_code: "#e8e8f8"
-      text: "#1a1a3a"
-      text_soft: "#5555aa"
-      accent: "#4a3ad9"
-      border: "#d0d0ee"
-      link: "#4a3ad9"
-      page_bg: "linear-gradient(160deg, #f0f0ff 0%, #e8e8f8 100%)"
-      toolbar_bg: "rgba(255, 255, 255, 0.94)"
-      toolbar_btn_bg: "#e8e8f8"
-      toolbar_btn_hover: "#d8d8ee"
-      toc_active_bg: "rgba(74, 58, 217, 0.15)"
+      bg: "#f5f5ff"
+      text: "#202044"
+      accent: "#5140d8"
 ```
 
-Custom themes appear in the theme cycle button alongside the 10 built-in themes.
+Theme variants may set any key listed in the [configuration inventory](CAPABILITIES.md#configuration-key-inventory). Underscores map to CSS custom-property hyphens. A custom name that normalizes to a built-in theme name is skipped.
+
+## Server environment variables
+
+| Variable | Purpose |
+|---|---|
+| `LOOKIE_LINK_CONFIG` | Select config file |
+| `PORT` | Override server port |
+| `HOSTNAME` | Override display hostname |
+| `ROOT_MAPPINGS` | Replace repository map |
+| `LOOKIE_LINK_ENABLE_EDITING` | Override editing boolean |
+| `LOOKIE_LINK_ENABLE_ANNOTATIONS` | Override annotations boolean |
+| `LOOKIE_LINK_ENABLE_RAW_HTML` | Override raw/transformed HTML boolean |
+
+Boolean overrides accept `true/false`, `1/0`, `yes/no`, and `on/off`. The CLI additionally reads `LOOKIE_LINK_BASE_URL` and `LOOKIE_LINK_TOKEN`; those do not configure the server.

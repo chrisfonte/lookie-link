@@ -2,6 +2,8 @@
 
 Publishing creates a stable, slug-addressed lineage of finished artifact bundles without writing into a configured source repository.
 
+The authoritative publish route, permission, config, CLI, and discovery inventory is [CAPABILITIES.md](CAPABILITIES.md). This document covers the payload and revision model.
+
 ## Immutability And Revisions
 
 “Immutable” applies to each numbered revision, not to the slug. A slug is a stable pointer whose current revision can advance from 1 to 2 and so on. Advancing the slug always creates a complete new snapshot; it never changes files in an existing revision. Historical revisions remain readable until the slug is revoked.

@@ -289,11 +289,35 @@ function registeredRoutes(app) {
 }
 
 async function documentedEndpointTemplates() {
-  const apiDocs = await fs.readFile(path.join(__dirname, '..', 'docs', 'API.md'), 'utf8');
+  const apiDocs = await fs.readFile(path.join(__dirname, '..', 'docs', 'CAPABILITIES.md'), 'utf8');
   const entries = [...apiDocs.matchAll(/^\| `([a-zA-Z]+)` \| `([^`]+)` \| .+ \|$/gm)]
     .map((match) => [match[1], match[2]]);
   return new Map(entries);
 }
+
+async function documentedApplicationRoutes() {
+  const matrix = await fs.readFile(path.join(__dirname, '..', 'docs', 'CAPABILITIES.md'), 'utf8');
+  const routeSection = matrix.split('## Registered HTTP routes')[1].split('## Discovery endpoint templates')[0];
+  return [...routeSection.matchAll(/^\| [^|]+: `([^`]+)` \| `([A-Z]+)` \|/gm)]
+    .map((match) => `${match[2].toLowerCase()}:${match[1]}`)
+    .filter((entry) => entry !== 'get:/public/*')
+    .sort();
+}
+
+test('authoritative route matrix covers every registered application route', async () => {
+  const app = createApp({
+    mappings: {},
+    accessConfig: {},
+    apiKeyStore: null,
+    grantStore: null,
+    managedRepoStore: null,
+    publishStore: null,
+    editingEnabled: false,
+    annotationsEnabled: false,
+    rawHtmlEnabled: false,
+  });
+  assert.deepEqual([...new Set(await documentedApplicationRoutes())], [...new Set(registeredRoutes(app).sort())]);
+});
 
 async function readDiscoveryTriplet(server, init) {
   const [agentResponse, whoamiResponse, reposResponse] = await Promise.all([
