@@ -674,19 +674,6 @@
   }
 
   ready(() => {
-    window.addEventListener('message', (event) => {
-      if (event.origin !== window.location.origin) {
-        return;
-      }
-
-      const data = event.data || {};
-      if (data.type !== 'lookie-link:set-annotation-mode') {
-        return;
-      }
-
-      document.documentElement.classList.toggle('lookie-annotations-active', Boolean(data.enabled));
-    });
-
     bindAnnotateButtons();
     if (toolbarToggle) {
       toolbarToggle.addEventListener('click', () => {
