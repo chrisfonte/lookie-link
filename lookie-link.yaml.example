@@ -58,6 +58,7 @@ repositories:
 #       permissions:
 #         view: true
 #         write: true
+#         publish: false
 #   grants:
 #     storePath: ~/.local/share/lookie-link/grants.yaml
 #     projectionPath: ~/.local/share/lookie-link/grants-projection.yaml
