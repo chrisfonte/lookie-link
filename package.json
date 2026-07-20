@@ -9,6 +9,8 @@
     "lookie-annotations": "./bin/lookie-annotations.js"
   },
   "scripts": {
+    "check:skill-packages": "node scripts/generate-skill-packages.js --check",
+    "generate:skill-packages": "node scripts/generate-skill-packages.js",
     "test": "node --test",
     "start": "node server.js",
     "validate:editable": "node scripts/validate-editable-mode.js",
