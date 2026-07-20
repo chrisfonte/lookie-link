@@ -13,6 +13,9 @@
 | `GET /api/annotations/<repo>/<path>` | Read sidecar annotations for a file. Supports repeatable `?state=open|claimed|resolved`. Returns an empty schema document when no sidecar exists. |
 | `POST /api/annotations/<repo>/<path>` | Create an annotation. Requires `write` access and `enableAnnotations: true`. |
 | `PATCH /api/annotations/<repo>/<path>` | Apply `claim`, `resolve`, `reopen`, `reply`, or `redact` with stale-write protection. Requires `write` access and `enableAnnotations: true`. |
+| `POST /api/publish` | Create a publish slug and immutable revision 1 |
+| `POST /api/publish/:slug` | Create the next immutable revision with an `expectedRevision` guard |
+| `POST /api/publish/:slug/revoke` | Revoke current and historical readback for a publish slug |
 | `GET /api/grants` | List managed grants (`Authorization: Bearer <admin-token>`) |
 | `POST /api/grants` | Create a managed grant and return token + issue comment helper |
 | `POST /api/grants/:grantId/renew` | Renew a managed grant and return issue comment helper |
@@ -36,8 +39,28 @@ Route enforcement in phase 1:
 - `/edit/*` and `/api/save/*` require `write` (`edit` remains a backward-compatible alias)
 - `/api/preview/*` requires `view` and still respects global editing mode
 - annotation reads require `view`; annotation creates and updates require `write`; all annotation routes return `404` when annotations are disabled
+- `/api/publish*` mutations require `publish`; readback under the configured publish repo requires `view`
 
 Invalid tokens return `403`. Missing tokens return `401` when unauthenticated human access is restricted.
+
+## Publish Endpoints
+
+Publishing is available when `publish.areaPath` is configured and `publish.enabled` is not `false`.
+
+`POST /api/publish` accepts a non-empty `files` array and an optional slug, `entryPath`, public `metadata`, and non-projected `privateMetadata`. File content is UTF-8 by default; use `"encoding": "base64"` for binary data. It returns `201` with the slug, revision, publication projection, and view URL.
+
+`POST /api/publish/:slug` accepts the same complete-bundle payload plus a mandatory positive `expectedRevision`. Every successful call creates a new immutable numbered snapshot. A stale guard returns `409` with `currentRevision` and the safe current publication projection.
+
+`POST /api/publish/:slug/revoke` requires `{ "reason": "..." }`. After revocation, current and historical readback return `410`.
+
+Readback reuses the existing routes under a virtual repo namespace:
+
+- `/view/published/<slug>/<path>`
+- `/asset/published/<slug>/<path>`
+- `/raw/published/<slug>/<path>` when raw HTML is enabled
+- append `?version=<positive-integer>` to select a historical revision
+
+The configured `publish.repoId` replaces `published` in these paths when customized. Published metadata is never interpreted as an authorization grant or source-repository mapping, and public metadata containing absolute filesystem paths is rejected. `privateMetadata` and the publish area's control files are not reachable through published readback. See [PUBLISHING.md](PUBLISHING.md) for the complete contract and examples.
 
 ## HTML Bundle Validation
 

@@ -47,6 +47,7 @@ access:
       permissions:
         view: true
         write: true
+        publish: false
 ```
 
 Notes:
@@ -58,6 +59,30 @@ Notes:
 - Static tokens still accept legacy `edit: true|false` and normalize it to `write` for backward compatibility.
 - Static tokens may carry optional `subject`, `issuer`, and `audit` metadata so future agent-facing `whoami/repos/grant` APIs can identify the Paperclip issue, agent, or projected grant behind a token without changing the phase 1 config shape.
 - Query-string tokens are preserved across rendered links so tokenized browser sessions can keep navigating.
+
+## Publish Artifacts
+
+```yaml
+publish:
+  enabled: true
+  areaPath: ~/.local/share/lookie-link/published
+  repoId: published
+  maxFiles: 100
+  maxFileBytes: 2097152
+  maxRevisionBytes: 10485760
+  maxMetadataBytes: 65536
+  maxRevisions: 20
+```
+
+Notes:
+
+- `areaPath` enables the publish store unless `enabled` is explicitly `false`.
+- `repoId` is the virtual repo used by published `view`, `asset`, and `raw` URLs. It defaults to `published`.
+- The file, byte, metadata, and revision limits above are the defaults. All limit values must be positive integers.
+- `maxRevisions` rejects another update at the limit. It does not prune historical revisions.
+- A credential needs `publish: true` plus scope for `repoId` to create, update, or revoke. Readback needs normal `view` scope.
+- Source paths belong in `privateMetadata`, which is stored internally but omitted from responses and artifact readback. Public `metadata` is descriptive and never changes authorization.
+- See [PUBLISHING.md](PUBLISHING.md) for immutability, atomicity, history, and revocation semantics.
 
 ## Managed Grants
 
