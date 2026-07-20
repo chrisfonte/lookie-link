@@ -480,8 +480,9 @@ function createApp(options = {}) {
     }
     const repos = Object.entries(mappings)
       .filter(([repo]) => canAccessPath(accessContext, 'view', repo, '', 'directory'))
-      .map(([repo]) => ({
+      .map(([repo, rootPath]) => ({
         repo,
+        rootPath,
         viewUrl: `/view/${encodeURIComponent(repo)}/`,
         assetUrl: `/asset/${encodeURIComponent(repo)}/`,
       }));
