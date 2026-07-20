@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-20 — Unreleased — Caller-Scoped Agent Discovery
+
+- Added `GET /.well-known/agent.json` and `GET /api/whoami`, deriving advertised capabilities and endpoint templates from enabled runtime configuration, registered routes, and the current caller's repo/path permissions.
+- Discovery responses omit administrative capabilities, unauthorized repos, credentials, private grant/audit metadata, and all host filesystem roots.
+- Removed `rootPath` from `GET /api/repos`; repository and discovery URLs are opaque server-side mappings.
+
 ## 2026-06-10 — Unreleased — Annotations Viewer UX
 
 - When `server.enableAnnotations: true`, the document viewer now renders a 💬 button next to every anchored heading and YAML key path. Clicking it opens an inline form whose submission writes through `POST /api/annotations/<repo>/<path>`.
@@ -31,7 +37,7 @@
 
 ## 2026-06-08 — Unreleased — Agent-Facing Read/Write Standard
 
-- Added `GET /api/repos` JSON discovery endpoint so agents can enumerate served repos at runtime (`{repo, rootPath, viewUrl, assetUrl}`). Filtered by the same access-control logic as the home page.
+- Added `GET /api/repos` JSON discovery endpoint so agents can enumerate served repos at runtime. It now returns opaque repo/view/asset identifiers and is filtered by the same access-control logic as the home page.
 - Added `bin/lookie-read.js` CLI shim (`lookie-read <repo>/<path>`) declared in `package.json#bin`. Encapsulates discovery, local-fallback, HTTP fetch with Range, and `LOOKIE_LINK_TOKEN` auth.
 - Extended `/asset/<repo>/<path>` mime allowlist to cover text/source extensions (markdown, yaml, json, sh/py/js/ts/go/rs/c/cpp/etc.) so the read shim can fetch source files. Source-code and HTML extensions are served as `text/plain; charset=utf-8` to prevent browser auto-rendering. Unknown extensions still return `415`.
 - Added `scripts/lookie-link-config-audit.sh` + `scripts/lookie-link-config-audit-cron.sh` and `scripts/launchd/com.lookie-link.config-audit.plist` to enumerate configured operations directories, classify them (served / worktree-skip / placeholder-skip / missing), and post deltas to Paperclip.

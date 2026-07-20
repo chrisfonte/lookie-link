@@ -17,6 +17,7 @@ Lookie-Link solves this by giving every file a URL. The agent modifies a documen
 - **Managed Paperclip grants** — issue time-limited repo/path tokens with audit history
 - **Grant projection writer** — optionally export active managed grants to a read-only private projection for Paperclip/runtime wiring
 - **Cross-company grant guardrail** — rejects managed grants that fall outside the Paperclip adapter's allowed filesystem roots
+- **Runtime capability discovery** — `/.well-known/agent.json` and `/api/whoami` report only the live routes, repos, path scopes, and mutations available to the current caller
 - **Markdown rendering** — full CommonMark with syntax-highlighted code blocks
 - **Cross-link rendering** — `[[name]] (~/repo/path.md#anchor)` becomes a clickable link
 - **Anchor linking** — every heading and YAML key gets a copy-link button
@@ -86,7 +87,7 @@ Open `http://localhost:9876` in your browser.
 # install the shim on PATH
 npm install -g .
 
-# stream a file to stdout (uses local fs if the file is on this host, otherwise /asset/)
+# stream a file to stdout through /asset/
 lookie-read operations/README.md
 
 # byte-range fetch over HTTP
@@ -96,7 +97,7 @@ lookie-read --range 0-99 operations/README.md
 lookie-read --list-repos
 ```
 
-It caches `/api/repos` at `~/.cache/lookie-link/repos.json` (5-min TTL), prefers a local OS read when the resolved root is on the same host, forwards `LOOKIE_LINK_TOKEN` as `Authorization: Bearer <token>` for path-scoped access grants, and exits non-zero on usage / not-found / forbidden / transport errors. See [`docs/API.md`](docs/API.md) for the underlying endpoints and agent-side contract.
+It caches `/api/repos` at `~/.cache/lookie-link/repos.json` (5-min TTL), forwards `LOOKIE_LINK_TOKEN` as `Authorization: Bearer <token>` for path-scoped access grants, and exits non-zero on usage / not-found / forbidden / transport errors. Repository discovery returns opaque URLs rather than host filesystem roots. See [`docs/API.md`](docs/API.md) for the underlying endpoints and agent-side contract.
 
 ## Network Model
 
