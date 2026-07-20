@@ -48,6 +48,7 @@ const {
   renderDirectoryPage,
   renderImagePage,
   renderAudioPage,
+  renderVideoPage,
   renderPdfPage,
   renderCsvPage,
   renderJsonPage,
@@ -84,6 +85,13 @@ const AUDIO_MIME_TYPES = {
   '.opus': 'audio/ogg',
   '.flac': 'audio/flac',
   '.aac': 'audio/aac',
+};
+
+const VIDEO_MIME_TYPES = {
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.m4v': 'video/mp4',
 };
 
 const PDF_MIME_TYPES = {
@@ -154,11 +162,13 @@ const TEXT_MIME_TYPES = {
 const ASSET_MIME_TYPES = {
   ...IMAGE_MIME_TYPES,
   ...AUDIO_MIME_TYPES,
+  ...VIDEO_MIME_TYPES,
   ...PDF_MIME_TYPES,
   ...TEXT_MIME_TYPES,
 };
 const IMAGE_EXTENSIONS = new Set(Object.keys(IMAGE_MIME_TYPES));
 const AUDIO_EXTENSIONS = new Set(Object.keys(AUDIO_MIME_TYPES));
+const VIDEO_EXTENSIONS = new Set(Object.keys(VIDEO_MIME_TYPES));
 const PDF_EXTENSIONS = new Set(Object.keys(PDF_MIME_TYPES));
 const EDITABLE_EXTENSIONS = new Set([
   '.md', '.markdown', '.mdown',
@@ -200,7 +210,7 @@ function isEditableFile(relativePath) {
     return false;
   }
 
-  if (IMAGE_EXTENSIONS.has(extension) || AUDIO_EXTENSIONS.has(extension) || PDF_EXTENSIONS.has(extension)) {
+  if (IMAGE_EXTENSIONS.has(extension) || AUDIO_EXTENSIONS.has(extension) || VIDEO_EXTENSIONS.has(extension) || PDF_EXTENSIONS.has(extension)) {
     return false;
   }
 
@@ -615,6 +625,24 @@ function createApp(options = {}) {
         parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
         audioHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
         mimeType: AUDIO_MIME_TYPES[extension],
+        mtime: formatMTime(stat.mtime),
+        size: formatFileSize(stat.size),
+        customThemeCss,
+        queryToken: accessContext.queryToken,
+      });
+
+      res.status(200).type('html').send(html);
+      return;
+    }
+
+    if (VIDEO_EXTENSIONS.has(extension)) {
+      const parentRel = parentPath(relativePath);
+      const html = renderVideoPage({
+        repo,
+        relativePath,
+        parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
+        videoHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
+        mimeType: VIDEO_MIME_TYPES[extension],
         mtime: formatMTime(stat.mtime),
         size: formatFileSize(stat.size),
         customThemeCss,
@@ -1116,7 +1144,10 @@ function createApp(options = {}) {
           ? [req.query.state]
           : [];
       const filtered = filterAnnotationsByState(result.document, states);
-      res.status(200).json(filtered);
+      res.status(200).json({
+        ...filtered,
+        mtimeMs: result.mtimeMs,
+      });
     } catch (error) {
       if (error instanceof SyntaxError) {
         res.status(500).json({ ok: false, error: 'Annotation sidecar contains invalid JSON.' });
@@ -1154,7 +1185,7 @@ function createApp(options = {}) {
       return;
     }
 
-    if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
+    if (!canAccessPath(accessContext, 'write', repo, relativePath, 'file')) {
       sendAccessError(res, accessContext, true);
       return;
     }
@@ -1236,7 +1267,7 @@ function createApp(options = {}) {
       return;
     }
 
-    if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
+    if (!canAccessPath(accessContext, 'write', repo, relativePath, 'file')) {
       sendAccessError(res, accessContext, true);
       return;
     }
@@ -1292,6 +1323,7 @@ function createApp(options = {}) {
         error.message === 'payload.claimedBy is required.' ||
         error.message === 'payload.author is required.' ||
         error.message === 'payload.body is required.' ||
+        error.message === 'payload.redactedBy is required.' ||
         error.message === 'Invalid expectedMtimeMs value.'
       ) {
         const status = error.message === 'Annotation not found.' ? 404 : 400;
