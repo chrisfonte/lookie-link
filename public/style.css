@@ -848,6 +848,19 @@ tbody tr:last-child td {
   opacity: 0.7;
 }
 
+.html-embed-view {
+  padding: 0;
+  overflow: hidden;
+}
+
+.embedded-html-frame {
+  display: block;
+  width: 100%;
+  min-height: 70vh;
+  border: 0;
+  background: var(--bg);
+}
+
 .yaml-anchor-wrap {
   display: inline-flex;
   align-items: center;
