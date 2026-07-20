@@ -37,6 +37,7 @@ const {
   buildSaveHref,
   buildPreviewHref,
   buildRawHref,
+  buildEmbedHref,
   formatFileSize,
   formatMTime,
   compareEntries,
@@ -736,6 +737,9 @@ function createApp(options = {}) {
         : null,
       rawHtmlHref: rawHtmlEnabled && isHtmlFile
         ? appendAccessToken(buildRawHref(repo, relativePath), accessContext)
+        : null,
+      embedHtmlHref: rawHtmlEnabled && isHtmlFile
+        ? appendAccessToken(buildEmbedHref(repo, relativePath), accessContext)
         : null,
       customThemeCss,
       queryToken: accessContext.queryToken,

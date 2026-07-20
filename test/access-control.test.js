@@ -365,6 +365,13 @@ test('embed transforms authorized HTML while raw remains exact and bearer creden
     assert.match(queryHtml, /src="\/asset\/alpha\/docs\/diagram\.png\?token=viewer-token"/);
     assert.match(queryHtml, /lookie-link-annotations-bootstrap/);
 
+    const framedView = await server.request('/view/alpha/docs/landing.htm?token=viewer-token');
+    assert.equal(framedView.status, 200);
+    const framedHtml = await framedView.text();
+    assert.match(framedHtml, /<iframe[\s\S]*data-embedded-html[\s\S]*src="\/embed\/alpha\/docs\/landing\.htm\?token=viewer-token"/);
+    assert.match(framedHtml, /href="\/raw\/alpha\/docs\/landing\.htm\?token=viewer-token"[^>]*>Open raw<\/a>/);
+    assert.doesNotMatch(framedHtml, /<iframe[\s\S]*src="\/raw\/alpha\/docs\/landing\.htm/);
+
     const bearerEmbed = await server.request('/embed/alpha/docs/landing.htm', {
       headers: { Authorization: 'Bearer viewer-token' },
     });

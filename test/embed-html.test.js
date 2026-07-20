@@ -11,6 +11,7 @@ const {
   decodeEmbedHtmlBuffer,
   transformEmbedHtml,
 } = require('../lib/embed-html');
+const { renderDocumentPage } = require('../lib/renderer');
 
 async function makeFixture() {
   const fixtureRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'lookie-embed-html-'));
@@ -153,4 +154,27 @@ test('embed module does not depend on authored files being writable', async () =
   } finally {
     await fsPromises.rm(fixture.fixtureRoot, { recursive: true, force: true });
   }
+});
+
+test('document viewer frames HTML through embed while retaining a distinct raw-source action', () => {
+  const html = renderDocumentPage({
+    repo: 'alpha',
+    repoRoot: '/srv/example/alpha',
+    relativePath: 'docs/page.html',
+    source: '<script>window.authored = true;</script>',
+    parentHref: '/view/alpha/docs',
+    mtime: '2026-01-01',
+    size: '1 KB',
+    rawHtmlHref: '/raw/alpha/docs/page.html',
+    embedHtmlHref: '/embed/alpha/docs/page.html',
+    annotationsEnabled: true,
+  });
+
+  assert.match(html, /<iframe[\s\S]*data-embedded-html[\s\S]*src="\/embed\/alpha\/docs\/page\.html"/);
+  assert.match(html, /href="\/embed\/alpha\/docs\/page\.html"[^>]*>Open embedded<\/a>/);
+  assert.match(html, /href="\/raw\/alpha\/docs\/page\.html"[^>]*>Open raw<\/a>/);
+  assert.match(html, /lookie-link:set-theme/);
+  assert.match(html, /MutationObserver/);
+  assert.doesNotMatch(html, /<iframe[\s\S]*src="\/raw\/alpha\/docs\/page\.html"/);
+  assert.doesNotMatch(html, /lookie-link-annotations-bootstrap/);
 });

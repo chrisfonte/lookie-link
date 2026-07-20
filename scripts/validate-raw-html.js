@@ -149,6 +149,16 @@ async function run() {
 
       const viewEnabled = await fetchResponse(enabledServer, '/view/docs/flashcards.html');
       assert.equal(viewEnabled.status, 200);
+      assert.match(
+        viewEnabled.text,
+        /<iframe[\s\S]*data-embedded-html[\s\S]*src="\/embed\/docs\/flashcards\.html"/,
+        '/view frames trusted authored HTML through /embed'
+      );
+      assert.doesNotMatch(
+        viewEnabled.text,
+        /<iframe[\s\S]*src="\/raw\/docs\/flashcards\.html"/,
+        '/view must not use the byte-preserving source route as its transformed runtime'
+      );
       assert.doesNotMatch(
         viewEnabled.text,
         /<script>document\.getElementById\("root"\)\.textContent = "flipped";<\/script>/,
