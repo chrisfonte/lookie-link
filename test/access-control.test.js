@@ -284,12 +284,27 @@ test('edit-scoped token can save while restricted humans and invalid tokens are 
     const editPage = await server.request('/edit/alpha/docs/guide.md?token=editor-token');
     assert.equal(editPage.status, 200);
     const editHtml = await editPage.text();
-    assert.match(editHtml, /"saveHref":"\/api\/save\/alpha\/docs\/guide\.md\?token=editor-token"/);
+    assert.match(editHtml, /"saveHref":"\/api\/save\/alpha\/docs\/guide\.md"/);
+    assert.doesNotMatch(editHtml, /api\/save[^"\\]*token=/);
 
     const beforeStat = await fs.stat(targetFile);
-    const saveResponse = await server.request('/api/save/alpha/docs/guide.md?token=editor-token', {
+    const querySave = await server.request('/api/save/alpha/docs/guide.md?token=editor-token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: '# Updated\n',
+        expectedMtimeMs: Math.trunc(beforeStat.mtimeMs),
+      }),
+    });
+    assert.equal(querySave.status, 400);
+    assert.equal(await fs.readFile(targetFile, 'utf8'), '# Guide\n![Diagram](diagram.png)\n');
+
+    const saveResponse = await server.request('/api/save/alpha/docs/guide.md', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer editor-token',
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         content: '# Updated\n',
         expectedMtimeMs: Math.trunc(beforeStat.mtimeMs),

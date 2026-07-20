@@ -18,15 +18,18 @@ const {
 } = require('./lib/config');
 const {
   parseAccessConfig,
-  authenticateRequest,
   canAccessPath,
   appendAccessToken,
+  extractBearerToken,
   extractPresentedToken,
+  mutationUsesQueryToken,
+  resolveCredentialAccess,
 } = require('./lib/access-control');
 const {
   GrantStore,
   buildIssueComment,
 } = require('./lib/grant-store');
+const { ApiKeyStore } = require('./lib/api-key-store');
 const {
   safeResolve,
   toPosixPath,
@@ -282,6 +285,10 @@ function sendGrantJsonError(res, status, error) {
   res.status(status).json({ ok: false, error });
 }
 
+function sendApiKeyJsonError(res, status, error) {
+  res.status(status).json({ ok: false, error });
+}
+
 function createApp(options = {}) {
   const app = express();
   const mappings = options.mappings || loadRootMappings();
@@ -291,6 +298,9 @@ function createApp(options = {}) {
   const customThemeCss = options.customThemeCss || '';
   const rawAccessConfig = options.accessConfig === undefined ? getAccessConfig() : options.accessConfig;
   const accessConfig = parseAccessConfig(rawAccessConfig);
+  const apiKeyStore = options.apiKeyStore === undefined
+    ? ApiKeyStore.fromAccessConfig(rawAccessConfig.apiKeys)
+    : options.apiKeyStore;
   const grantStore = options.grantStore === undefined
     ? GrantStore.fromAccessConfig(rawAccessConfig.grants)
     : options.grantStore;
@@ -299,22 +309,7 @@ function createApp(options = {}) {
       return req.accessContext;
     }
 
-    const accessContext = authenticateRequest(req, accessConfig);
-    if (accessContext.mode === 'scoped' || !grantStore || !grantStore.isEnabled()) {
-      return accessContext;
-    }
-
-    const presentedToken = extractPresentedToken(req);
-    if (!presentedToken) {
-      return accessContext;
-    }
-
-    const grantAccess = grantStore.authenticateGrantToken(
-      presentedToken,
-      accessContext.source || null,
-      accessContext.queryToken || null
-    );
-    return grantAccess || accessContext;
+    return resolveCredentialAccess(req, accessConfig, apiKeyStore, grantStore);
   };
 
   const authenticateGrantAdmin = (req) => {
@@ -335,10 +330,42 @@ function createApp(options = {}) {
     return { ok: true, admin };
   };
 
+  const authenticateApiKeyAdmin = (req) => {
+    if (!apiKeyStore || !apiKeyStore.isEnabled()) {
+      return { ok: false, status: 404, error: 'Agent API keys are not configured.' };
+    }
+
+    const secret = extractBearerToken(req);
+    if (!secret) {
+      return { ok: false, status: 401, error: 'Agent API key admin authentication required.' };
+    }
+
+    const admin = apiKeyStore.authenticateAdminToken(secret);
+    if (!admin) {
+      return { ok: false, status: 403, error: 'Invalid agent API key admin token.' };
+    }
+
+    return { ok: true, admin };
+  };
+
+  const recordApiKeyAuditEvent = (type, accessContext, target, metadata) => {
+    if (!apiKeyStore || !apiKeyStore.isEnabled()) {
+      return null;
+    }
+    return apiKeyStore.recordAuditEvent(type, accessContext, target, metadata);
+  };
+
   app.disable('x-powered-by');
   app.set('trust proxy', true);
 
   app.use(express.json({ limit: '2mb' }));
+  app.use((req, res, next) => {
+    if (mutationUsesQueryToken(req)) {
+      res.status(400).json({ ok: false, error: 'Mutation credentials must use the Authorization header.' });
+      return;
+    }
+    next();
+  });
   app.use((req, _res, next) => {
     req.accessContext = resolveAccessContext(req);
     next();
@@ -347,6 +374,72 @@ function createApp(options = {}) {
     etag: true,
     maxAge: '1h',
   }));
+
+  app.get('/api/agent-keys', (req, res) => {
+    const auth = authenticateApiKeyAdmin(req);
+    if (!auth.ok) {
+      sendApiKeyJsonError(res, auth.status, auth.error);
+      return;
+    }
+
+    try {
+      const result = apiKeyStore.listKeys({
+        state: typeof req.query.state === 'string' ? req.query.state.trim() : undefined,
+        agentId: typeof req.query.agentId === 'string' ? req.query.agentId.trim() : undefined,
+        includeAudit: parseBooleanQuery(req.query.includeAudit),
+      });
+      res.status(200).json({ ok: true, ...result });
+    } catch (error) {
+      sendApiKeyJsonError(res, 400, error.message);
+    }
+  });
+
+  app.post('/api/agent-keys', (req, res) => {
+    const auth = authenticateApiKeyAdmin(req);
+    if (!auth.ok) {
+      sendApiKeyJsonError(res, auth.status, auth.error);
+      return;
+    }
+
+    try {
+      const result = apiKeyStore.createKey(req.body || {}, auth.admin);
+      res.status(201).json({ ok: true, ...result });
+    } catch (error) {
+      sendApiKeyJsonError(res, 400, error.message);
+    }
+  });
+
+  app.post('/api/agent-keys/:keyId/rotate', (req, res) => {
+    const auth = authenticateApiKeyAdmin(req);
+    if (!auth.ok) {
+      sendApiKeyJsonError(res, auth.status, auth.error);
+      return;
+    }
+
+    try {
+      const result = apiKeyStore.rotateKey(req.params.keyId, req.body || {}, auth.admin);
+      res.status(200).json({ ok: true, ...result });
+    } catch (error) {
+      const status = error.code === 'ENOTFOUND' ? 404 : 400;
+      sendApiKeyJsonError(res, status, error.code === 'ENOTFOUND' ? 'Agent API key not found.' : error.message);
+    }
+  });
+
+  app.post('/api/agent-keys/:keyId/revoke', (req, res) => {
+    const auth = authenticateApiKeyAdmin(req);
+    if (!auth.ok) {
+      sendApiKeyJsonError(res, auth.status, auth.error);
+      return;
+    }
+
+    try {
+      const result = apiKeyStore.revokeKey(req.params.keyId, req.body || {}, auth.admin);
+      res.status(200).json({ ok: true, ...result });
+    } catch (error) {
+      const status = error.code === 'ENOTFOUND' ? 404 : 400;
+      sendApiKeyJsonError(res, status, error.code === 'ENOTFOUND' ? 'Agent API key not found.' : error.message);
+    }
+  });
 
   app.get('/api/grants', (req, res) => {
     const auth = authenticateGrantAdmin(req);
@@ -816,7 +909,7 @@ function createApp(options = {}) {
       mtime: formatMTime(stat.mtime),
       size: formatFileSize(stat.size),
       viewHref: appendAccessToken(buildHref(repo, relativePath), accessContext),
-      saveHref: appendAccessToken(buildSaveHref(repo, relativePath), accessContext),
+      saveHref: buildSaveHref(repo, relativePath),
       previewHref: appendAccessToken(buildPreviewHref(repo, relativePath), accessContext),
       customThemeCss,
       queryToken: accessContext.queryToken,
@@ -949,6 +1042,11 @@ function createApp(options = {}) {
       res.status(500).json({ ok: false, error: 'Saved file but failed to fetch metadata.' });
       return;
     }
+
+    recordApiKeyAuditEvent('content.write', accessContext, { repo, relativePath }, {
+      outcome: 'accepted',
+      byteCount: Buffer.byteLength(content, 'utf8'),
+    });
 
     res.status(200).json({
       ok: true,

@@ -59,6 +59,11 @@ repositories:
 #         view: true
 #         write: true
 #         publish: false
+#   apiKeys:
+#     storePath: ~/.local/share/lookie-link/agent-api-keys.yaml
+#     adminTokens:
+#       local_operator:
+#         secretEnv: LOOKIE_LINK_AGENT_KEY_ADMIN_TOKEN
 #   grants:
 #     storePath: ~/.local/share/lookie-link/grants.yaml
 #     projectionPath: ~/.local/share/lookie-link/grants-projection.yaml
