@@ -39,7 +39,7 @@ Route enforcement in phase 1:
 - `/edit/*` and `/api/save/*` require `write` (`edit` remains a backward-compatible alias)
 - `/api/preview/*` requires `view` and still respects global editing mode
 - annotation reads require `view`; annotation creates and updates require `write`; all annotation routes return `404` when annotations are disabled
-- `/api/publish*` mutations require `publish`; readback under the configured publish repo requires `view`
+- `/api/publish*` mutations require repo-level `publish` access to the configured publish repo; path-scoped publish credentials are rejected. Readback under that repo requires normal path-aware `view` access.
 
 Invalid tokens return `403`. Missing tokens return `401` when unauthenticated human access is restricted.
 

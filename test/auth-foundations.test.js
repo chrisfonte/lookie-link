@@ -9,6 +9,7 @@ const path = require('node:path');
 const {
   authenticateRequest,
   canAccessPath,
+  canAccessRepo,
   parseAccessConfig,
 } = require('../lib/access-control');
 const { GrantStore } = require('../lib/grant-store');
@@ -121,6 +122,7 @@ test('publish remains independent from write and is consumed by the publish endp
   assert.deepEqual(access.permissions, { view: true, write: false, edit: false, publish: true });
   assert.deepEqual(roundTrippedAccess.permissions, { view: true, write: false, edit: false, publish: true });
   assert.equal(canAccessPath(access, 'publish', 'docs', 'release.md'), true);
+  assert.equal(canAccessRepo(access, 'publish', 'docs'), true);
   assert.equal(canAccessPath(access, 'write', 'docs', 'release.md'), false);
 
   const app = createApp({ mappings: {}, accessConfig: config });
@@ -166,6 +168,7 @@ test('publish remains independent from write and is consumed by the publish endp
 
     assert.deepEqual(created.grant.permissions, { view: true, write: false, edit: false, publish: true });
     assert.equal(canAccessPath(grantAccess, 'publish', 'docs', 'releases/v1.md'), true);
+    assert.equal(canAccessRepo(grantAccess, 'publish', 'docs'), false);
     assert.equal(canAccessPath(grantAccess, 'write', 'docs', 'releases/v1.md'), false);
   } finally {
     await fs.rm(root, { recursive: true, force: true });

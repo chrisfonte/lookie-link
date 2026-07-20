@@ -22,9 +22,11 @@ publish:
   maxRevisions: 20
 ```
 
-The publish area is exposed only through the virtual `published` repo namespace. Internal publication metadata and the configured filesystem path are not mounted into the viewer.
+The publish area is exposed only through the virtual `published` repo namespace. Its `repoId` must not collide with a configured source-repository mapping; Lookie-Link rejects a collision at startup. Internal publication metadata and the configured filesystem path are not mounted into the viewer.
 
-A publishing credential needs `publish: true` and scope for the configured publish repo. Reading an artifact separately needs `view` scope for its slug or path.
+Publishing is a repo-level capability. A publishing credential needs `publish: true` and whole-repo scope for the configured publish repo (or `repos: all`). Path-scoped publish credentials are rejected for create, update, and revoke rather than silently treating a path as a slug-management boundary. Reading an artifact separately remains path-aware and needs `view` scope for its slug or path.
+
+Publish routes use the instance's normal default-access posture. The default `access.humanDefault: full` therefore allows anonymous publish, update, and revoke when publishing is enabled. Multi-user deployments should use `humanDefault: restricted` or `none` and explicit publish credentials.
 
 ## Create A Slug
 
@@ -66,6 +68,8 @@ curl -X POST http://localhost:9876/api/publish/release-notes \
 ```
 
 `expectedRevision` is mandatory. A stale value returns `409 Conflict` with the current revision. Multi-file revisions are staged outside the visible revision path and committed together; a failed publish does not expose a partial bundle. An interrupted, unreferenced next revision is removed when the same update is retried.
+
+The `expectedRevision` check and per-slug lock coordinate one Lookie-Link process. Deployments must not run multiple server instances against the same `areaPath`; cross-process locking is not currently provided.
 
 ## Read Current And Historical Content
 

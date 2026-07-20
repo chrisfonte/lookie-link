@@ -50,7 +50,7 @@ async function startTestServer(fixture) {
   };
 }
 
-async function createKey(server, permissions) {
+async function createKey(server, permissions, repos = { published: true }) {
   const response = await server.request('/api/agent-keys', {
     method: 'POST',
     headers: { Authorization: `Bearer ${ADMIN_TOKEN}`, 'Content-Type': 'application/json' },
@@ -58,7 +58,7 @@ async function createKey(server, permissions) {
       label: 'Publisher',
       subject: { companyId: 'example', agentId: `agent-${Date.now()}`, label: 'Publish test' },
       permissions,
-      repos: { published: true },
+      repos,
       issuer: { actorType: 'operator', actorId: 'test' },
     }),
   });
@@ -189,6 +189,65 @@ test('publish mutations require publish capability and matching expectedRevision
     assert.equal(payload.currentRevision, 2);
   } finally {
     await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('publish requires whole-repo scope for create, update, and revoke', async () => {
+  const fixture = await makeFixture();
+  const server = await startTestServer(fixture);
+  try {
+    const repoPublisher = await createKey(server, { view: true, publish: true });
+    const create = await server.request('/api/publish', publishRequest(repoPublisher.token, {
+      slug: 'repo-level', files: [{ path: 'index.md', content: 'one' }],
+    }));
+    assert.equal(create.status, 201);
+
+    const pathPublisher = await createKey(
+      server,
+      { view: true, publish: true },
+      { published: { paths: ['repo-level/'] } }
+    );
+    const deniedRequests = [
+      server.request('/api/publish', publishRequest(pathPublisher.token, {
+        files: [{ path: 'index.md', content: 'must not mint an out-of-scope slug' }],
+      })),
+      server.request('/api/publish/repo-level', publishRequest(pathPublisher.token, {
+        expectedRevision: 1, files: [{ path: 'index.md', content: 'must not update' }],
+      })),
+      server.request('/api/publish/repo-level/revoke', publishRequest(pathPublisher.token, {
+        reason: 'must not revoke',
+      })),
+    ];
+
+    for (const response of await Promise.all(deniedRequests)) {
+      assert.equal(response.status, 403);
+      assert.deepEqual(await response.json(), { ok: false, error: 'Access denied.' });
+    }
+
+    const entries = await fs.readdir(fixture.publishArea);
+    assert.deepEqual(entries, ['repo-level']);
+    const publication = JSON.parse(await fs.readFile(
+      path.join(fixture.publishArea, 'repo-level', 'publication.json'),
+      'utf8'
+    ));
+    assert.equal(publication.currentRevision, 1);
+    assert.equal(publication.revokedAt, null);
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('publish repo id cannot shadow a configured repository mapping', async () => {
+  const fixture = await makeFixture();
+  try {
+    assert.throws(() => createApp({
+      mappings: { published: fixture.sourceRepo },
+      accessConfig: { humanDefault: 'restricted' },
+      publishConfig: { areaPath: fixture.publishArea, repoId: 'published' },
+    }), /publish\.repoId "published" conflicts with a configured repository mapping/);
+  } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });
   }
 });

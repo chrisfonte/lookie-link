@@ -78,9 +78,11 @@ Notes:
 
 - `areaPath` enables the publish store unless `enabled` is explicitly `false`.
 - `repoId` is the virtual repo used by published `view`, `asset`, and `raw` URLs. It defaults to `published`.
+- `repoId` must not match a configured `repositories` key; Lookie-Link rejects that collision at startup so the virtual publish namespace cannot shadow a real repository.
 - The file, byte, metadata, and revision limits above are the defaults. All limit values must be positive integers.
 - `maxRevisions` rejects another update at the limit. It does not prune historical revisions.
-- A credential needs `publish: true` plus scope for `repoId` to create, update, or revoke. Readback needs normal `view` scope.
+- Publish is a repo-level capability: a credential needs `publish: true` plus whole-repo scope for `repoId` (or `repos: all`) to create, update, or revoke. Path-scoped publish credentials are rejected rather than treated as slug-level grants. Readback still uses normal path-aware `view` scope.
+- Publish routes inherit `access.humanDefault`. Because the default is `full`, enabling publishing without explicit access control also enables anonymous publish, update, and revoke. Multi-user deployments should set `humanDefault: restricted` or `none` and issue explicit publish credentials.
 - Source paths belong in `privateMetadata`, which is stored internally but omitted from responses and artifact readback. Public `metadata` is descriptive and never changes authorization.
 - See [PUBLISHING.md](PUBLISHING.md) for immutability, atomicity, history, and revocation semantics.
 

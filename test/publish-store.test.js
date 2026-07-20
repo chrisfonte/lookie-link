@@ -92,6 +92,29 @@ test('a metadata failure rolls back a staged update and leaves the prior revisio
   }
 });
 
+test('a mid-update failure removes partial revision staging', async () => {
+  const { root, store } = await fixture();
+  try {
+    await store.createPublication({ slug: 'clean-staging', files: [{ path: 'index.md', content: 'one' }] });
+    const originalWrite = store.writeRevisionFiles.bind(store);
+    store.writeRevisionFiles = async (target, files) => {
+      await originalWrite(target, files.slice(0, 1));
+      throw new Error('injected staged update failure');
+    };
+
+    await assert.rejects(store.updatePublication('clean-staging', {
+      expectedRevision: 1,
+      files: [{ path: 'index.md', content: 'two' }, { path: 'asset.txt', content: 'partial' }],
+    }), /injected staged update failure/);
+
+    const revisionsPath = path.join(store.publicationDir('clean-staging'), 'revisions');
+    assert.deepEqual(await fs.readdir(revisionsPath), ['1']);
+    assert.equal((await store.readPublication('clean-staging')).currentRevision, 1);
+  } finally {
+    await removeFixture(root);
+  }
+});
+
 test('an unreferenced revision left by interruption is recovered before retry', async () => {
   const { root, store } = await fixture();
   try {

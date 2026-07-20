@@ -21,6 +21,7 @@ const {
 const {
   parseAccessConfig,
   canAccessPath,
+  canAccessRepo,
   appendAccessToken,
   extractBearerToken,
   extractPresentedToken,
@@ -599,13 +600,11 @@ function createApp(options = {}) {
   };
 
   const publishedRepo = publishStore ? publishStore.getRepoId() : 'published';
-  const canPublishTarget = (accessContext, slug = '') => canAccessPath(
-    accessContext,
-    'publish',
-    publishedRepo,
-    slug,
-    'directory'
-  );
+  if (publishStore && publishStore.isEnabled()
+      && Object.prototype.hasOwnProperty.call(mappings, publishedRepo)) {
+    throw new Error(`publish.repoId "${publishedRepo}" conflicts with a configured repository mapping.`);
+  }
+  const canPublishTarget = (accessContext) => canAccessRepo(accessContext, 'publish', publishedRepo);
   const resolvePublishedTarget = async (repo, relativePath, version) => {
     if (!publishStore || !publishStore.isEnabled() || repo !== publishedRepo) {
       return null;
@@ -673,8 +672,7 @@ function createApp(options = {}) {
       return;
     }
     const accessContext = resolveAccessContext(req);
-    const requestedSlug = req.body && typeof req.body.slug === 'string' ? req.body.slug : '';
-    if (!canPublishTarget(accessContext, requestedSlug)) {
+    if (!canPublishTarget(accessContext)) {
       sendAccessError(res, accessContext, true);
       return;
     }
@@ -709,7 +707,7 @@ function createApp(options = {}) {
       return;
     }
     const accessContext = resolveAccessContext(req);
-    if (!canPublishTarget(accessContext, req.params.slug)) {
+    if (!canPublishTarget(accessContext)) {
       sendAccessError(res, accessContext, true);
       return;
     }
@@ -749,7 +747,7 @@ function createApp(options = {}) {
       return;
     }
     const accessContext = resolveAccessContext(req);
-    if (!canPublishTarget(accessContext, req.params.slug)) {
+    if (!canPublishTarget(accessContext)) {
       sendAccessError(res, accessContext, true);
       return;
     }
