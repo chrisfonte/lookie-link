@@ -102,6 +102,7 @@ async function run() {
   await fs.mkdir(path.join(repoDir, 'images'));
 
   await fs.writeFile(path.join(repoDir, 'doc.md'), '# Hello\n\nInitial\n', 'utf8');
+  await fs.writeFile(path.join(repoDir, 'notes.txt'), 'alpha\nbeta\ngamma\ndelta\n', 'utf8');
   await fs.writeFile(path.join(repoDir, 'config.yaml'), 'name: before\n', 'utf8');
   await fs.writeFile(
     path.join(repoDir, 'nested.yaml'),
@@ -283,6 +284,7 @@ async function run() {
       schema: 1,
       file: 'docs/doc.md',
       annotations: [],
+      mtimeMs: null,
     }, 'annotation GET empty shape mismatch');
   }
 
@@ -403,6 +405,7 @@ async function run() {
 
     assert.equal(res.statusCode, 200, 'annotation GET filter failed');
     assert.equal(res.body.annotations.length, 1, 'annotation open filter mismatch');
+    assert.equal(typeof res.body.mtimeMs, 'number', 'annotation GET missing current mtime');
 
     const filteredResolved = createMockRes();
     await annotationsGet({
@@ -470,6 +473,10 @@ async function run() {
     assert(typeof res.body === 'string', 'annotations-enabled view body missing');
     assert(res.body.includes('/public/annotations.js'), 'annotations script not injected when enabled');
     assert(res.body.includes('lookie-link-annotations-bootstrap'), 'annotations bootstrap script tag missing when enabled');
+    assert(res.body.includes('data-annotate-trigger'), 'server-rendered annotate affordance missing');
+    assert(res.body.includes('data-annotations-mount'), 'server-rendered annotation mount missing');
+    assert(res.body.includes('data-annotations-stale'), 'stale annotations slot missing');
+    assert(res.body.includes('data-annotations-toggle'), 'annotation toolbar chip missing');
   }
 
   {
@@ -478,6 +485,15 @@ async function run() {
     assert.equal(res.statusCode, 200, 'annotations-disabled view failed');
     assert(!res.body.includes('/public/annotations.js'), 'annotations script leaked into view when disabled');
     assert(!res.body.includes('lookie-link-annotations-bootstrap'), 'annotations bootstrap leaked into view when disabled');
+  }
+
+  {
+    const res = createMockRes();
+    await viewWithAnnotations({ params: { 0: 'docs/notes.txt' } }, res);
+    assert.equal(res.statusCode, 200, 'annotations-enabled text view failed');
+    assert(typeof res.body === 'string', 'annotations-enabled text view body missing');
+    assert(res.body.includes('"supportsLineRangeAnnotations":true'), 'line-range bootstrap missing for plain-text view');
+    assert(res.body.includes('data-annotations-line-range-root'), 'line-range root missing for plain-text view');
   }
 
   // CLI shim coverage — spawn the CLI against a real HTTP listener

@@ -36,17 +36,17 @@ access:
             - README.md
       permissions:
         view: true
-        edit: false
+        write: false
 
-    builder_edit:
-      secretEnv: LOOKIE_TOKEN_BUILDER_EDIT
+    builder_write:
+      secretEnv: LOOKIE_TOKEN_BUILDER_WRITE
       repos:
         docs:
           paths:
             - drafts/
       permissions:
         view: true
-        edit: true
+        write: true
 ```
 
 Notes:
@@ -55,6 +55,7 @@ Notes:
 - `humanDefault: restricted` or `none` requires a token for `/`, `/view/*`, `/asset/*`, `/edit/*`, and `/api/*`.
 - Paths ending in `/` grant a directory subtree. Paths without a trailing slash grant a single file.
 - Tokens can also use `secret:` directly for local development, but that should not be committed.
+- Static tokens still accept legacy `edit: true|false` and normalize it to `write` for backward compatibility.
 - Static tokens may carry optional `subject`, `issuer`, and `audit` metadata so future agent-facing `whoami/repos/grant` APIs can identify the Paperclip issue, agent, or projected grant behind a token without changing the phase 1 config shape.
 - Query-string tokens are preserved across rendered links so tokenized browser sessions can keep navigating.
 
@@ -117,6 +118,7 @@ Settings resolve in this order (first wins):
 - Precedence: `LOOKIE_LINK_ENABLE_ANNOTATIONS` env var, then user/project YAML, then default
 - Independent of `enableEditing`
 - When disabled, `GET|POST|PATCH /api/annotations/<repo>/<path>` return `404`
+- `GET` requires `view`; `POST` and `PATCH` require the write-class `write` permission (including legacy `edit` aliases)
 - Annotation sidecars live inside each served repo at `.lookie-link/annotations/<repo>/<relative-path>.json`
 
 ## Custom Themes

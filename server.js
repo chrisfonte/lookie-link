@@ -1104,7 +1104,10 @@ function createApp(options = {}) {
           ? [req.query.state]
           : [];
       const filtered = filterAnnotationsByState(result.document, states);
-      res.status(200).json(filtered);
+      res.status(200).json({
+        ...filtered,
+        mtimeMs: result.mtimeMs,
+      });
     } catch (error) {
       if (error instanceof SyntaxError) {
         res.status(500).json({ ok: false, error: 'Annotation sidecar contains invalid JSON.' });
@@ -1142,7 +1145,7 @@ function createApp(options = {}) {
       return;
     }
 
-    if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
+    if (!canAccessPath(accessContext, 'write', repo, relativePath, 'file')) {
       sendAccessError(res, accessContext, true);
       return;
     }
@@ -1224,7 +1227,7 @@ function createApp(options = {}) {
       return;
     }
 
-    if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
+    if (!canAccessPath(accessContext, 'write', repo, relativePath, 'file')) {
       sendAccessError(res, accessContext, true);
       return;
     }
@@ -1280,6 +1283,7 @@ function createApp(options = {}) {
         error.message === 'payload.claimedBy is required.' ||
         error.message === 'payload.author is required.' ||
         error.message === 'payload.body is required.' ||
+        error.message === 'payload.redactedBy is required.' ||
         error.message === 'Invalid expectedMtimeMs value.'
       ) {
         const status = error.message === 'Annotation not found.' ? 404 : 400;
