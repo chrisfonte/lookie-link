@@ -8,10 +8,16 @@ Run:
 
 ```bash
 npm test
+npm run test:browser
 npm run validate:raw-html
 npm run validate:editable
 npm run check:skill-packages
 ```
+
+The browser suite uses Playwright Chromium at a phone viewport. If Chromium is
+not installed or cannot launch in the current environment, its tests report a
+visible skip instead of failing the rest of the suite. Failure screenshots are
+left in the gitignored `test/browser/.artifacts/` directory.
 
 If `docs/SKILL-SPEC.md` changes, run `npm run generate:skill-packages` before the checks.
 

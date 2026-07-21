@@ -1,0 +1,346 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+import {after, before, test} from 'node:test';
+import {fileURLToPath} from 'node:url';
+
+const require = createRequire(import.meta.url);
+const {chromium} = require('playwright');
+const {createApp} = require('../../server.js');
+const {TemplateRegistry} = require('../../lib/forms/template-registry.js');
+
+const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
+const ARTIFACT_DIR = path.join(TEST_DIR, '.artifacts');
+const PHONE_VIEWPORT = {width: 390, height: 844};
+const TEMPLATE_ID = 'machine-strength-log';
+const TEMPLATE_TITLE = 'Gym — Strength (machine)';
+const LONGEST_MACHINE_LABEL = 'Plate-loaded chest press machine';
+
+const gymTemplate = {
+  contractVersion: 1,
+  resourceKind: 'form-template',
+  templateId: TEMPLATE_ID,
+  ownerId: 'operator',
+  revision: 1,
+  grammarVersion: 1,
+  destinationId: 'gym-log',
+  title: TEMPLATE_TITLE,
+  fields: [
+    {
+      id: 'machine',
+      type: 'select',
+      label: 'Machine',
+      required: true,
+      options: [
+        {id: 'cable-row', label: 'Cable row'},
+        {id: 'plate-loaded-press', label: LONGEST_MACHINE_LABEL},
+      ],
+    },
+    {
+      id: 'weight-lbs',
+      type: 'number',
+      label: 'Working weight (lb)',
+      required: true,
+      constraints: {minimum: 0, maximum: 999, integer: true, step: 1},
+    },
+    {
+      id: 'sets',
+      type: 'number',
+      component: 'stepped-select',
+      label: 'Sets',
+      required: true,
+      constraints: {minimum: 1, maximum: 20, integer: true, step: 1},
+    },
+    {
+      id: 'reps',
+      type: 'number',
+      component: 'stepped-select',
+      label: 'Reps',
+      required: true,
+      constraints: {minimum: 1, maximum: 100, integer: true, step: 1},
+    },
+    {
+      id: 'intensity',
+      type: 'number',
+      component: 'stepped-select',
+      label: 'Intensity (%)',
+      required: false,
+      constraints: {minimum: 0, maximum: 100, integer: true, step: 1},
+    },
+  ],
+};
+
+let browser;
+let launchError;
+
+before(async () => {
+  try {
+    browser = await chromium.launch({headless: true});
+  } catch (error) {
+    launchError = error;
+  }
+});
+
+after(async () => {
+  if (browser) await browser.close();
+});
+
+async function startFixture() {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lookie-playwright-forms-'));
+  const templatesPath = path.join(root, 'templates');
+  const destinationPath = path.join(root, 'gym-log');
+  await fs.mkdir(templatesPath);
+  await fs.mkdir(destinationPath);
+
+  const registry = new TemplateRegistry({
+    templatesPath,
+    destinationIds: ['gym-log'],
+    logger: {warn() {}},
+  });
+  await registry.createDraft(structuredClone(gymTemplate));
+
+  const listener = http.createServer();
+  await new Promise((resolve, reject) => {
+    listener.once('error', reject);
+    listener.listen(0, '127.0.0.1', resolve);
+  });
+  const origin = `http://127.0.0.1:${listener.address().port}`;
+  const app = createApp({
+    mappings: {},
+    accessConfig: {humanDefault: 'full'},
+    formsConfig: {
+      enabled: true,
+      templatesPath,
+      destinations: {'gym-log': destinationPath},
+    },
+    formsRegistry: registry,
+    formsPublicOrigin: origin,
+    formsAudit: () => {},
+  });
+  listener.on('request', app);
+
+  return {
+    origin,
+    async close() {
+      await new Promise((resolve, reject) => listener.close((error) => error ? reject(error) : resolve()));
+      await fs.rm(root, {recursive: true, force: true});
+    },
+  };
+}
+
+function skipReason() {
+  const firstLine = launchError && launchError.message
+    ? launchError.message.split('\n').find((line) => line.trim())
+    : 'unknown launch error';
+  return `Playwright Chromium unavailable: ${firstLine}`;
+}
+
+function browserTest(name, run) {
+  test(name, {timeout: 45_000}, async (t) => {
+    if (!browser) {
+      t.skip(skipReason());
+      return;
+    }
+
+    let fixture;
+    let context;
+    let page;
+    try {
+      fixture = await startFixture();
+      context = await browser.newContext({viewport: PHONE_VIEWPORT, colorScheme: 'dark'});
+      page = await context.newPage();
+      await run({t, page, fixture});
+    } catch (error) {
+      if (page && !page.isClosed()) {
+        try {
+          await fs.mkdir(ARTIFACT_DIR, {recursive: true});
+          const safeName = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          const screenshotPath = path.join(ARTIFACT_DIR, `${safeName}-${Date.now()}.png`);
+          await page.screenshot({path: screenshotPath, fullPage: true});
+          t.diagnostic(`Failure screenshot: ${screenshotPath}`);
+        } catch (screenshotError) {
+          t.diagnostic(`Could not capture failure screenshot: ${screenshotError.message}`);
+        }
+      }
+      throw error;
+    } finally {
+      if (context) await context.close().catch(() => {});
+      if (fixture) await fixture.close().catch(() => {});
+    }
+  });
+}
+
+function formUrl(fixture) {
+  return `${fixture.origin}/forms/${TEMPLATE_ID}`;
+}
+
+async function assertNoClippedControls(page, state) {
+  const measurements = await page.locator('input, select, .field-readout').evaluateAll((elements) =>
+    elements.map((element, index) => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      const visible = style.display !== 'none' && style.visibility !== 'hidden'
+        && rect.width > 0 && rect.height > 0;
+      const value = element instanceof HTMLInputElement || element instanceof HTMLSelectElement
+        ? element.value
+        : element.textContent.trim();
+      return {
+        index,
+        visible,
+        name: element.getAttribute('name') || element.id || element.className || element.tagName,
+        value,
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+      };
+    })
+  );
+  const clipped = measurements.filter((measurement) => measurement.visible
+    && measurement.scrollWidth > measurement.clientWidth + 1);
+  assert.deepEqual(clipped, [], `${state}: visible controls must not clip their content`);
+  assert.ok(measurements.some((measurement) => measurement.visible), `${state}: expected visible controls`);
+}
+
+function parseRgb(color) {
+  const channels = color.match(/[\d.]+/g);
+  assert.ok(channels && channels.length >= 3, `expected an RGB color, got ${color}`);
+  return channels.slice(0, 3).map(Number);
+}
+
+function luminance(color) {
+  const linear = parseRgb(color).map((channel) => {
+    const value = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+async function assertContrast(page, selector, minimum, description) {
+  const colors = await page.locator(selector).first().evaluate((element) => {
+    let backgroundElement = element;
+    let background = getComputedStyle(backgroundElement).backgroundColor;
+    while (backgroundElement.parentElement && (background === 'transparent' || /,\s*0\s*\)$/.test(background))) {
+      backgroundElement = backgroundElement.parentElement;
+      background = getComputedStyle(backgroundElement).backgroundColor;
+    }
+    return {foreground: getComputedStyle(element).color, background};
+  });
+  const lighter = Math.max(luminance(colors.foreground), luminance(colors.background));
+  const darker = Math.min(luminance(colors.foreground), luminance(colors.background));
+  const ratio = (lighter + 0.05) / (darker + 0.05);
+  assert.ok(ratio >= minimum, `${description} contrast ${ratio.toFixed(2)} must be at least ${minimum}`);
+}
+
+async function setTheme(page, mode) {
+  const isLight = await page.locator('html').getAttribute('data-theme') === 'light';
+  if (isLight !== (mode === 'light')) await page.locator('[data-theme-toggle]').click();
+  assert.equal(await page.locator('html').getAttribute('data-theme'), mode === 'light' ? 'light' : null);
+}
+
+async function fillWorstCase(page) {
+  await page.locator('#field-machine').selectOption('plate-loaded-press');
+  await page.locator('#field-weight-lbs').fill('999');
+  await page.locator('#field-sets').selectOption('20');
+  await page.locator('#field-reps').selectOption('100');
+  await page.locator('#field-intensity').selectOption('100');
+}
+
+async function fillValidEntry(page) {
+  await page.locator('#field-machine').selectOption('plate-loaded-press');
+  await page.locator('#field-weight-lbs').fill('150');
+  await page.locator('#field-sets').selectOption('5');
+  await page.locator('#field-reps').selectOption('12');
+  await page.locator('#field-intensity').selectOption('85');
+}
+
+async function submitBoundViolation(page) {
+  await fillValidEntry(page);
+  await page.locator('#field-weight-lbs').fill('1000');
+  await page.locator('.form-card form').evaluate((form) => { form.noValidate = true; });
+  const [response] = await Promise.all([
+    page.waitForResponse((candidate) => candidate.request().method() === 'POST'
+      && new URL(candidate.url()).pathname === `/forms/${TEMPLATE_ID}`),
+    page.locator('.form-primary-action').click(),
+  ]);
+  assert.equal(response.status(), 422);
+  await page.locator('.errors[role="alert"]').waitFor();
+}
+
+browserTest('phone form controls do not clip in dark or light themes', async ({page, fixture}) => {
+  for (const mode of ['dark', 'light']) {
+    await page.goto(formUrl(fixture));
+    await setTheme(page, mode);
+
+    await assertNoClippedControls(page, `${mode} empty form`);
+    await assertContrast(page, '.form-primary-action', 4, `${mode} primary action`);
+
+    await fillWorstCase(page);
+    assert.equal(await page.locator('#field-machine option:checked').textContent(), LONGEST_MACHINE_LABEL);
+    await assertNoClippedControls(page, `${mode} worst-case form`);
+
+    await submitBoundViolation(page);
+    await assertNoClippedControls(page, `${mode} validation re-render`);
+    await assertContrast(page, '.errors', 4.5, `${mode} error summary`);
+  }
+});
+
+browserTest('primary action and validation errors use human copy', async ({page, fixture}) => {
+  await page.goto(formUrl(fixture));
+  const actionText = (await page.locator('.form-primary-action').textContent()).trim();
+  assert.notEqual(actionText, '', 'primary action must have text');
+  assert.equal(actionText.includes(TEMPLATE_TITLE), false, 'primary action must not repeat the punctuated title');
+
+  await submitBoundViolation(page);
+  const errorText = (await page.locator('.errors li').textContent()).trim();
+  assert.match(errorText, /Working weight \(lb\)/, 'error must use the human field label');
+  assert.match(errorText, /999/, 'bound error must state the numeric limit');
+  assert.doesNotMatch(errorText, /\bweight-lbs\b/, 'error must not expose the field ID');
+});
+
+browserTest('machine strength entry reaches its receipt and entries list', async ({page, fixture}) => {
+  await page.goto(formUrl(fixture));
+  await fillValidEntry(page);
+  await Promise.all([
+    page.waitForURL((url) => /\/receipts\//.test(url.pathname)),
+    page.locator('.form-primary-action').click(),
+  ]);
+
+  assert.equal((await page.locator('h1').textContent()).trim(), 'Entry logged');
+  const receipt = Object.fromEntries(await page.locator('.receipt-table tbody tr').evaluateAll((rows) =>
+    rows.map((row) => {
+      const label = row.querySelector('th').textContent.trim();
+      const value = row.querySelector('.receipt-value').textContent.trim();
+      const unit = row.querySelector('.receipt-unit').textContent.trim();
+      return [label, {value, unit}];
+    })
+  ));
+  assert.deepEqual(receipt.Machine, {value: LONGEST_MACHINE_LABEL, unit: ''});
+  assert.deepEqual(receipt['Working weight'], {value: '150', unit: 'lb'});
+  assert.deepEqual(receipt.Sets, {value: '5', unit: ''});
+  assert.deepEqual(receipt.Reps, {value: '12', unit: ''});
+
+  await page.getByRole('link', {name: 'All entries'}).click();
+  await page.waitForURL((url) => url.pathname.endsWith('/entries'));
+  const listed = (await page.locator('.entry-list').textContent()).replace(/\s+/g, ' ');
+  assert.match(listed, new RegExp(LONGEST_MACHINE_LABEL));
+  assert.match(listed, /Working weight\s*150\s*lb/);
+  assert.match(listed, /Sets\s*5/);
+  assert.match(listed, /Reps\s*12/);
+});
+
+browserTest('builder field rows start collapsed and expand without clipped controls', async ({page, fixture}) => {
+  await page.goto(`${formUrl(fixture)}/configure`);
+  const fields = page.locator('details.builder-field');
+  assert.equal(await fields.count(), gymTemplate.fields.length);
+  for (let index = 0; index < await fields.count(); index += 1) {
+    assert.equal(await fields.nth(index).getAttribute('open'), null, `field ${index + 1} should start collapsed`);
+    assert.equal(await fields.nth(index).locator('.builder-field-settings').isVisible(), false);
+  }
+
+  await fields.first().locator('summary').click();
+  assert.equal(await fields.first().getAttribute('open'), '');
+  assert.equal(await fields.first().locator('.builder-field-settings').isVisible(), true);
+  await assertNoClippedControls(page, 'expanded builder');
+});

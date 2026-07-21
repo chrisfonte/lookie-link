@@ -1,7 +1,7 @@
 {
   "name": "lookie-link",
   "version": "2.1.0",
-  "description": "Lightweight web file viewer for local directories \u2014 look at things, via links",
+  "description": "Lightweight web file viewer for local directories — look at things, via links",
   "main": "server.js",
   "bin": {
     "lookie": "./bin/lookie.js",
@@ -11,7 +11,8 @@
   "scripts": {
     "check:skill-packages": "node scripts/generate-skill-packages.js --check",
     "generate:skill-packages": "node scripts/generate-skill-packages.js",
-    "test": "node --test",
+    "test": "node --test test/*.test.js && npm run test:browser",
+    "test:browser": "node test/browser/forms.spec.mjs",
     "start": "node server.js",
     "validate:editable": "node scripts/validate-editable-mode.js",
     "validate:raw-html": "node scripts/validate-raw-html.js"
@@ -31,5 +32,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/chrisfonte/lookie-link.git"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.1"
   }
 }
