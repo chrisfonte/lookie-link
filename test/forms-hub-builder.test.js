@@ -516,3 +516,35 @@ test('builder offers server-installed themes, saves the choice, and refuses one 
     await server.close();
   }
 });
+
+test('toolbar Go menu offers Files and Forms, and disappears when there is nowhere to choose between', async () => {
+  const {setNavLinks, toolbarHtml} = require('../lib/renderer');
+
+  const server = await makeServer();
+  try {
+    // Reachable from a form page and from a document page alike.
+    const page = await browserPage(await server.request('/forms/training-log'));
+    const links = [...page.document.querySelectorAll('.toolbar-nav-panel a')];
+    assert.deepEqual(links.map((link) => link.textContent), ['Files', 'Forms']);
+    assert.deepEqual(links.map((link) => link.getAttribute('href')), ['/', '/forms']);
+    // No inline handler: the dropdown is a native <details>, so it survives CSP.
+    assert.match(page.html, /<details class="toolbar-nav">/);
+    assert.doesNotMatch(page.html, /onclick=/i);
+  } finally {
+    await server.close();
+  }
+
+  // A deployment with forms disabled registers only Files. One destination is not
+  // a choice, so the menu is omitted rather than rendered with a single entry.
+  setNavLinks([{href: '/', label: 'Files'}]);
+  assert.ok(!toolbarHtml().includes('toolbar-nav'), 'single destination renders no menu');
+
+  setNavLinks([{href: '/', label: 'Files'}, {href: '/forms', label: 'Forms'}]);
+  assert.ok(toolbarHtml().includes('toolbar-nav'), 'two destinations render the menu');
+
+  // Malformed entries are dropped rather than emitted as broken links.
+  setNavLinks([{href: '/', label: 'Files'}, {label: 'No href'}, {href: '/forms', label: 'Forms'}]);
+  const html = toolbarHtml();
+  assert.doesNotMatch(html, /No href/);
+  setNavLinks([]);
+});
