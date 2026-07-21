@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — First-party forms (Phase 1)
+
+- Added an opt-in forms runner: file-backed templates, a strict field-grammar validator, canonical serialization with a reproducible schema digest, and an immutable fsync-hardened submission store (one JSON file per accepted submission, idempotent replay).
+- Added server-rendered first-party form pages with native Post/Redirect/Get submission, a JSON submission endpoint sharing one service, and receipt views.
+- Browser mutations require an exact configured Origin plus a synchronizer token, and fail closed when no public origin is configured.
+- Submissions capture field type and label at capture time alongside option label snapshots, so later template edits never re-caption an issued receipt.
+- Forms are disabled unless the `forms` configuration block is present.
+
 ## 2026-07-20 — Unreleased — Reconciled Runtime Surface
 
 - Added `docs/CAPABILITIES.md` as the test-checked source of truth for every registered route, auth requirement, feature gate, discovery field/template, configuration key, unified CLI command, and runtime library/store.

@@ -19,6 +19,7 @@ const fs = require('node:fs/promises');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
+const { Duplex } = require('node:stream');
 const { JSDOM } = require('jsdom');
 
 const { createApp } = require('../server');
@@ -32,6 +33,9 @@ const CURRENT_ANNOTATION_SELECTORS = [
 ];
 
 function fetchResponse(server, urlPath) {
+  if (server.injectedApp) {
+    return injectResponse(server.injectedApp, urlPath);
+  }
   return new Promise((resolve, reject) => {
     const { port } = server.address();
     const req = http.request(
@@ -56,13 +60,62 @@ function fetchResponse(server, urlPath) {
   });
 }
 
+function injectResponse(app, urlPath) {
+  return new Promise((resolve, reject) => {
+    const socket = new Duplex({
+      read() {},
+      write(_chunk, _encoding, callback) { callback(); },
+    });
+    socket.remoteAddress = '127.0.0.1';
+    const req = new http.IncomingMessage(socket);
+    req.method = 'GET';
+    req.url = urlPath;
+    req.headers = { host: '127.0.0.1' };
+    const res = new http.ServerResponse(req);
+    res.assignSocket(socket);
+    const chunks = [];
+    res.write = (chunk, encoding) => {
+      if (chunk !== undefined && chunk !== null) chunks.push(Buffer.from(chunk, encoding));
+      return true;
+    };
+    res.end = (chunk, encoding) => {
+      if (chunk !== undefined && chunk !== null) chunks.push(Buffer.from(chunk, encoding));
+      res.finished = true;
+      res.emit('finish');
+      return res;
+    };
+    res.on('finish', () => {
+      const body = Buffer.concat(chunks);
+      const headers = res.getHeaders();
+      resolve({
+        status: res.statusCode,
+        contentType: headers['content-type'] || '',
+        headers,
+        body,
+        text: body.toString('utf8'),
+      });
+    });
+    res.on('error', reject);
+    app.handle(req, res, reject);
+    req.push(null);
+  });
+}
+
 function listen(app) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const server = app.listen(0, '127.0.0.1', () => resolve(server));
+    server.once('error', (error) => {
+      if (error && error.code === 'EPERM') {
+        resolve({ injectedApp: app });
+        return;
+      }
+      reject(error);
+    });
   });
 }
 
 function close(server) {
+  if (server.injectedApp) return Promise.resolve();
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
@@ -109,6 +162,7 @@ async function run() {
       const enabledResp = await fetchResponse(enabledServer, '/raw/docs/flashcards.html');
       assert.equal(enabledResp.status, 200, '/raw/<.html> should 200 when enabled');
       assert.match(enabledResp.contentType, /^text\/html/, 'content-type should be text/html');
+      assert.equal(enabledResp.headers['content-security-policy'], 'sandbox allow-scripts allow-forms allow-popups');
       assert.deepEqual(enabledResp.body, Buffer.from(FLASHCARDS_HTML), 'raw body should equal file bytes verbatim');
       assert.match(enabledResp.text, /<script>document.getElementById/, 'inline <script> must survive raw mode');
 
@@ -123,6 +177,7 @@ async function run() {
       );
       assert.equal(embedResp.status, 200, '/embed/<.html> should 200 when enabled');
       assert.equal(embedResp.headers['x-lookie-content-mode'], 'transformed-embed');
+      assert.equal(embedResp.headers['content-security-policy'], 'sandbox allow-scripts allow-forms allow-popups');
       assert.match(embedResp.text, /<base href="\/asset\/docs\/">/, '/embed injects an opaque asset base');
       assert.match(embedResp.text, /id="lookie-link-embed-theme"/, '/embed injects theme tokens');
       assert.match(embedResp.text, /data-lookie-link-theme="light"/, '/embed accepts the framed theme mode');
@@ -172,6 +227,17 @@ async function run() {
         /<iframe[\s\S]*data-embedded-html[\s\S]*src="\/embed\/docs\/flashcards\.html"/,
         '/view frames trusted authored HTML through /embed'
       );
+      // Attribute order is not significant in HTML: assert the framing iframe
+      // carries both the embed src and the sandbox, in whatever order.
+      const embedFrameTag = viewEnabled.text.match(/<iframe[^>]*data-embedded-html[^>]*>/);
+      assert.ok(embedFrameTag, '/view should frame the embed route');
+      assert.match(embedFrameTag[0], /src="\/embed\/docs\/flashcards\.html"/);
+      assert.match(
+        embedFrameTag[0],
+        /sandbox="allow-scripts allow-forms allow-popups"/,
+        '/view applies the opaque-origin sandbox to the embed frame'
+      );
+      assert.doesNotMatch(viewEnabled.text, /sandbox="[^"]*allow-same-origin/);
       assert.doesNotMatch(
         viewEnabled.text,
         /<iframe[\s\S]*src="\/raw\/docs\/flashcards\.html"/,
