@@ -2266,7 +2266,8 @@ tbody tr:last-child td {
 .lookie-annotate-btn:hover, .lookie-annotate-btn:focus {
   opacity: 1; color: var(--accent); border-color: var(--accent);
 }
-.toolbar-btn-annotation-count[aria-pressed="true"] {
+.toolbar-btn-annotation-count[aria-pressed="true"],
+[data-annotation-mode-toggle][aria-pressed="true"] {
   border-color: var(--accent);
   color: var(--accent);
 }
