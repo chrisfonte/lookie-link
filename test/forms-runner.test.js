@@ -180,7 +180,7 @@ async function getBrowserContext(server, templateId = 'gym-session-entry') {
 function nativeBody(token, overrides = {}) {
   return new URLSearchParams({
     _csrf: token,
-    'session-date': '2026-07-20',
+    'session-date': '2026-07-20T09:30',
     lift: 'bench',
     'top-weight': '225.5',
     'top-reps': '5',
@@ -193,7 +193,7 @@ function nativeBody(token, overrides = {}) {
 
 function jsonValues(overrides = {}) {
   return {
-    'session-date': '2026-07-20',
+    'session-date': '2026-07-20T09:30:00-04:00',
     lift: 'deadlift',
     'top-weight': 315,
     'top-reps': 3,
@@ -257,9 +257,57 @@ test('GET renders every field type, required markers, constraints, and a CSRF to
     assert.equal(document.querySelector('#field-entry-date').type, 'date');
     assert.equal(document.querySelector('#field-entry-time').type, 'time');
     assert.equal(document.querySelector('#field-recorded-at').type, 'datetime-local');
+    assert.ok(document.querySelector('input[name="recorded-at__offset"]'));
+    assert.ok(document.querySelector('input[name="recorded-at__timezone"]'));
+    assert.match(html, /getTimezoneOffset/);
     assert.equal(document.querySelector('#field-choice').tagName, 'SELECT');
     assert.equal(document.querySelector('#field-choices').multiple, true);
     assert.equal(document.querySelectorAll('[required]').length, everyTypeTemplate.fields.length);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('native datetime capture records an explicit offset and uses the configured zone when offset is absent', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, { formsTimezone: 'America/New_York' });
+  try {
+    const context = await getBrowserContext(server);
+    const explicitBody = nativeBody(context.token, {
+      'session-date': '2026-07-20T09:30',
+      'session-date__offset': '-240',
+      'session-date__timezone': 'America/New_York',
+    });
+    const explicit = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: explicitBody,
+    });
+    assert.equal(explicit.status, 303);
+
+    const fallbackBody = nativeBody(context.token, { 'session-date': '2026-01-20T09:30' });
+    const fallback = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: fallbackBody,
+    });
+    assert.equal(fallback.status, 303);
+
+    const records = await Promise.all((await submissionFiles(fixture.submissionsPath)).map(async (fileName) => (
+      JSON.parse(await fs.readFile(path.join(fixture.submissionsPath, fileName), 'utf8'))
+    )));
+    const summer = records.find((record) => record.eventAt.startsWith('2026-07-20'));
+    const winter = records.find((record) => record.eventAt.startsWith('2026-01-20'));
+    assert.deepEqual(
+      { eventAt: summer.eventAt, timezone: summer.timezone, clientOffsetMinutes: summer.clientOffsetMinutes },
+      { eventAt: '2026-07-20T09:30:00-04:00', timezone: 'America/New_York', clientOffsetMinutes: -240 }
+    );
+    assert.equal(summer.values.find((entry) => entry.fieldId === 'session-date').value, summer.eventAt);
+    assert.deepEqual(
+      { eventAt: winter.eventAt, timezone: winter.timezone, clientOffsetMinutes: winter.clientOffsetMinutes },
+      { eventAt: '2026-01-20T09:30:00-05:00', timezone: 'America/New_York', clientOffsetMinutes: -300 }
+    );
+    assert.equal(winter.values.find((entry) => entry.fieldId === 'session-date').value, winter.eventAt);
   } finally {
     await cleanup(fixture, server);
   }
@@ -790,6 +838,113 @@ test('receipt authorization conceals submissions from a different principal', as
     const reader = await server.request(accepted.headers.get('location'), { headers: { 'X-Read-All': 'yes' } });
     assert.equal(reader.status, 200);
     assert.match(await reader.text(), /Smooth reps/);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('correction API is immutable, linear, concealed, and list/history stay owner scoped', async () => {
+  const fixture = await makeFixture();
+  let tick = 0;
+  const formsStore = new SubmissionStore({
+    storageRoot: fixture.submissionsPath,
+    clock: () => new Date(Date.UTC(2026, 6, 20, 12, 0, tick++)),
+  });
+  const server = await startServer(fixture, {
+    formsStore,
+    formsAuthorize: ({ req, capability }) => {
+      req.accessContext = {
+        mode: 'scoped',
+        principal: { id: req.get('x-principal') || 'owner', kind: 'user' },
+      };
+      return capability === 'forms.submit' || capability === 'forms.view'
+        || ((capability === 'forms.read_submissions' || capability === 'forms.manage')
+          && req.get('x-reader') === 'yes');
+    },
+  });
+  try {
+    const form = await server.request('/forms/gym-session-entry', { headers: { 'X-Principal': 'owner' } });
+    const context = browserContext(form, await form.text());
+    const apiHeaders = (principal) => ({
+      'Content-Type': 'application/json',
+      Cookie: context.cookie,
+      Origin: PUBLIC_ORIGIN,
+      'X-CSRF-Token': context.token,
+      'X-Principal': principal,
+    });
+    const create = async (principal, values) => {
+      const response = await server.request('/api/forms/gym-session-entry/submissions', {
+        method: 'POST', headers: apiHeaders(principal), body: JSON.stringify({ values }),
+      });
+      assert.equal(response.status, 201);
+      return response.json();
+    };
+
+    const original = await create('owner', jsonValues({ notes: 'Original' }));
+    const originalPath = path.join(fixture.submissionsPath, `${original.submissionId}.json`);
+    const predecessorBytes = await fs.readFile(originalPath);
+    const second = await create('owner', jsonValues({ notes: 'Second entry' }));
+    const foreign = await create('other', jsonValues({ notes: 'Foreign entry' }));
+    const beforeDenied = await submissionFiles(fixture.submissionsPath);
+    const correctionBody = (id, notes = 'Corrected') => JSON.stringify({
+      values: jsonValues({ notes }),
+      supersedesRecord: { resourceKind: 'form-submission', id },
+    });
+
+    const denied = await server.request('/api/forms/gym-session-entry/submissions', {
+      method: 'POST', headers: apiHeaders('other'), body: correctionBody(original.submissionId),
+    });
+    const unknown = await server.request('/api/forms/gym-session-entry/submissions', {
+      method: 'POST', headers: apiHeaders('owner'),
+      body: correctionBody('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+    });
+    assert.equal(denied.status, 404);
+    assert.equal(unknown.status, 404);
+    assert.deepEqual(await denied.json(), await unknown.json());
+    assert.deepEqual(await submissionFiles(fixture.submissionsPath), beforeDenied);
+
+    const correctedResponse = await server.request('/api/forms/gym-session-entry/submissions', {
+      method: 'POST', headers: apiHeaders('owner'), body: correctionBody(original.submissionId),
+    });
+    assert.equal(correctedResponse.status, 201);
+    const corrected = await correctedResponse.json();
+    assert.equal(Buffer.compare(predecessorBytes, await fs.readFile(originalPath)), 0);
+
+    const duplicate = await server.request('/api/forms/gym-session-entry/submissions', {
+      method: 'POST', headers: apiHeaders('owner'), body: correctionBody(original.submissionId, 'Fork'),
+    });
+    assert.equal(duplicate.status, 409);
+    assert.equal((await submissionFiles(fixture.submissionsPath)).length, beforeDenied.length + 1);
+
+    const list = await server.request('/api/forms/gym-session-entry/submissions?limit=1000', {
+      headers: { 'X-Principal': 'owner' },
+    });
+    assert.equal(list.status, 200);
+    const listed = await list.json();
+    assert.equal(listed.limit, 100);
+    assert.deepEqual(listed.submissions.map((record) => record.submissionId), [
+      corrected.submissionId,
+      second.submissionId,
+    ]);
+    assert.equal(listed.submissions.some((record) => record.submissionId === foreign.submissionId), false);
+    assert.equal(listed.submissions.some((record) => record.submissionId === original.submissionId), false);
+    assert.equal(listed.submissions[0].values.find((entry) => entry.fieldId === 'notes').value, 'Corrected');
+
+    const bounded = await server.request('/api/forms/gym-session-entry/submissions?limit=1', {
+      headers: { 'X-Principal': 'owner' },
+    });
+    assert.equal((await bounded.json()).submissions.length, 1);
+    const history = await server.request(
+      `/api/forms/gym-session-entry/submissions/${original.submissionId}/history`,
+      { headers: { 'X-Principal': 'owner' } }
+    );
+    assert.equal(history.status, 200);
+    const chain = await history.json();
+    assert.equal(chain.latestSubmissionId, corrected.submissionId);
+    assert.deepEqual(chain.submissions.map((record) => record.submissionId), [
+      corrected.submissionId,
+      original.submissionId,
+    ]);
   } finally {
     await cleanup(fixture, server);
   }

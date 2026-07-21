@@ -95,9 +95,10 @@ test('submission records round-trip with exact capture-time contract fields', as
       templateId: 'activity-log',
       templateVersion: 3,
       schemaDigest: SCHEMA_DIGEST,
+      values: submission().values,
     }]);
     assert.equal(Object.hasOwn(listed[0], 'actor'), false);
-    assert.equal(Object.hasOwn(listed[0], 'values'), false);
+    assert.equal(Object.hasOwn(listed[0], 'values'), true);
   } finally {
     await removeFixture(root);
   }
@@ -261,6 +262,66 @@ test('a rejected invalid write has no filesystem side effects', async () => {
       (error) => error.code === 'EVALIDATION'
     );
     await assert.rejects(fs.access(storageRoot), { code: 'ENOENT' });
+  } finally {
+    await removeFixture(root);
+  }
+});
+
+test('corrections preserve predecessor bytes, form a linear history, and replace the current list row', async () => {
+  const { root, storageRoot, store } = await fixture();
+  try {
+    const original = await store.createSubmission(submission());
+    const originalPath = path.join(storageRoot, `${original.submissionId}.json`);
+    const before = await fs.readFile(originalPath);
+    const corrected = await store.createSubmission(submission({
+      values: [
+        ...submission().values.slice(0, 2),
+        { fieldId: 'notes', fieldType: 'long-text', fieldLabel: 'Notes', value: 'Corrected pace' },
+      ],
+      supersedesRecord: { resourceKind: 'form-submission', id: original.submissionId },
+    }));
+
+    assert.equal(Buffer.compare(before, await fs.readFile(originalPath)), 0);
+    assert.deepEqual(await store.getSubmission(original.submissionId), original);
+    assert.equal((await store.resolveLatest(original.submissionId)).submissionId, corrected.submissionId);
+    const history = await store.getSubmissionHistory(original.submissionId);
+    assert.equal(history.latest.submissionId, corrected.submissionId);
+    assert.deepEqual(history.predecessors.map((record) => record.submissionId), [original.submissionId]);
+    const listed = await store.listSubmissions({ templateId: 'activity-log' });
+    assert.deepEqual(listed.map((record) => record.submissionId), [corrected.submissionId]);
+    assert.equal(listed[0].values.find((entry) => entry.fieldId === 'notes').value, 'Corrected pace');
+
+    await assert.rejects(
+      store.createSubmission(submission({
+        supersedesRecord: { resourceKind: 'form-submission', id: original.submissionId },
+      })),
+      (error) => error.code === 'ESUPERSEDED'
+    );
+    assert.equal((await store.submissionFiles()).length, 2);
+  } finally {
+    await removeFixture(root);
+  }
+});
+
+test('unknown and foreign correction predecessors are uniformly not found without a write', async () => {
+  const { root, store } = await fixture();
+  try {
+    const original = await store.createSubmission(submission());
+    const attempts = [
+      submission({
+        supersedesRecord: { resourceKind: 'form-submission', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+      }),
+      submission({
+        actor: { id: 'coach-two', type: 'user' },
+        supersedesRecord: { resourceKind: 'form-submission', id: original.submissionId },
+      }),
+    ];
+    for (const attempt of attempts) {
+      await assert.rejects(store.createSubmission(attempt), (error) => (
+        error.code === 'ENOTFOUND' && error.message === 'Submission not found.'
+      ));
+    }
+    assert.deepEqual(await store.submissionFiles(), [`${original.submissionId}.json`]);
   } finally {
     await removeFixture(root);
   }

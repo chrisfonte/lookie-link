@@ -7,8 +7,8 @@ grammarVersion: 1
 title: Gym Session Entry
 fields:
   - id: session-date
-    type: date
-    label: Session date
+    type: datetime
+    label: Session time
     required: true
   - id: lift
     type: select

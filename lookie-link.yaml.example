@@ -104,6 +104,8 @@ repositories:
 #   enabled: true
 #   templatesPath: ~/.local/share/lookie-link/form-templates
 #   submissionsPath: ~/.local/share/lookie-link/form-submissions
+#   # IANA zone used when a browser cannot report its UTC offset.
+#   timezone: America/New_York
 #   # Required for browser mutations. Each entry is an exact scheme/host/port;
 #   # Host and X-Forwarded-* request headers are never trusted as substitutes.
 #   publicOrigins:
