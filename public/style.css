@@ -674,40 +674,109 @@ tbody tr:last-child td {
   resize: vertical;
 }
 
-.form-layout .form-card input[type="checkbox"] {
+.form-layout .checkbox-control {
+  position: relative;
   display: block;
-  width: 52px;
-  height: 52px;
-  accent-color: var(--accent);
+  width: 2rem;
+  height: 2rem;
+}
+
+.form-layout .form-card .checkbox-control input[type="checkbox"] {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 2rem;
+  min-height: 2rem;
+  height: 2rem;
+  margin: 0;
+  cursor: pointer;
+  opacity: 0;
+  padding: 0;
+}
+
+.form-layout .checkbox-mark {
+  box-sizing: border-box;
+  display: block;
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--bg-code);
+  pointer-events: none;
+}
+
+.form-layout .checkbox-mark::after {
+  position: absolute;
+  top: 0.24rem;
+  left: 0.62rem;
+  width: 0.38rem;
+  height: 0.8rem;
+  border: solid var(--bg);
+  border-width: 0 0.18rem 0.18rem 0;
+  content: '';
+  opacity: 0;
+  transform: rotate(45deg);
+}
+
+.form-layout .checkbox-control input[type="checkbox"]:checked + .checkbox-mark {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.form-layout .checkbox-control input[type="checkbox"]:checked + .checkbox-mark::after {
+  opacity: 1;
+}
+
+.form-layout .checkbox-control input[type="checkbox"]:focus-visible + .checkbox-mark {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
 }
 
 .form-layout .readout-control {
   position: relative;
 }
 
-.form-layout .field-readout input {
-  height: 4.25rem;
-  padding: 0.45rem 2.7rem 0.45rem 0.65rem;
+.form-layout .field-readout input[type="number"] {
+  height: 5rem;
+  appearance: textfield;
+  padding: 0.5rem 3.75rem 0.5rem 0.75rem;
   font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
-  font-size: clamp(1.65rem, 8vw, 2.35rem);
+  font-size: 2.5rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  letter-spacing: -0.045em;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.form-layout .field-readout input[type="number"]::-webkit-inner-spin-button,
+.form-layout .field-readout input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.form-layout .field-readout input[type="number"]::placeholder {
+  color: var(--text-soft);
+  font-weight: 400;
+  opacity: 0.55;
 }
 
 .form-layout .readout-unit {
   position: absolute;
   top: 50%;
-  right: 0.45rem;
-  max-width: 2.15rem;
-  border-left: 1px solid var(--border);
+  right: 0.6rem;
+  min-width: 1.8rem;
+  max-width: 2.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elev);
   color: var(--text-soft);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   line-height: 1.2;
   overflow-wrap: anywhere;
-  padding: 0.3rem 0 0.3rem 0.4rem;
+  padding: 0.35rem 0.38rem;
+  pointer-events: none;
   text-align: center;
   transform: translateY(-50%);
 }
@@ -726,6 +795,10 @@ tbody tr:last-child td {
 .form-layout .form-card .invalid textarea,
 .form-layout .form-card .errors {
   border: 2px solid var(--accent);
+}
+
+.form-layout .form-card .invalid .checkbox-mark {
+  border-color: var(--accent);
 }
 
 .form-layout .form-card .field .field-error {

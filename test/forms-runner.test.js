@@ -30,6 +30,7 @@ const everyTypeTemplate = {
   revision: 1,
   grammarVersion: 1,
   title: 'Every Field',
+  presentation: { submitLabel: 'Submit' },
   fields: [
     { id: 'summary', type: 'short-text', label: 'Summary', required: true },
     { id: 'notes', type: 'long-text', label: 'Notes', required: true },
@@ -253,7 +254,12 @@ test('GET renders every field type, required markers, constraints, and a CSRF to
     assert.equal(document.querySelector('#field-count').min, '1');
     assert.equal(document.querySelector('#field-count').max, '10');
     assert.equal(document.querySelector('#field-count').step, '1');
+    assert.equal(document.querySelector('#field-count').placeholder, '\u2014');
     assert.equal(document.querySelector('.readout-unit').textContent, 'kg');
+    assert.deepEqual(
+      [...document.querySelectorAll('.form-section > h2')].map((heading) => heading.textContent),
+      ['What you\u2019re logging', 'Measurements', 'More about this entry']
+    );
     assert.deepEqual(
       [...document.querySelectorAll('.form-section')].map((section) => section.className),
       [
@@ -270,8 +276,12 @@ test('GET renders every field type, required markers, constraints, and a CSRF to
     assert.ok(document.querySelector('input[name="recorded-at__timezone"]'));
     assert.match(html, /getTimezoneOffset/);
     assert.equal(document.querySelector('#field-choice').tagName, 'SELECT');
+    assert.equal(document.querySelector('#field-choice option').textContent, 'Select…');
     assert.equal(document.querySelector('#field-choices').multiple, true);
     assert.equal(document.querySelectorAll('[required]').length, everyTypeTemplate.fields.length);
+    assert.equal(document.querySelector('.topbar .subtitle'), null);
+    assert.equal(document.querySelector('.form-primary-action').textContent, 'Log Every Field');
+    assert.doesNotMatch(html, />Submit</);
   } finally {
     await cleanup(fixture, server);
   }
@@ -340,7 +350,9 @@ test('form and receipt use the themed shell, preserve escaping, and offer Log an
     const formDocument = assertSharedFormsShell(formResponse, formHtml, customThemeMarker);
     const context = browserContext(formResponse, formHtml);
     assert.equal(formDocument.querySelector('.topbar h1').textContent, 'Gym Session Entry');
+    assert.equal(formDocument.querySelector('.topbar .subtitle'), null);
     assert.equal(formDocument.querySelector('.topbar .back').getAttribute('href'), '/');
+    assert.equal(formDocument.querySelector('.form-primary-action').textContent, 'Log Gym Session');
     assert.equal(formDocument.querySelector('label[for="field-notes"]').textContent, '<em>Notes</em> *');
     assert.match(formHtml, /&lt;em&gt;Notes&lt;\/em&gt;/);
     assert.doesNotMatch(formHtml, /<em>Notes<\/em>/);
