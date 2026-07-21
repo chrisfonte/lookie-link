@@ -355,33 +355,105 @@ test('collapsed field rows reorder with CAS and soft-delete identities can only 
   }
 });
 
-test('first-run hub offers API-backed creation only to managers and rejects path destinations', async () => {
+test('forms index offers its single API-backed creation path only to managers and rejects path destinations', async () => {
   const server = await makeServer({empty: true});
   try {
     assert.equal((await server.request('/forms/daily-log', {headers: {'X-No-Manage': 'yes'}})).status, 404);
-    let firstRun = await browserPage(await server.request('/forms/daily-log'));
+    const deniedIndex = await browserPage(await server.request('/forms', {headers: {'X-No-Manage': 'yes'}}));
+    assert.equal(deniedIndex.document.querySelector('a[href="/forms/new"]'), null);
+    assert.equal((await server.request('/forms/new', {headers: {'X-No-Manage': 'yes'}})).status, 404);
+    const emptyIndex = await browserPage(await server.request('/forms'));
+    assert.match(emptyIndex.document.body.textContent, /Create your first template/);
+    assert.ok(emptyIndex.document.querySelector('a[href="/forms/new"]'));
+    let firstRun = await browserPage(await server.request('/forms/new'));
     const cookie = firstRun.cookie;
-    assert.match(firstRun.document.querySelector('h1').textContent, /Create your first form/);
+    assert.match(firstRun.document.querySelector('h1').textContent, /New template/);
     assert.deepEqual(
       [...firstRun.document.querySelector('select[name="destinationId"]').options].map((option) => option.value),
       ['default', 'gym-log'],
     );
     const form = firstRun.document.querySelector('form');
+    form.querySelector('[name="templateId"]').value = 'daily-log';
     form.querySelector('[name="title"]').value = 'Daily log';
     let values = formValues(form);
     values.set('destinationId', '../../tmp');
-    let response = await browserPost(server, '/forms/daily-log/configure/create', values, cookie);
+    let response = await browserPost(server, '/forms', values, cookie);
     assert.equal(response.status, 422);
     assert.equal(await server.registry.getTemplate('daily-log'), null);
 
     firstRun = await browserPage(response);
     values = formValues(firstRun.document.querySelector('form'));
+    values.set('templateId', 'daily-log');
     values.set('title', 'Daily log');
     values.set('destinationId', 'default');
-    response = await browserPost(server, '/forms/daily-log/configure/create', values, cookie);
+    response = await browserPost(server, '/forms', values, cookie);
     assert.equal(response.status, 303);
     assert.equal(response.headers.get('location'), '/forms/daily-log/configure');
     assert.equal((await server.registry.getTemplate('daily-log')).destinationId, 'default');
+  } finally {
+    await server.close();
+  }
+});
+
+test('forms index separates archived templates and removes management detail for submit-only callers', async () => {
+  const server = await makeServer();
+  try {
+    const base = {
+      contractVersion: 1,
+      resourceKind: 'form-template',
+      ownerId: 'operator',
+      revision: 1,
+      grammarVersion: 1,
+      destinationId: 'default',
+      fields: [{id: 'entry', type: 'short-text', label: 'Entry', required: true}],
+    };
+    await server.registry.createDraft({...base, templateId: 'daily-log', title: 'Daily log'});
+    await server.registry.createDraft({...base, templateId: 'old-log', title: 'Old log'});
+    await server.registry.setArchived('old-log', 1, true);
+
+    const formPage = await browserPage(await server.request('/forms/training-log'));
+    const submitted = await browserPost(server, '/forms/training-log', new URLSearchParams({
+      _csrf: formPage.document.querySelector('input[name="_csrf"]').value,
+      lift: 'bench',
+      notes: 'Counted entry',
+    }), formPage.cookie);
+    assert.equal(submitted.status, 303);
+
+    const managerIndex = await browserPage(await server.request('/forms'));
+    assert.equal(managerIndex.document.querySelectorAll('.forms-index-list[aria-label="Active templates"] > .forms-index-item').length, 2);
+    assert.ok(managerIndex.document.querySelector('a[href="/forms/new"]'));
+    const trainingCard = [...managerIndex.document.querySelectorAll('.forms-index-item')]
+      .find((card) => /Training <log>/.test(card.textContent));
+    assert.ok(trainingCard);
+    assert.match(trainingCard.textContent, /Draft\s*r1/);
+    assert.match(trainingCard.textContent, /Destination\s*gym-log/);
+    assert.match(trainingCard.textContent, /Entries\s*1/);
+    assert.deepEqual(
+      [...trainingCard.querySelectorAll('.forms-index-actions a, .forms-index-actions button')].map((node) => node.textContent.trim()),
+      ['Open', 'History', 'Configure', 'Clone', 'Archive'],
+    );
+    const archived = managerIndex.document.querySelector('.forms-index-archived');
+    assert.ok(archived);
+    assert.equal(archived.open, false);
+    assert.match(archived.querySelector('summary').textContent, /Show archived\s*1/);
+    assert.match(archived.textContent, /Old log/);
+
+    const submitOnly = await browserPage(await server.request('/forms', {headers: {'X-No-Manage': 'yes'}}));
+    assert.equal(submitOnly.document.querySelector('a[href="/forms/new"]'), null);
+    assert.equal(submitOnly.document.querySelector('.forms-index-actions'), null);
+    assert.equal(submitOnly.document.querySelector('.forms-index-meta'), null);
+    assert.equal(submitOnly.document.querySelector('.forms-index-archived'), null);
+    assert.deepEqual(
+      [...submitOnly.document.querySelectorAll('.forms-index-simple')].map((link) => link.textContent.trim().replace(/›$/, '')),
+      ['Daily log', 'Training <log>'],
+    );
+    assert.doesNotMatch(submitOnly.document.body.textContent, /Old log|Entries|Destination|Configure|Archive/);
+
+    const cloneForm = trainingCard.querySelector('form[action$="/clone"]');
+    const clonedResponse = await browserPost(server, cloneForm.getAttribute('action'), formValues(cloneForm), managerIndex.cookie);
+    assert.equal(clonedResponse.status, 303);
+    assert.match(clonedResponse.headers.get('location'), /^\/forms\/training-log-copy\/configure$/);
+    assert.equal((await server.registry.getTemplate('training-log-copy')).revision, 1);
   } finally {
     await server.close();
   }
