@@ -312,6 +312,16 @@ function sendAccessError(res, accessContext, asJson = false) {
 // origin; allow-same-origin must never be added (ADR-92 B1 + operator decision).
 const ARTIFACT_SANDBOX = 'sandbox allow-scripts allow-forms allow-popups';
 
+// Asset MIME types a browser will execute as a document when navigated to
+// directly (SVG carries <script>; HTML/XHTML/XML can execute inline or via
+// XSLT). Served same-origin these are the same write primitive as /embed was,
+// so they get the identical opaque-origin sandbox.
+const SCRIPTABLE_ASSET_TYPES = /^(?:image\/svg\+xml|text\/html|application\/xhtml\+xml|(?:text|application)\/xml)\b/i;
+
+function isScriptableAssetType(mimeType) {
+  return typeof mimeType === 'string' && SCRIPTABLE_ASSET_TYPES.test(mimeType);
+}
+
 function sendRawHtmlResponse(res, sourceBuffer) {
   res.set('Content-Security-Policy', ARTIFACT_SANDBOX);
   res.status(200).type(RAW_HTML_MIME_TYPE).send(sourceBuffer);
@@ -2455,6 +2465,10 @@ function createApp(options = {}) {
       return;
     }
 
+    res.set('X-Content-Type-Options', 'nosniff');
+    if (isScriptableAssetType(mimeType)) {
+      res.set('Content-Security-Policy', ARTIFACT_SANDBOX);
+    }
     res.type(mimeType).sendFile(resolved, (error) => {
       if (!error) {
         return;

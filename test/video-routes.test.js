@@ -37,6 +37,11 @@ function invokeHandler(handler, req) {
       contentType: null,
       body: null,
       filePath: null,
+      headers: {},
+      set(name, value) {
+        this.headers[String(name).toLowerCase()] = value;
+        return this;
+      },
       status(code) {
         this.statusCode = code;
         return this;
