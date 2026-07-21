@@ -178,6 +178,43 @@ async function getBrowserContext(server, templateId = 'gym-session-entry') {
   return browserContext(response, html);
 }
 
+function scriptedForm(html, clockState) {
+  return new JSDOM(html, {
+    url: PUBLIC_ORIGIN,
+    runScripts: 'dangerously',
+    beforeParse(window) {
+      const NativeDate = window.Date;
+      class ControlledDate extends NativeDate {
+        constructor(...args) {
+          super(...(args.length ? args : [clockState.now.getTime()]));
+        }
+
+        static now() {
+          return clockState.now.getTime();
+        }
+
+        getFullYear() { return this.getUTCFullYear(); }
+        getMonth() { return this.getUTCMonth(); }
+        getDate() { return this.getUTCDate(); }
+        getHours() { return this.getUTCHours(); }
+        getMinutes() { return this.getUTCMinutes(); }
+        getTimezoneOffset() { return clockState.offsetMinutes; }
+      }
+      window.Date = ControlledDate;
+      const NativeDateTimeFormat = window.Intl.DateTimeFormat;
+      const ControlledDateTimeFormat = function (...args) {
+        const formatter = new NativeDateTimeFormat(...args);
+        const resolvedOptions = formatter.resolvedOptions.bind(formatter);
+        formatter.resolvedOptions = () => ({ ...resolvedOptions(), timeZone: clockState.timezone });
+        return formatter;
+      };
+      ControlledDateTimeFormat.prototype = NativeDateTimeFormat.prototype;
+      ControlledDateTimeFormat.supportedLocalesOf = NativeDateTimeFormat.supportedLocalesOf.bind(NativeDateTimeFormat);
+      window.Intl.DateTimeFormat = ControlledDateTimeFormat;
+    },
+  });
+}
+
 function nativeBody(token, overrides = {}) {
   return new URLSearchParams({
     _csrf: token,
@@ -272,8 +309,11 @@ test('GET renders every field type, required markers, constraints, and a CSRF to
     assert.equal(document.querySelector('#field-entry-date').type, 'date');
     assert.equal(document.querySelector('#field-entry-time').type, 'time');
     assert.equal(document.querySelector('#field-recorded-at').type, 'datetime-local');
+    assert.ok(document.querySelector('#field-recorded-at').value);
+    assert.equal(document.querySelector('#field-recorded-at').hasAttribute('data-auto-stamp'), true);
     assert.ok(document.querySelector('input[name="recorded-at__offset"]'));
     assert.ok(document.querySelector('input[name="recorded-at__timezone"]'));
+    assert.equal(document.querySelector('input[name="recorded-at__stamp"]').value, 'seed');
     assert.match(html, /getTimezoneOffset/);
     assert.equal(document.querySelector('#field-choice').tagName, 'SELECT');
     assert.equal(document.querySelector('#field-choice option').textContent, 'Select…');
@@ -413,6 +453,155 @@ test('native datetime capture records an explicit offset and uses the configured
       { eventAt: '2026-01-20T09:30:00-05:00', timezone: 'America/New_York', clientOffsetMinutes: -300 }
     );
     assert.equal(winter.values.find((entry) => entry.fieldId === 'session-date').value, winter.eventAt);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('untouched datetime is stamped at browser submit with freshly recomputed offset and timezone', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, {
+    formsClock: () => new Date('2026-07-20T13:30:00.000Z'),
+    formsTimezone: 'America/New_York',
+  });
+  try {
+    const response = await server.request('/forms/gym-session-entry');
+    const html = await response.text();
+    const context = browserContext(response, html);
+    const clockState = {
+      now: new Date('2026-07-20T09:30:00.000Z'),
+      offsetMinutes: 240,
+      timezone: 'Etc/GMT+4',
+    };
+    const dom = scriptedForm(html, clockState);
+    const { document } = dom.window;
+    const input = document.querySelector('#field-session-date');
+    const seed = input.value;
+    assert.equal(seed, '2026-07-20T09:30');
+    assert.equal(document.querySelector('input[name="session-date__stamp"]').value, 'seed');
+
+    clockState.now = new Date('2026-07-20T09:42:00.000Z');
+    clockState.offsetMinutes = 300;
+    clockState.timezone = 'Etc/GMT+5';
+    const form = input.form;
+    form.addEventListener('submit', (event) => event.preventDefault());
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+
+    assert.equal(input.value, '2026-07-20T09:42');
+    assert.equal(document.querySelector('input[name="session-date__offset"]').value, '-300');
+    assert.equal(document.querySelector('input[name="session-date__timezone"]').value, 'Etc/GMT+5');
+    assert.equal(document.querySelector('input[name="session-date__stamp"]').value, 'stamped');
+
+    const body = nativeBody(context.token, {
+      'session-date': input.value,
+      'session-date__offset': '-300',
+      'session-date__timezone': 'Etc/GMT+5',
+      'session-date__seed': seed,
+      'session-date__stamp': 'stamped',
+    });
+    const accepted = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body,
+    });
+    assert.equal(accepted.status, 303);
+    const [fileName] = await submissionFiles(fixture.submissionsPath);
+    const record = JSON.parse(await fs.readFile(path.join(fixture.submissionsPath, fileName), 'utf8'));
+    assert.deepEqual(
+      { eventAt: record.eventAt, timezone: record.timezone, clientOffsetMinutes: record.clientOffsetMinutes },
+      { eventAt: '2026-07-20T09:42:00-05:00', timezone: 'Etc/GMT+5', clientOffsetMinutes: -300 }
+    );
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('datetime input events preserve deliberate overrides, including retyping the identical seed', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, {
+    formsClock: () => new Date('2026-07-20T13:30:00.000Z'),
+    formsTimezone: 'America/New_York',
+  });
+  try {
+    const response = await server.request('/forms/gym-session-entry');
+    const html = await response.text();
+    const context = browserContext(response, html);
+    const clockState = {
+      now: new Date('2026-07-20T09:30:00.000Z'),
+      offsetMinutes: 240,
+      timezone: 'Etc/GMT+4',
+    };
+    const dom = scriptedForm(html, clockState);
+    const { document } = dom.window;
+    const input = document.querySelector('#field-session-date');
+    const seed = input.value;
+    input.value = seed;
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    assert.equal(document.querySelector('input[name="session-date__stamp"]').value, 'dirty');
+
+    clockState.now = new Date('2026-07-20T10:15:00.000Z');
+    input.form.addEventListener('submit', (event) => event.preventDefault());
+    input.form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    assert.equal(input.value, seed);
+
+    input.value = '2026-07-19T08:05';
+    input.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    clockState.now = new Date('2026-07-20T11:00:00.000Z');
+    input.form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    assert.equal(input.value, '2026-07-19T08:05');
+
+    const accepted = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: nativeBody(context.token, {
+        'session-date': input.value,
+        'session-date__offset': document.querySelector('input[name="session-date__offset"]').value,
+        'session-date__timezone': document.querySelector('input[name="session-date__timezone"]').value,
+        'session-date__seed': seed,
+        'session-date__stamp': 'dirty',
+      }),
+    });
+    assert.equal(accepted.status, 303);
+    const [fileName] = await submissionFiles(fixture.submissionsPath);
+    const record = JSON.parse(await fs.readFile(path.join(fixture.submissionsPath, fileName), 'utf8'));
+    assert.equal(record.eventAt, '2026-07-19T08:05:00-04:00');
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('no-JS untouched datetime seed is stamped by the server at submit', async () => {
+  const fixture = await makeFixture();
+  let now = new Date('2026-07-20T13:30:00.000Z');
+  const server = await startServer(fixture, {
+    formsClock: () => now,
+    formsTimezone: 'America/New_York',
+  });
+  try {
+    const response = await server.request('/forms/gym-session-entry');
+    const html = await response.text();
+    const context = browserContext(response, html);
+    const document = context.document;
+    const seed = document.querySelector('#field-session-date').value;
+    assert.equal(seed, '2026-07-20T09:30');
+
+    now = new Date('2026-07-20T13:47:00.000Z');
+    const accepted = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: nativeBody(context.token, {
+        'session-date': seed,
+        'session-date__seed': seed,
+        'session-date__stamp': 'seed',
+      }),
+    });
+    assert.equal(accepted.status, 303);
+    const [fileName] = await submissionFiles(fixture.submissionsPath);
+    const record = JSON.parse(await fs.readFile(path.join(fixture.submissionsPath, fileName), 'utf8'));
+    assert.deepEqual(
+      { eventAt: record.eventAt, timezone: record.timezone, clientOffsetMinutes: record.clientOffsetMinutes },
+      { eventAt: '2026-07-20T09:47:00-04:00', timezone: 'America/New_York', clientOffsetMinutes: -240 }
+    );
   } finally {
     await cleanup(fixture, server);
   }
@@ -1076,11 +1265,17 @@ test('receipt edit prefills values and saves an immutable superseding correction
     const editDocument = new JSDOM(await edit.text()).window.document;
     assert.equal(editDocument.querySelector('#field-top-weight').value, '225');
     assert.equal(editDocument.querySelector('#field-notes').value, 'Smooth reps');
+    assert.equal(editDocument.querySelector('#field-session-date').hasAttribute('data-auto-stamp'), false);
+    assert.equal(editDocument.querySelector('input[name="session-date__stamp"]'), null);
     assert.equal(editDocument.querySelector('input[name="_supersedes"]').value, originalId);
     assert.match(editDocument.querySelector('.correction-note').textContent, /earlier version stays preserved/i);
     const editToken = editDocument.querySelector('input[name="_csrf"]').value;
 
-    const correctionBody = nativeBody(editToken, { notes: 'Corrected form', 'top-weight': '230' });
+    const correctionBody = nativeBody(editToken, {
+      notes: 'Corrected form',
+      'top-weight': '230',
+      'session-date': '2026-07-19T08:15',
+    });
     correctionBody.set('_supersedes', originalId);
     const correctedResponse = await server.request('/forms/gym-session-entry', {
       method: 'POST',
@@ -1100,6 +1295,8 @@ test('receipt edit prefills values and saves an immutable superseding correction
     ));
     assert.deepEqual(corrected.supersedesRecord, { resourceKind: 'form-submission', id: originalId });
     assert.equal(corrected.values.find((entry) => entry.fieldId === 'top-weight').value, 230);
+    assert.equal(corrected.eventAt, '2026-07-19T08:15:00-04:00');
+    assert.equal(corrected.values.find((entry) => entry.fieldId === 'session-date').value, corrected.eventAt);
     assert.equal((await submissionFiles(fixture.submissionsPath)).length, 2);
 
     const receipt = await server.request(correctedResponse.headers.get('location'), {

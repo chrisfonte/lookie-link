@@ -828,6 +828,7 @@ function createApp(options = {}) {
         ? formsConfig.publicOrigins
         : options.formsPublicOrigin,
       timezone: options.formsTimezone === undefined ? formsConfig.timezone : options.formsTimezone,
+      clock: options.formsClock,
       contexts: options.formsCsrfContexts,
       audit: formsAudit,
       logger,
