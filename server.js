@@ -822,6 +822,7 @@ function createApp(options = {}) {
       registry: formsRegistry,
       store: formsStore,
       service: formsService,
+      destinationIds: Object.keys(destinationRoots),
       authorize: options.formsAuthorize,
       publicOrigin: options.formsPublicOrigin === undefined
         ? formsConfig.publicOrigins
