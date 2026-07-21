@@ -2,7 +2,35 @@
 
 # ADR-92: Forms ownership, permissions, CSRF, and raw-HTML boundary
 
-- **Status:** Proposed
+> ## As-built status — 2026-07-21
+>
+> **Built and matching this ADR:** the sandbox token set `allow-scripts allow-forms
+> allow-popups`, with no `allow-same-origin`, applied to artifact HTML; synchronizer CSRF token
+> plus exact-Origin checking that fails closed when no public origin is configured;
+> Post/Redirect/Get on native form submission; uniform 404s that conceal existence rather than
+> leaking it.
+>
+> Two live vulnerabilities were found and fixed during implementation, both proven with real
+> headless Chrome writing real files: `/embed` served artifact HTML same-origin with no CSP
+> ([#164](https://github.com/chrisfonte/lookie-link/issues/164)), and `/asset/*.svg` served
+> executable SVG the same way ([#165](https://github.com/chrisfonte/lookie-link/issues/165)).
+>
+> **Divergence — the permission model has no grant path.** `forms.manage` is defined but no
+> configuration path grants it to a bearer token, so agents depend on ambient `unrestricted`
+> access. Tracked as [#183](https://github.com/chrisfonte/lookie-link/issues/183).
+>
+> **Context this ADR predates.** There is still no authentication. Every caller resolves to
+> `unrestricted`, and an unauthenticated caller is recorded as a principal named `operator` —
+> so the ownership model described here is written but never exercised against a real
+> unauthorised caller. Tracked as [#192](https://github.com/chrisfonte/lookie-link/issues/192)
+> (explicit unauthenticated principal) and
+> [#84](https://github.com/chrisfonte/lookie-link/issues/84) (verification).
+>
+> Triage record: `~/operations-system/plans/lookie-link-backlog-triage/`.
+
+
+
+- **Status:** Accepted 2026-07-21 — partially implemented, see As-built status
 - **Date:** 2026-07-19
 - **Decision owners:** Lookie-Link operator and maintainers
 - **Parent:** issue #90

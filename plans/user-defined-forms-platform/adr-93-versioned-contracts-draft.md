@@ -1,7 +1,43 @@
 # ADR 93: Versioned template, form, submission, and direct-file contracts
 
+> ## As-built status — 2026-07-21
+>
+> The Phase-1 forms slice shipped between this revision and today. Recorded here so this
+> document is not read as a description of the running system.
+>
+> **Built and matching this ADR:** immutable one-file-per-submission store (exclusive `wx`
+> create, fsync, atomic `link(2)` publish that cannot replace an existing record, directory
+> fsync); capture-time `fieldType`, `fieldLabel`, and option-label snapshots, so template edits
+> never re-caption issued receipts; corrections as new records via `supersedesRecord`;
+> RFC 8785-style canonical serialization with `schemaDigest`; idempotency keys with replay
+> protection.
+>
+> **Divergence 1 — `templateVersion` semantics. The ADR is correct; the code is wrong.**
+> This document states that `templateVersion` versions a template's immutable content while
+> `revision` versions a mutable definition, and that they are *not interchangeable*.
+> `lib/forms/submission-service.js` stamps `templateVersion: template.revision`. Confirmed on
+> the live instance: `gym-strength-entry` is revision 2 with **zero** published versions, so
+> every submission's provenance pointer refers to a version that does not exist. Tracked as
+> [#185](https://github.com/chrisfonte/lookie-link/issues/185); the fix is to the code, not to
+> this ADR.
+>
+> **Divergence 2 — the form-instance layer is deferred, not dropped silently.** §3.3
+> (`resourceKind: form-instance`) and the `{ formId, formRevision }` references on submissions
+> and related records are **not implemented**. Submissions reference the template directly and
+> carry no `formId`. Tracked as [#118](https://github.com/chrisfonte/lookie-link/issues/118)
+> and [#123](https://github.com/chrisfonte/lookie-link/issues/123).
+>
+> **Open question that could move §3.** Whether structured write-back belongs in a database
+> rather than files is unresolved (private todo `2026-07-12-lookie-writeback-database-question`,
+> SQLite → Postgres ladder). The file model shipped before that was answered. Resolving it
+> would change the storage assumptions here.
+>
+> Triage record: `~/operations-system/plans/lookie-link-backlog-triage/`.
+
+
+
 - Changelog: Revision 2 addresses adversarial-review requirements R1–R4.
-- Status: Proposed
+- Status: Accepted 2026-07-21 — partially implemented, see As-built status
 - Date: 2026-07-19
 - Issue: #93
 - Parent: #90
