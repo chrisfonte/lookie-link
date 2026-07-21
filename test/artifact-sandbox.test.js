@@ -58,3 +58,34 @@ test('the /view wrapper frames the embedded artifact with a sandbox attribute', 
     assert.ok(!/allow-same-origin/.test(iframe[0]), 'iframe must never grant allow-same-origin');
   });
 });
+
+test('scriptable asset MIME types are sandboxed on /asset; ordinary files are not', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-asset-'));
+  const repo = path.join(root, 'docs');
+  fs.mkdirSync(repo, { recursive: true });
+  // SVG can carry <script>; served same-origin it is the same write primitive
+  // as unsandboxed /embed was (proven exploitable in a real browser).
+  fs.writeFileSync(path.join(repo, 'diagram.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><circle r="5"/></svg>');
+  fs.writeFileSync(path.join(repo, 'notes.md'), '# plain\n');
+  const app = createApp({
+    mappings: { docs: repo },
+    accessConfig: { humanDefault: 'full' },
+    editingEnabled: true,
+  });
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const svg = await fetch(`${origin}/asset/docs/diagram.svg`);
+    assert.equal(svg.headers.get('content-security-policy'), EXPECTED, 'SVG must be sandboxed');
+    assert.ok(!/allow-same-origin/.test(svg.headers.get('content-security-policy')));
+    assert.equal(svg.headers.get('x-content-type-options'), 'nosniff');
+
+    const md = await fetch(`${origin}/asset/docs/notes.md`);
+    assert.equal(md.headers.get('content-security-policy'), null, 'non-scriptable assets need no sandbox');
+    assert.equal(md.headers.get('x-content-type-options'), 'nosniff', 'but must still refuse MIME sniffing');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
