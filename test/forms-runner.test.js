@@ -150,6 +150,26 @@ function browserContext(response, html) {
   return { cookie, token, document };
 }
 
+function assertSharedFormsShell(response, html, customThemeMarker) {
+  const document = new JSDOM(html).window.document;
+  assert.ok(document.querySelector('link[rel="stylesheet"][href="/public/style.css"]'));
+  assert.ok(document.querySelector('[data-theme-picker]'));
+  assert.ok(document.querySelector('[data-theme-toggle]'));
+  assert.match(html, /lookie-link-color-scheme/);
+  assert.match(html, new RegExp(customThemeMarker));
+
+  const policy = response.headers.get('content-security-policy');
+  const nonce = policy && policy.match(/script-src 'nonce-([^']+)'/)?.[1];
+  assert.ok(nonce, 'forms shell scripts must use a CSP nonce');
+  for (const script of document.querySelectorAll('script')) {
+    assert.equal(script.getAttribute('nonce'), nonce);
+  }
+  for (const style of document.querySelectorAll('style')) {
+    assert.equal(style.getAttribute('nonce'), nonce);
+  }
+  return document;
+}
+
 async function getBrowserContext(server, templateId = 'gym-session-entry') {
   const response = await server.request(`/forms/${templateId}`);
   assert.equal(response.status, 200);
@@ -240,6 +260,64 @@ test('GET renders every field type, required markers, constraints, and a CSRF to
     assert.equal(document.querySelector('#field-choice').tagName, 'SELECT');
     assert.equal(document.querySelector('#field-choices').multiple, true);
     assert.equal(document.querySelectorAll('[required]').length, everyTypeTemplate.fields.length);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('form and receipt use the themed shell, preserve escaping, and offer Log another', async () => {
+  const fixture = await makeFixture();
+  const templatePath = path.join(fixture.templatesPath, 'gym-session-entry.yaml');
+  const template = yaml.load(await fs.readFile(templatePath, 'utf8'));
+  template.fields.find((field) => field.id === 'notes').label = '<em>Notes</em>';
+  await fs.writeFile(templatePath, yaml.dump(template), 'utf8');
+  const customThemeMarker = '--forms-shell-test';
+  const server = await startServer(fixture, {
+    customThemeCss: `:root { ${customThemeMarker}: #123456; }`,
+  });
+
+  try {
+    const formResponse = await server.request('/forms/gym-session-entry');
+    assert.equal(formResponse.status, 200);
+    const formHtml = await formResponse.text();
+    const formDocument = assertSharedFormsShell(formResponse, formHtml, customThemeMarker);
+    const context = browserContext(formResponse, formHtml);
+    assert.equal(formDocument.querySelector('.topbar h1').textContent, 'Gym Session Entry');
+    assert.equal(formDocument.querySelector('.topbar .back').getAttribute('href'), '/');
+    assert.equal(formDocument.querySelector('label[for="field-notes"]').textContent, '<em>Notes</em> *');
+    assert.match(formHtml, /&lt;em&gt;Notes&lt;\/em&gt;/);
+    assert.doesNotMatch(formHtml, /<em>Notes<\/em>/);
+    assert.ok(formDocument.querySelector('input[name="_csrf"]'));
+    assert.equal(formDocument.querySelector('iframe'), null, 'first-party forms must not be iframed');
+
+    const submittedMarkup = '<img src=x onerror=alert(1)>';
+    const accepted = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: context.cookie,
+        Origin: PUBLIC_ORIGIN,
+      },
+      body: nativeBody(context.token, { notes: submittedMarkup }),
+    });
+    assert.equal(accepted.status, 303);
+
+    const receiptResponse = await server.request(accepted.headers.get('location'), {
+      headers: { Cookie: context.cookie },
+    });
+    assert.equal(receiptResponse.status, 200);
+    const receiptHtml = await receiptResponse.text();
+    const receiptDocument = assertSharedFormsShell(receiptResponse, receiptHtml, customThemeMarker);
+    assert.equal(receiptDocument.querySelector('.topbar h1').textContent, 'Submission received');
+    assert.equal(receiptDocument.querySelector('.topbar .back').getAttribute('href'), '/');
+    assert.equal(
+      receiptDocument.querySelector('.form-primary-action').getAttribute('href'),
+      '/forms/gym-session-entry'
+    );
+    assert.equal(receiptDocument.querySelector('.form-primary-action').textContent, 'Log another');
+    assert.match(receiptHtml, /&lt;em&gt;Notes&lt;\/em&gt;/);
+    assert.match(receiptHtml, /&lt;img src=x onerror=alert\(1\)&gt;/);
+    assert.doesNotMatch(receiptHtml, /<dd><img/);
   } finally {
     await cleanup(fixture, server);
   }
@@ -728,7 +806,7 @@ test('capture-time receipt labels and values remain HTML escaped', () => {
       value: '<img src=x onerror=alert(1)>',
     }],
   });
-  assert.doesNotMatch(html, /<script>label|<img src/);
+  assert.doesNotMatch(html, /<script>label|<dd><img/);
   assert.match(html, /&lt;script&gt;label\(\)&lt;\/script&gt;/);
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
 });

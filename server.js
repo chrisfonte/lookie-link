@@ -821,6 +821,7 @@ function createApp(options = {}) {
       contexts: options.formsCsrfContexts,
       audit: formsAudit,
       logger,
+      customThemeCss,
     }));
   }
   app.use(express.json({ limit: '2mb' }));
