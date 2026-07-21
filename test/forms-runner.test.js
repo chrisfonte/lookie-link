@@ -183,7 +183,7 @@ function nativeBody(token, overrides = {}) {
     _csrf: token,
     'session-date': '2026-07-20T09:30',
     lift: 'bench',
-    'top-weight': '225.5',
+    'top-weight': '225',
     'top-reps': '5',
     rpe: '8',
     'felt-strong': 'true',
@@ -280,8 +280,94 @@ test('GET renders every field type, required markers, constraints, and a CSRF to
     assert.equal(document.querySelector('#field-choices').multiple, true);
     assert.equal(document.querySelectorAll('[required]').length, everyTypeTemplate.fields.length);
     assert.equal(document.querySelector('.topbar .subtitle'), null);
-    assert.equal(document.querySelector('.form-primary-action').textContent, 'Log Every Field');
-    assert.doesNotMatch(html, />Submit</);
+    assert.equal(document.querySelector('.form-primary-action').textContent, 'Submit');
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('stepped number selects render bounded options, preserve selection, and store numbers', async () => {
+  const fixture = await makeFixture();
+  const template = {
+    contractVersion: 1,
+    resourceKind: 'form-template',
+    templateId: 'stepped-numbers',
+    ownerId: 'operator',
+    revision: 1,
+    grammarVersion: 1,
+    title: 'Stepped numbers',
+    fields: [
+      {
+        id: 'load', type: 'number', component: 'stepped-select', label: 'Load (kg)', required: true,
+        constraints: { minimum: 1, maximum: 3, step: 0.5 },
+      },
+      {
+        id: 'missing-range', type: 'number', component: 'stepped-select', label: 'Missing range', required: false,
+        constraints: { minimum: 0, step: 1 },
+      },
+      {
+        id: 'too-many', type: 'number', component: 'stepped-select', label: 'Too many', required: false,
+        constraints: { minimum: 0, maximum: 201, step: 1 },
+      },
+      { id: 'summary', type: 'short-text', label: 'Summary', required: true },
+    ],
+  };
+  await fs.writeFile(
+    path.join(fixture.templatesPath, 'stepped-numbers.yaml'),
+    yaml.dump(template),
+    'utf8'
+  );
+  const server = await startServer(fixture);
+  try {
+    const response = await server.request('/forms/stepped-numbers');
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    const context = browserContext(response, html);
+    const load = context.document.querySelector('#field-load');
+    assert.equal(load.tagName, 'SELECT');
+    assert.equal(load.className, 'stepped-select');
+    assert.deepEqual(
+      [...load.options].map((option) => option.value),
+      ['', '1', '1.5', '2', '2.5', '3']
+    );
+    assert.equal(context.document.querySelector('#field-missing-range').type, 'number');
+    assert.equal(context.document.querySelector('#field-missing-range').step, '1');
+    assert.equal(context.document.querySelector('#field-too-many').type, 'number');
+    assert.equal(context.document.querySelector('.form-primary-action').textContent, 'Submit');
+
+    const invalid = await server.request('/forms/stepped-numbers', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: context.cookie,
+        Origin: PUBLIC_ORIGIN,
+      },
+      body: new URLSearchParams({ _csrf: context.token, load: '2.5', summary: '' }),
+    });
+    assert.equal(invalid.status, 422);
+    const invalidDocument = new JSDOM(await invalid.text()).window.document;
+    assert.equal(invalidDocument.querySelector('#field-load').value, '2.5');
+    assert.equal(
+      invalidDocument.querySelector('.entries-link').getAttribute('href'),
+      '/forms/stepped-numbers/entries'
+    );
+
+    const accepted = await server.request('/forms/stepped-numbers', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: context.cookie,
+        Origin: PUBLIC_ORIGIN,
+      },
+      body: new URLSearchParams({ _csrf: context.token, load: '2.5', summary: 'Working set' }),
+    });
+    assert.equal(accepted.status, 303);
+    const records = await Promise.all((await submissionFiles(fixture.submissionsPath)).map((fileName) => (
+      fs.readFile(path.join(fixture.submissionsPath, fileName), 'utf8').then(JSON.parse)
+    )));
+    const storedLoad = records[0].values.find((entry) => entry.fieldId === 'load').value;
+    assert.equal(storedLoad, 2.5);
+    assert.equal(typeof storedLoad, 'number');
   } finally {
     await cleanup(fixture, server);
   }
@@ -352,7 +438,7 @@ test('form and receipt use the themed shell, preserve escaping, and offer Log an
     assert.equal(formDocument.querySelector('.topbar h1').textContent, 'Gym Session Entry');
     assert.equal(formDocument.querySelector('.topbar .subtitle'), null);
     assert.equal(formDocument.querySelector('.topbar .back').getAttribute('href'), '/');
-    assert.equal(formDocument.querySelector('.form-primary-action').textContent, 'Log Gym Session');
+    assert.equal(formDocument.querySelector('.form-primary-action').textContent, 'Submit');
     assert.equal(formDocument.querySelector('label[for="field-notes"]').textContent, '<em>Notes</em> *');
     assert.match(formHtml, /&lt;em&gt;Notes&lt;\/em&gt;/);
     assert.doesNotMatch(formHtml, /<em>Notes<\/em>/);
@@ -416,7 +502,7 @@ test('native POST redirects with 303 and the receipt page renders submitted valu
     assert.equal(receipt.status, 200);
     const html = await receipt.text();
     assert.match(html, /Bench press/);
-    assert.match(html, /225\.5/);
+    assert.match(html, /225/);
     assert.match(html, /Smooth reps/);
     assert.equal((await submissionFiles(fixture.submissionsPath)).length, 1);
   } finally {
@@ -431,7 +517,7 @@ test('native validation failure preserves entered values, renders errors, and wr
     const context = await getBrowserContext(server);
     const body = nativeBody(context.token);
     body.delete('notes');
-    body.set('rpe', '11');
+    body.set('rpe', '10');
     const response = await server.request('/forms/gym-session-entry', {
       method: 'POST',
       headers: {
@@ -444,9 +530,9 @@ test('native validation failure preserves entered values, renders errors, and wr
     assert.equal(response.status, 422);
     const document = new JSDOM(await response.text()).window.document;
     assert.match(document.body.textContent, /Please correct/);
-    assert.equal(document.querySelector('#field-rpe').value, '11');
+    assert.equal(document.querySelector('#field-rpe').value, '10');
     assert.equal(document.querySelector('#field-lift').value, 'bench');
-    assert.equal(document.querySelector('#field-top-weight').value, '225.5');
+    assert.equal(document.querySelector('#field-top-weight').value, '225');
     assert.deepEqual(await submissionFiles(fixture.submissionsPath), []);
   } finally {
     await cleanup(fixture, server);
@@ -845,7 +931,13 @@ test('receipt authorization conceals submissions from a different principal', as
   });
   try {
     const form = await server.request('/forms/gym-session-entry', { headers: { 'X-Principal': 'owner' } });
-    const context = browserContext(form, await form.text());
+    const formHtml = await form.text();
+    const context = browserContext(form, formHtml);
+    assert.equal(
+      context.document.querySelector('.entries-link').getAttribute('href'),
+      '/forms/gym-session-entry/entries'
+    );
+    assert.match(context.document.querySelector('.recent-entries-empty').textContent, /first entry/i);
     const accepted = await server.request('/forms/gym-session-entry', {
       method: 'POST',
       headers: {
@@ -914,7 +1006,22 @@ test('entries page is reverse chronological, grouped with date and time, and str
     };
     await submit('owner', jsonValues({ 'top-weight': 205, notes: 'Older own' }));
     await submit('owner', jsonValues({ 'top-weight': 225, notes: 'Newer own' }));
-    await submit('other', jsonValues({ 'top-weight': 999, notes: 'Foreign secret' }));
+    await submit('other', jsonValues({ 'top-weight': 995, notes: 'Foreign secret' }));
+
+    const refreshedForm = await server.request('/forms/gym-session-entry', {
+      headers: { 'X-Principal': 'owner' },
+    });
+    assert.equal(refreshedForm.status, 200);
+    const refreshedHtml = await refreshedForm.text();
+    const refreshedDocument = new JSDOM(refreshedHtml).window.document;
+    const recentRows = [...refreshedDocument.querySelectorAll('.recent-entries .entry-row')];
+    assert.equal(recentRows.length, 2);
+    assert.match(recentRows[0].textContent, /225/);
+    assert.match(recentRows[1].textContent, /205/);
+    assert.doesNotMatch(
+      refreshedDocument.querySelector('.recent-entries').textContent,
+      /995|Foreign secret/
+    );
 
     const response = await server.request('/forms/gym-session-entry/entries', {
       headers: { 'X-Principal': 'owner' },
@@ -926,7 +1033,7 @@ test('entries page is reverse chronological, grouped with date and time, and str
     assert.equal(rows.length, 2);
     assert.match(rows[0].textContent, /225/);
     assert.match(rows[1].textContent, /205/);
-    assert.doesNotMatch(html, /999|Foreign secret/);
+    assert.doesNotMatch(html, /995|Foreign secret/);
     assert.equal(document.querySelectorAll('.entries-day').length, 2);
     for (const time of document.querySelectorAll('.entry-row-heading time')) {
       assert.match(time.getAttribute('datetime'), /^2026-07-\d{2}T\d{2}:\d{2}/);
@@ -967,7 +1074,7 @@ test('receipt edit prefills values and saves an immutable superseding correction
     });
     assert.equal(edit.status, 200);
     const editDocument = new JSDOM(await edit.text()).window.document;
-    assert.equal(editDocument.querySelector('#field-top-weight').value, '225.5');
+    assert.equal(editDocument.querySelector('#field-top-weight').value, '225');
     assert.equal(editDocument.querySelector('#field-notes').value, 'Smooth reps');
     assert.equal(editDocument.querySelector('input[name="_supersedes"]').value, originalId);
     assert.match(editDocument.querySelector('.correction-note').textContent, /earlier version stays preserved/i);
