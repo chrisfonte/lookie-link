@@ -66,6 +66,7 @@ const {
   renderEditPage,
   renderPreviewHtml,
   setThemeList,
+  setNavLinks,
 } = require('./lib/renderer');
 const {
   readAnnotationDocument,
@@ -631,6 +632,11 @@ function createApp(options = {}) {
   const rawManagedReposConfig = options.managedReposConfig === undefined ? getManagedReposConfig() : options.managedReposConfig;
   const rawPublishConfig = options.publishConfig === undefined ? getPublishConfig() : options.publishConfig;
   const formsConfig = options.formsConfig === undefined ? getFormsConfig() : options.formsConfig;
+  // Forms only appears when the deployment actually serves them.
+  setNavLinks([
+    { href: '/', label: 'Files' },
+    ...(formsConfig && formsConfig.enabled === true ? [{ href: '/forms', label: 'Forms' }] : []),
+  ]);
   const accessConfig = parseAccessConfig(rawAccessConfig);
   const apiKeyStore = options.apiKeyStore === undefined
     ? ApiKeyStore.fromAccessConfig(rawAccessConfig.apiKeys)
