@@ -103,7 +103,14 @@ repositories:
 # forms:
 #   enabled: true
 #   templatesPath: ~/.local/share/lookie-link/form-templates
-#   submissionsPath: ~/.local/share/lookie-link/form-submissions
+#   # Deployment-owned aliases. Templates may select one of these definition
+#   # IDs, but cannot declare storage paths or create destinations.
+#   destinations:
+#     gym-log: ~/.local/share/lookie-link/gym-submissions
+#     default: ~/.local/share/lookie-link/form-submissions
+#   # Legacy single-root configuration remains supported as `default` when
+#   # destinations is absent:
+#   # submissionsPath: ~/.local/share/lookie-link/form-submissions
 #   # IANA zone used when a browser cannot report its UTC offset.
 #   timezone: America/New_York
 #   # Required for browser mutations. Each entry is an exact scheme/host/port;

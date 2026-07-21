@@ -82,7 +82,10 @@ const {
   buildWhoAmIDocument,
 } = require('./lib/agent-discovery');
 const { TemplateRegistry } = require('./lib/forms/template-registry');
-const { SubmissionStore } = require('./lib/forms/submission-store');
+const {
+  DestinationAdapter,
+  configuredDestinationRoots,
+} = require('./lib/forms/destination-adapter');
 const { SubmissionService } = require('./lib/forms/submission-service');
 const { createFormsRouter } = require('./lib/forms/routes');
 
@@ -788,11 +791,16 @@ function createApp(options = {}) {
     next();
   });
   if (formsConfig && formsConfig.enabled === true) {
-    if (!formsConfig.templatesPath || !formsConfig.submissionsPath) {
-      throw new Error('forms.templatesPath and forms.submissionsPath are required when forms are enabled.');
+    if (!formsConfig.templatesPath) {
+      throw new Error('forms.templatesPath is required when forms are enabled.');
     }
-    const formsRegistry = options.formsRegistry || new TemplateRegistry({ templatesPath: formsConfig.templatesPath });
-    const formsStore = options.formsStore || new SubmissionStore({ storageRoot: formsConfig.submissionsPath });
+    const destinationRoots = configuredDestinationRoots(formsConfig);
+    const formsRegistry = options.formsRegistry || new TemplateRegistry({
+      templatesPath: formsConfig.templatesPath,
+      destinationIds: Object.keys(destinationRoots),
+      logger,
+    });
+    const formsStore = options.formsStore || new DestinationAdapter({ destinations: destinationRoots });
     const formsService = options.formsService || new SubmissionService({ registry: formsRegistry, store: formsStore });
     const formsAudit = typeof options.formsAudit === 'function'
       ? options.formsAudit

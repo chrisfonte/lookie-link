@@ -1,6 +1,6 @@
 # Configuration
 
-The authoritative inventory of recognized keys, defaults, and environment overrides is [CAPABILITIES.md](CAPABILITIES.md#configuration-key-inventory). Unknown YAML keys are not feature declarations; in particular, there are no implemented forms, templates, or submissions settings.
+The authoritative inventory of recognized keys, defaults, and environment overrides is [CAPABILITIES.md](CAPABILITIES.md#configuration-key-inventory). Unknown YAML keys are not feature declarations; only settings listed in that inventory are supported.
 
 ## File lookup and precedence
 

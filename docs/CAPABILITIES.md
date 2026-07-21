@@ -150,6 +150,12 @@ Neither response includes credentials, token names, repository roots, store path
 | `publish.maxRevisionBytes` | Positive integer; default `10485760` |
 | `publish.maxMetadataBytes` | Positive integer; default `65536` |
 | `publish.maxRevisions` | Positive integer; default `20` |
+| `forms.enabled` | Enables the first-party forms routes; default `false` |
+| `forms.templatesPath` | Directory containing validated form-template YAML files; required when forms are enabled |
+| `forms.destinations.<destinationId>` | Deployment-owned map from definition-ID aliases to absolute or `~/`-relative submission roots; roots are never disclosed to clients |
+| `forms.submissionsPath` | Legacy single submission root; when `destinations` is absent it becomes the `default` destination |
+| `forms.timezone` | IANA timezone used when a browser cannot report its UTC offset |
+| `forms.publicOrigins[]` / `.publicOrigin` | Exact allowed browser mutation origins, including scheme and port; browser mutations fail closed when absent |
 | `themes.<name>.dark` / `.light` | Custom CSS-variable maps. Accepted keys: `bg`, `bg_elev`, `bg_code`, `text`, `text_soft`, `accent`, `border`, `link`, `page_bg`, `toolbar_bg`, `toolbar_btn_bg`, `toolbar_btn_hover`, `toolbar_btn_text`, `toc_active_bg`, `heading_font` |
 
 Configuration file lookup is `LOOKIE_LINK_CONFIG`, then the user config directory, then the project root. The recognized server environment variables are `LOOKIE_LINK_CONFIG`, `ROOT_MAPPINGS`, `PORT`, `HOSTNAME`, `LOOKIE_LINK_ENABLE_EDITING`, `LOOKIE_LINK_ENABLE_ANNOTATIONS`, and `LOOKIE_LINK_ENABLE_RAW_HTML`. Secret environment-variable names are chosen by each `secretEnv` value.
@@ -211,9 +217,15 @@ equality test intentionally does not cover them.
 | Receipt: `/forms/:templateId/receipts/:submissionId` | `GET` | Submitter (or `read_submissions`) | `forms.enabled` | Uniform 404 for non-owners and unknown IDs. |
 
 Templates are file-backed and validated on load (invalid ones are skipped, last
-known good retained). Each accepted submission is one immutable JSON file with a
-capture-time field type and label, option label snapshots, schema digest, and
-optional idempotency key.
+known good retained). A template may select an optional definition-ID
+`destinationId`; omission selects `default`. The deployment-owned destination
+adapter maps approved aliases to private storage roots. A template cannot define
+that map or use a path as an alias, and an unknown alias prevents startup rather
+than falling back. Each accepted submission is one immutable JSON file under the
+selected root, with a capture-time field type and label, option label snapshots,
+schema digest, and optional idempotency key. Receipt, correction, history, and
+list reads use the same template destination, and no client response or audit
+event includes storage paths.
 
 Forms builder UI, dynamic option providers, sessions, and reaction dispatch are
 **not** implemented.
