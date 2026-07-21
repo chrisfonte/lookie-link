@@ -1300,6 +1300,129 @@ test('exit gate survives fresh registry, store, service, and app construction', 
   }
 });
 
+test('destination aliases isolate writes, lists, and receipts without disclosing storage roots', async () => {
+  const fixture = await makeFixture();
+  const gymRoot = path.join(fixture.root, 'private-gym-records');
+  const notesRoot = path.join(fixture.root, 'private-notes-records');
+  const defaultRoot = path.join(fixture.root, 'private-default-records');
+  const source = yaml.load(await fs.readFile(GYM_FIXTURE, 'utf8'));
+  const gymTemplate = {...source, templateId: 'gym-log', title: 'Gym Log', destinationId: 'gym-records'};
+  const notesTemplate = {...source, templateId: 'training-notes', title: 'Training Notes', destinationId: 'notes-records'};
+  const defaultTemplate = {...source, templateId: 'daily-log', title: 'Daily Log'};
+  await fs.rm(path.join(fixture.templatesPath, 'gym-session-entry.yaml'));
+  await fs.writeFile(path.join(fixture.templatesPath, 'gym-log.yaml'), yaml.dump(gymTemplate), 'utf8');
+  await fs.writeFile(path.join(fixture.templatesPath, 'training-notes.yaml'), yaml.dump(notesTemplate), 'utf8');
+  await fs.writeFile(path.join(fixture.templatesPath, 'daily-log.yaml'), yaml.dump(defaultTemplate), 'utf8');
+  const events = [];
+  const server = await startServer(fixture, {
+    formsConfig: {
+      enabled: true,
+      templatesPath: fixture.templatesPath,
+      destinations: {
+        'gym-records': gymRoot,
+        'notes-records': notesRoot,
+        default: defaultRoot,
+      },
+    },
+    formsAudit: (event) => events.push(event),
+  });
+  try {
+    const created = {};
+    const responseBodies = [];
+    for (const templateId of ['gym-log', 'training-notes', 'daily-log']) {
+      const context = await getBrowserContext(server, templateId);
+      const response = await server.request(`/api/forms/${templateId}/submissions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: context.cookie,
+          Origin: PUBLIC_ORIGIN,
+          'X-CSRF-Token': context.token,
+        },
+        body: JSON.stringify({ values: jsonValues({ notes: `private value for ${templateId}` }) }),
+      });
+      assert.equal(response.status, 201);
+      const body = await response.json();
+      created[templateId] = body;
+      responseBodies.push(JSON.stringify(body));
+    }
+
+    assert.deepEqual((await submissionFiles(gymRoot)), [`${created['gym-log'].submissionId}.json`]);
+    assert.deepEqual((await submissionFiles(notesRoot)), [`${created['training-notes'].submissionId}.json`]);
+    assert.deepEqual((await submissionFiles(defaultRoot)), [`${created['daily-log'].submissionId}.json`]);
+
+    for (const [templateId, otherTemplateId] of [
+      ['gym-log', 'training-notes'],
+      ['training-notes', 'daily-log'],
+      ['daily-log', 'gym-log'],
+    ]) {
+      const ownReceipt = await server.request(created[templateId].receiptUrl);
+      assert.equal(ownReceipt.status, 200);
+      responseBodies.push(await ownReceipt.text());
+      const crossed = await server.request(
+        `/forms/${templateId}/receipts/${created[otherTemplateId].submissionId}`
+      );
+      assert.equal(crossed.status, 404);
+      responseBodies.push(await crossed.text());
+      const entries = await server.request(`/api/forms/${templateId}/submissions`);
+      assert.equal(entries.status, 200);
+      const entriesBody = await entries.json();
+      assert.deepEqual(entriesBody.submissions.map((entry) => entry.submissionId), [created[templateId].submissionId]);
+      responseBodies.push(JSON.stringify(entriesBody));
+    }
+
+    const disclosed = `${responseBodies.join('\n')}\n${JSON.stringify(events)}`;
+    for (const storageRoot of [gymRoot, notesRoot, defaultRoot]) {
+      assert.doesNotMatch(disclosed, new RegExp(storageRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    }
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('an unknown destination alias fails startup without silently writing to default', async () => {
+  const fixture = await makeFixture();
+  const defaultRoot = path.join(fixture.root, 'default-records');
+  const document = yaml.load(await fs.readFile(GYM_FIXTURE, 'utf8'));
+  document.destinationId = 'operator-must-approve';
+  await fs.writeFile(path.join(fixture.templatesPath, 'gym-session-entry.yaml'), yaml.dump(document), 'utf8');
+  try {
+    await assert.rejects(
+      () => startServer(fixture, {
+        formsConfig: {
+          enabled: true,
+          templatesPath: fixture.templatesPath,
+          destinations: { default: defaultRoot },
+        },
+      }),
+      /gym-session-entry\.yaml references unknown destinationId operator-must-approve/
+    );
+    assert.deepEqual(await submissionFiles(defaultRoot), []);
+  } finally {
+    await cleanup(fixture, null);
+  }
+});
+
+test('legacy submissionsPath configuration reads records created before the destination adapter', async () => {
+  const fixture = await makeFixture();
+  const legacyStore = new SubmissionStore({ storageRoot: fixture.submissionsPath });
+  const legacyRecord = await legacyStore.createSubmission({
+    actor: { id: 'local-user', type: 'human' },
+    templateId: 'gym-session-entry',
+    templateVersion: 1,
+    schemaDigest: `sha256:${'a'.repeat(64)}`,
+    values: [{ fieldId: 'notes', fieldType: 'long-text', fieldLabel: 'Notes', value: 'Legacy entry' }],
+  });
+  const server = await startServer(fixture);
+  try {
+    const receipt = await server.request(`/forms/gym-session-entry/receipts/${legacyRecord.submissionId}`);
+    assert.equal(receipt.status, 200);
+    assert.match(await receipt.text(), /Legacy entry/);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
 test('registry keeps last-known-good data and rejects non-definition IDs without path reads', async () => {
   const fixture = await makeFixture();
   const warnings = [];

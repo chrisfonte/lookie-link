@@ -68,6 +68,14 @@ test('unknown template and field keys report their exact paths', () => {
   assert.ok(paths(validateTemplate(templateWith(fields))).includes('fields[2].surprise'));
 });
 
+test('destinationId accepts only a logical definition ID, never a path', () => {
+  assert.equal(validateTemplate({...everyTypeTemplate, destinationId: 'gym-log'}).valid, true);
+  for (const destinationId of ['/var/lib/forms', '../forms', '~/forms', 'C:\\forms']) {
+    const result = validateTemplate({...everyTypeTemplate, destinationId});
+    assert.ok(paths(result).includes('destinationId'), destinationId);
+  }
+});
+
 test('unknown field types and duplicate field and option IDs are rejected', () => {
   const fields = [
     field('same', 'mystery'),
