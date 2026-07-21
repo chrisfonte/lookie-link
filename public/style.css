@@ -2150,21 +2150,36 @@ tbody tr:last-child td {
 
 .toolbar-select {
   border: 1px solid var(--border);
-  background: var(--toolbar-btn-bg);
+  /* background-color, not the `background` shorthand: the shorthand resets
+     background-image and would erase the chevron below. */
+  background-color: var(--toolbar-btn-bg);
   color: var(--text);
   border-radius: 999px;
-  padding: 0.2rem 0.5rem;
+  padding: 0.2rem 1.45rem 0.2rem 0.6rem;
   font-size: 0.82rem;
   font-weight: 600;
   line-height: 1.3;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
+  -moz-appearance: none;
   outline: none;
+  /* appearance:none strips the native dropdown arrow. Without a replacement the
+     control renders as a plain pill and reads as a static label -- users cannot
+     tell the theme picker is a picker at all. */
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.55rem center;
+  background-size: 0.62rem auto;
 }
 
 .toolbar-select:hover {
-  background: var(--toolbar-btn-hover);
+  background-color: var(--toolbar-btn-hover);
+}
+
+.toolbar-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .content.toc-view {
