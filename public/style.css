@@ -739,9 +739,11 @@ tbody tr:last-child td {
 .form-layout .field-readout input[type="number"] {
   height: 5rem;
   appearance: textfield;
-  padding: 0.5rem 3.75rem 0.5rem 0.75rem;
+  padding: 0.5rem 3rem 0.5rem 0.6rem;
   font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
-  font-size: 2.5rem;
+  /* Weights and reps are routinely 3-4 digits. A fixed 2.5rem clips "150" in a
+     narrow column, so scale with available width and keep a readable floor. */
+  font-size: clamp(1.6rem, 7.5vw, 2.5rem);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   letter-spacing: -0.05em;
@@ -1006,7 +1008,7 @@ tbody tr:last-child td {
   color: var(--text-soft);
 }
 
-@media (min-width: 420px) {
+@media (min-width: 560px) {
   .form-layout .form-section-readouts .form-section-fields {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
