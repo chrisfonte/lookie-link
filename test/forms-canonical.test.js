@@ -101,3 +101,16 @@ test('schema digest includes the canonical terminal newline and only grammarVers
   assert.equal(schemaDigest(template), expected);
   assert.equal(schemaDigest({...template, title: 'Ignored'}), expected);
 });
+
+test('field list and destruction flags participate in the schema digest', () => {
+  const template = {
+    grammarVersion: 1,
+    fields: [{id: 'value', type: 'short-text', label: 'Value', required: false}],
+  };
+  const baseline = schemaDigest(template);
+  for (const flag of ['showInList', 'isDestroyed']) {
+    const changed = structuredClone(template);
+    changed.fields[0][flag] = true;
+    assert.notEqual(schemaDigest(changed), baseline, flag);
+  }
+});

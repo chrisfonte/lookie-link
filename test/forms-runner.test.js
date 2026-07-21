@@ -229,6 +229,19 @@ function nativeBody(token, overrides = {}) {
   });
 }
 
+function formValues(form) {
+  const values = new URLSearchParams();
+  for (const control of form.querySelectorAll('input, select, textarea')) {
+    if (!control.name || control.disabled || (control.type === 'checkbox' && !control.checked)) continue;
+    if (control.tagName === 'SELECT' && control.multiple) {
+      for (const option of control.selectedOptions) values.append(control.name, option.value);
+    } else {
+      values.append(control.name, control.value);
+    }
+  }
+  return values;
+}
+
 function jsonValues(overrides = {}) {
   return {
     'session-date': '2026-07-20T09:30:00-04:00',
@@ -1207,8 +1220,13 @@ test('entries page is reverse chronological, grouped with date and time, and str
     assert.equal(recentRows.length, 2);
     assert.match(recentRows[0].textContent, /225/);
     assert.match(recentRows[1].textContent, /205/);
+    assert.deepEqual(
+      [...recentRows[0].querySelectorAll('.entry-row-summary .entry-metric-label')].map((label) => label.textContent),
+      ['Top weight', 'Top reps', 'RPE'],
+    );
+    assert.match(recentRows[0].querySelector('.entry-row-summary').textContent, /Deadlift/);
     assert.doesNotMatch(
-      refreshedDocument.querySelector('.recent-entries').textContent,
+      [...refreshedDocument.querySelectorAll('.recent-entries .entry-row-summary')].map((row) => row.textContent).join(' '),
       /995|Foreign secret/
     );
 
@@ -1222,11 +1240,16 @@ test('entries page is reverse chronological, grouped with date and time, and str
     assert.equal(rows.length, 2);
     assert.match(rows[0].textContent, /225/);
     assert.match(rows[1].textContent, /205/);
-    assert.doesNotMatch(html, /995|Foreign secret/);
+    assert.doesNotMatch(
+      [...document.querySelectorAll('.entry-row-summary')].map((row) => row.textContent).join(' '),
+      /995|Foreign secret/
+    );
     assert.equal(document.querySelectorAll('.entries-day').length, 2);
+    assert.equal((document.querySelector('.entries-card').textContent.match(/2026/g) || []).length, 2);
     for (const time of document.querySelectorAll('.entry-row-heading time')) {
       assert.match(time.getAttribute('datetime'), /^2026-07-\d{2}T\d{2}:\d{2}/);
-      assert.match(time.textContent, /Jul \d{1,2}, 2026, \d{1,2}:\d{2} [AP]M/);
+      assert.match(time.textContent, /^\d{1,2}:\d{2} [AP]M$/);
+      assert.doesNotMatch(time.textContent, /Jul|2026/);
     }
 
     const empty = await server.request('/forms/gym-session-entry/entries', {
@@ -1234,6 +1257,118 @@ test('entries page is reverse chronological, grouped with date and time, and str
     });
     assert.equal(empty.status, 200);
     assert.match(await empty.text(), /Ready for your first entry\?/);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('showInList fields drive recent and history rows in template order', async () => {
+  const fixture = await makeFixture();
+  const templatePath = path.join(fixture.templatesPath, 'gym-session-entry.yaml');
+  const template = yaml.load(await fs.readFile(templatePath, 'utf8'), {schema: yaml.JSON_SCHEMA});
+  template.fields.find((field) => field.id === 'lift').showInList = true;
+  template.fields.find((field) => field.id === 'top-reps').showInList = true;
+  await fs.writeFile(templatePath, yaml.dump(template), 'utf8');
+  const server = await startServer(fixture, {formsTimezone: 'UTC'});
+  try {
+    const context = await getBrowserContext(server);
+    const accepted = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: context.cookie,
+        Origin: PUBLIC_ORIGIN,
+      },
+      body: nativeBody(context.token),
+    });
+    assert.equal(accepted.status, 303);
+    for (const route of ['/forms/gym-session-entry', '/forms/gym-session-entry/entries']) {
+      const response = await server.request(route, {headers: {Cookie: context.cookie}});
+      const document = new JSDOM(await response.text()).window.document;
+      assert.deepEqual(
+        [...document.querySelectorAll('.entry-row-summary .entry-metric-label')].slice(0, 2).map((label) => label.textContent),
+        ['Lift', 'Top reps'],
+      );
+      assert.equal(document.querySelector('.entry-row-summary').textContent.includes('Top weight'), false);
+    }
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('inline editors on recent and history create immutable linear corrections and edit view excludes itself', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, {formsTimezone: 'America/New_York'});
+  try {
+    const context = await getBrowserContext(server);
+    const accepted = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: context.cookie,
+        Origin: PUBLIC_ORIGIN,
+      },
+      body: nativeBody(context.token),
+    });
+    assert.equal(accepted.status, 303);
+    const originalId = accepted.headers.get('location').split('/').pop();
+    const originalPath = path.join(fixture.submissionsPath, `${originalId}.json`);
+    const originalBytes = await fs.readFile(originalPath);
+
+    let response = await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}});
+    let document = new JSDOM(await response.text()).window.document;
+    let inline = document.querySelector('.recent-entries .inline-edit-form');
+    assert.ok(inline);
+    assert.equal(inline.querySelector('[name="top-weight"]').tagName, 'SELECT');
+    inline.querySelector('[name="top-weight"]').value = '230';
+    inline.querySelector('[name="notes"]').value = 'Recent inline edit';
+    response = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: context.cookie,
+        Origin: PUBLIC_ORIGIN,
+      },
+      body: formValues(inline),
+    });
+    assert.equal(response.status, 303);
+    assert.equal(Buffer.compare(originalBytes, await fs.readFile(originalPath)), 0);
+    const firstCorrectionId = response.headers.get('location').split('/').pop();
+    const firstCorrectionPath = path.join(fixture.submissionsPath, `${firstCorrectionId}.json`);
+    const firstCorrectionBytes = await fs.readFile(firstCorrectionPath);
+    const firstCorrection = JSON.parse(firstCorrectionBytes.toString('utf8'));
+    assert.deepEqual(firstCorrection.supersedesRecord, {resourceKind: 'form-submission', id: originalId});
+
+    response = await server.request('/forms/gym-session-entry/entries', {headers: {Cookie: context.cookie}});
+    document = new JSDOM(await response.text()).window.document;
+    inline = document.querySelector('.entries-card .inline-edit-form');
+    assert.ok(inline);
+    inline.querySelector('[name="top-weight"]').value = '235';
+    inline.querySelector('[name="notes"]').value = 'History inline edit';
+    response = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: context.cookie,
+        Origin: PUBLIC_ORIGIN,
+      },
+      body: formValues(inline),
+    });
+    assert.equal(response.status, 303);
+    assert.equal(Buffer.compare(firstCorrectionBytes, await fs.readFile(firstCorrectionPath)), 0);
+    const latestId = response.headers.get('location').split('/').pop();
+    const latest = JSON.parse(await fs.readFile(path.join(fixture.submissionsPath, `${latestId}.json`), 'utf8'));
+    assert.deepEqual(latest.supersedesRecord, {resourceKind: 'form-submission', id: firstCorrectionId});
+    assert.equal(latest.values.find((entry) => entry.fieldId === 'top-weight').value, 235);
+
+    response = await server.request(`/forms/gym-session-entry/receipts/${latestId}/edit`, {
+      headers: {Cookie: context.cookie},
+    });
+    document = new JSDOM(await response.text()).window.document;
+    assert.equal(
+      [...document.querySelectorAll('.recent-entries [name="_supersedes"]')].some((input) => input.value === latestId),
+      false,
+    );
   } finally {
     await cleanup(fixture, server);
   }
