@@ -458,3 +458,61 @@ test('forms index separates archived templates and removes management detail for
     await server.close();
   }
 });
+
+test('builder offers server-installed themes, saves the choice, and refuses one the server does not offer', async () => {
+  const {setThemeList} = require('../lib/renderer');
+  setThemeList([
+    {slug: 'slate', label: 'Slate'},
+    {slug: 'planet-fitness', label: 'Planet Fitness'},
+    {slug: 'the-bic', label: 'The BIC'},
+  ]);
+
+  const server = await makeServer();
+  try {
+    // A submitLabel set outside the builder must survive a builder save.
+    const before = await server.registry.getManagementTemplate('training-log');
+    await server.registry.reviseDraft('training-log', before.draft.revision, {
+      presentation: {submitLabel: 'Log it'},
+    });
+
+    let configure = await browserPage(await server.request('/forms/training-log/configure'));
+    const themeSelect = configure.document.querySelector('select[name="theme"]');
+    assert.ok(themeSelect, 'builder exposes a theme control');
+    assert.deepEqual(
+      [...themeSelect.options].map((option) => option.value),
+      ['', 'slate', 'planet-fitness', 'the-bic'],
+      'options come from the server theme list, plus an explicit no-override choice'
+    );
+    assert.deepEqual(
+      [...configure.document.querySelector('select[name="themeMode"]').options].map((option) => option.value),
+      ['', 'dark', 'light']
+    );
+
+    const cookie = configure.cookie;
+    const values = formValues(configure.document.querySelector('.builder-form'), 'save');
+    values.set('theme', 'planet-fitness');
+    values.set('themeMode', 'dark');
+    const saved = await browserPost(server, '/forms/training-log/configure', values, cookie);
+    assert.equal(saved.status, 200);
+    assert.match((await browserPage(saved)).document.querySelector('.builder-status').textContent, /Draft saved/);
+
+    const after = await server.registry.getManagementTemplate('training-log');
+    assert.equal(after.draft.presentation.theme, 'planet-fitness');
+    assert.equal(after.draft.presentation.themeMode, 'dark');
+    assert.equal(after.draft.presentation.submitLabel, 'Log it', 'submitLabel survived the save');
+
+    configure = await browserPage(await server.request('/forms/training-log/configure'));
+    assert.equal(configure.document.querySelector('select[name="theme"]').value, 'planet-fitness');
+
+    // A slug the server never offered is refused, not silently stored.
+    const hostile = formValues(configure.document.querySelector('.builder-form'), 'save');
+    hostile.set('theme', 'not-installed');
+    const refused = await browserPost(server, '/forms/training-log/configure', hostile, configure.cookie);
+    assert.equal(refused.status, 400);
+    const unchanged = await server.registry.getManagementTemplate('training-log');
+    assert.equal(unchanged.draft.presentation.theme, 'planet-fitness', 'rejected save changed nothing');
+  } finally {
+    setThemeList(null);
+    await server.close();
+  }
+});
