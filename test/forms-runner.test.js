@@ -1774,3 +1774,40 @@ test('registry keeps last-known-good data and rejects non-definition IDs without
     await cleanup(fixture, null);
   }
 });
+
+test('a template theme reaches the page and does not leak into other forms', () => {
+  const themed = {
+    ...everyTypeTemplate,
+    templateId: 'themed-form',
+    presentation: { submitLabel: 'Submit', theme: 'the-bic', themeMode: 'light' },
+  };
+  const record = {
+    contractVersion: 1, resourceKind: 'form-submission', submissionId: 'sub-1',
+    templateId: 'themed-form', templateRevision: 1, receiptAt: '2026-07-21T12:00:00.000Z',
+    values: [],
+  };
+
+  const themedHtml = renderReceiptPage(themed, record, {});
+  assert.ok(themedHtml.includes('"the-bic"'), 'themed receipt carries the slug');
+  assert.ok(themedHtml.includes('"light"'), 'themed receipt carries the mode');
+
+  // An unthemed template must not inherit it -- the default stays the viewer preference.
+  const plainHtml = renderReceiptPage(everyTypeTemplate, {...record, templateId: 'every-field'}, {});
+  assert.ok(!plainHtml.includes('"the-bic"'), 'unthemed receipt has no page theme');
+});
+
+test('a template cannot smuggle a script through the theme slug', () => {
+  // Defence in depth: schema rejects this shape, and the renderer must too.
+  const hostile = {
+    ...everyTypeTemplate,
+    templateId: 'hostile-form',
+    presentation: { submitLabel: 'Submit', theme: '"};alert(1);//' },
+  };
+  const record = {
+    contractVersion: 1, resourceKind: 'form-submission', submissionId: 'sub-2',
+    templateId: 'hostile-form', templateRevision: 1, receiptAt: '2026-07-21T12:00:00.000Z',
+    values: [],
+  };
+  const html = renderReceiptPage(hostile, record, {});
+  assert.ok(!html.includes('alert(1)'), 'hostile slug is not emitted into the page');
+});
