@@ -1499,6 +1499,218 @@ tbody tr:last-child td {
   font-weight: 700;
 }
 
+.forms-index-layout {
+  max-width: 48rem;
+}
+
+.forms-index-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.forms-index-header .subtitle {
+  margin-bottom: 0;
+}
+
+.forms-index-header > .button-link {
+  flex: 0 0 auto;
+  min-height: 46px;
+}
+
+.forms-index-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.forms-index-item,
+.forms-index-empty,
+.forms-index-simple {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elev);
+}
+
+.forms-index-item,
+.forms-index-empty {
+  padding: 1rem;
+}
+
+.forms-index-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.forms-index-title h2,
+.forms-index-empty h2,
+.archived-form-state h2 {
+  margin: 0;
+  font-family: var(--heading-font, inherit);
+  font-size: 1.08rem;
+}
+
+.forms-index-title h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.forms-index-state {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-soft);
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  padding: 0.28rem 0.48rem;
+  text-transform: uppercase;
+}
+
+.forms-index-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin: 0.9rem 0;
+}
+
+.forms-index-meta div {
+  min-width: 0;
+}
+
+.forms-index-meta dt {
+  color: var(--text-soft);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.forms-index-meta dd {
+  margin: 0.16rem 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+}
+
+.forms-index-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.forms-index-actions form {
+  display: contents;
+}
+
+.forms-index-actions a,
+.forms-index-actions button {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-code);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.79rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.4rem 0.25rem;
+  text-decoration: none;
+}
+
+.forms-index-actions a:first-child {
+  border-color: var(--accent);
+  color: var(--link);
+}
+
+.forms-index-actions a:hover,
+.forms-index-actions button:hover,
+.forms-index-simple:hover {
+  background: var(--toolbar-btn-hover);
+  text-decoration: none;
+}
+
+.forms-index-simple {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--text);
+  font-weight: 700;
+  padding: 0.8rem 1rem;
+}
+
+.forms-index-simple span {
+  color: var(--link);
+  font-size: 1.4rem;
+}
+
+.forms-index-empty {
+  text-align: center;
+}
+
+.forms-index-empty p,
+.archived-form-state p {
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.forms-index-archived {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.forms-index-archived > summary {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-weight: 700;
+  list-style: none;
+  padding: 0 0.25rem;
+}
+
+.forms-index-archived > summary::-webkit-details-marker {
+  display: none;
+}
+
+.forms-index-archived > summary span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  min-width: 1.7rem;
+  padding: 0.18rem 0.42rem;
+  text-align: center;
+}
+
+.forms-index-archived[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
+.forms-index-item.is-archived {
+  border-style: dashed;
+}
+
+.archived-form-state {
+  text-align: center;
+}
+
+.forms-index-actions a:focus-visible,
+.forms-index-actions button:focus-visible,
+.forms-index-simple:focus-visible,
+.forms-index-archived > summary:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
 @media (min-width: 640px) {
   .builder-layout .builder-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1506,6 +1718,17 @@ tbody tr:last-child td {
 
   .builder-layout .builder-wide {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 430px) {
+  .forms-index-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .forms-index-header > .button-link {
+    align-self: flex-start;
   }
 }
 
