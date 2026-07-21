@@ -301,7 +301,14 @@ function sendAccessError(res, accessContext, asJson = false) {
   res.status(accessContext.denialStatus).type('text/plain').send(accessContext.denialMessage);
 }
 
+// Artifact HTML (/raw, /embed) executes author-supplied scripts. Serving it
+// same-origin lets those scripts drive first-party mutations (save, annotations,
+// forms) with the viewer's own credentials. The CSP sandbox forces an opaque
+// origin; allow-same-origin must never be added (ADR-92 B1 + operator decision).
+const ARTIFACT_SANDBOX = 'sandbox allow-scripts allow-forms allow-popups';
+
 function sendRawHtmlResponse(res, sourceBuffer) {
+  res.set('Content-Security-Policy', ARTIFACT_SANDBOX);
   res.status(200).type(RAW_HTML_MIME_TYPE).send(sourceBuffer);
 }
 
@@ -2520,6 +2527,7 @@ function createApp(options = {}) {
         ),
       });
       res.set('X-Lookie-Content-Mode', 'transformed-embed');
+      res.set('Content-Security-Policy', ARTIFACT_SANDBOX);
       res.status(200).type(RAW_HTML_MIME_TYPE).send(html);
     } catch (error) {
       console.error('Failed to transform embed HTML', { repo, relativePath, error });
