@@ -597,6 +597,17 @@ tbody tr:last-child td {
   padding: clamp(1rem, 4vw, 2rem);
 }
 
+.form-layout .form-page-links {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.55rem;
+}
+
+.form-layout .entries-link {
+  font-weight: 700;
+}
+
 .form-layout .form-description {
   margin: 0 0 1.5rem;
   color: var(--text-soft);
@@ -750,6 +761,25 @@ tbody tr:last-child td {
   line-height: 1;
 }
 
+.form-layout .field-readout .stepped-select {
+  height: 5rem;
+  padding: 0.5rem 2.4rem 0.5rem 0.6rem;
+  font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(1.6rem, 7.5vw, 2.5rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.form-layout .readout-control-select .stepped-select {
+  padding-right: 5rem;
+}
+
+.form-layout .readout-control-select .readout-unit {
+  right: 2.2rem;
+}
+
 .form-layout .field-readout input[type="number"]::-webkit-inner-spin-button,
 .form-layout .field-readout input[type="number"]::-webkit-outer-spin-button {
   margin: 0;
@@ -845,6 +875,47 @@ tbody tr:last-child td {
   position: sticky;
   bottom: 0.75rem;
   z-index: 1;
+}
+
+.form-layout .recent-entries {
+  border-top: 1px solid var(--border);
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+}
+
+.form-layout .recent-entries-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.65rem;
+}
+
+.form-layout .recent-entries-heading h2 {
+  margin: 0;
+  color: var(--text-soft);
+  font-family: var(--heading-font, inherit);
+  font-size: 0.9rem;
+}
+
+.form-layout .recent-entries-heading a {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.form-layout .recent-entries .entry-row {
+  padding: 0.65rem;
+}
+
+.form-layout .recent-entries .entry-metrics {
+  margin-top: 0.5rem;
+}
+
+.form-layout .recent-entries-empty {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .form-layout .receipt-table-wrap {

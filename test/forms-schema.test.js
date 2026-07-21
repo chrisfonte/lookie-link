@@ -92,6 +92,10 @@ test('invalid constraint declarations report the individual constraint paths', (
     [field('text', 'short-text', {constraints: {minLength: 3, maxLength: 2}}), 'fields[0].constraints.minLength'],
     [field('count', 'number', {constraints: {minimum: NaN}}), 'fields[0].constraints.minimum'],
     [field('count', 'number', {constraints: {maximum: Infinity}}), 'fields[0].constraints.maximum'],
+    [field('count', 'number', {constraints: {step: 0}}), 'fields[0].constraints.step'],
+    [field('count', 'number', {constraints: {step: -1}}), 'fields[0].constraints.step'],
+    [field('count', 'number', {constraints: {step: Infinity}}), 'fields[0].constraints.step'],
+    [field('count', 'number', {constraints: {minimum: 0, maximum: 10, step: 3}}), 'fields[0].constraints.step'],
     [field('count', 'number', {constraints: {integer: 'yes'}}), 'fields[0].constraints.integer'],
     [field('day', 'date', {constraints: {minimum: '2026-02-30'}}), 'fields[0].constraints.minimum'],
     [field('day', 'date', {constraints: {minimum: '2027-01-01', maximum: '2026-01-01'}}), 'fields[0].constraints.minimum'],
@@ -115,6 +119,18 @@ test('defaults use submission validation and dynamic selection defaults are proh
     field('choice', 'select', {providerSlot: 'catalog', default: 'one'}),
   ]));
   assert.ok(paths(dynamic).includes('fields[0].default'));
+});
+
+test('number steps accept decimal ranges and reject submitted values off the step', () => {
+  const stepped = templateWith([
+    field('load', 'number', {
+      component: 'stepped-select',
+      constraints: { minimum: 0.5, maximum: 2, step: 0.5 },
+    }),
+  ]);
+  assert.deepEqual(validateTemplate(stepped), {valid: true, errors: []});
+  assert.equal(validateSubmissionValues(stepped, {load: 1.5}).valid, true);
+  assert.ok(paths(validateSubmissionValues(stepped, {load: 1.6})).includes('values.load'));
 });
 
 test('submission values reject every type constraint with exact value paths', () => {
