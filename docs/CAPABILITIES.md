@@ -197,4 +197,23 @@ The package also ships compatibility executables `lookie-read` and `lookie-annot
 | `lib/publish-store.js` | Atomic immutable revisions, optimistic update guard, metadata separation, limits, historical resolution, revocation |
 | `lib/renderer.js` | Sanitized Markdown/HTML and highlighted code; directory/image/audio/video/PDF/CSV/JSON pages; portable links; anchors; editor and preview |
 
-No forms, templates, or submission routes, stores, configuration keys, CLI commands, discovery fields, or runtime capabilities are implemented.
+## Forms routes (mounted only when `forms.enabled` is true)
+
+These routes are **not** part of the default route set above: they are registered
+only when the opt-in `forms` configuration block is present, so the route-matrix
+equality test intentionally does not cover them.
+
+| Route | Method | Effective auth | Enabled by | Notes |
+|---|---|---|---|---|
+| Form page: `/forms/:templateId` | `GET` | `forms.submit` or `forms.view` | `forms.enabled` | Server-rendered first-party form; issues the browser context cookie and synchronizer token. |
+| Native submit: `/forms/:templateId` | `POST` | `forms.submit` | `forms.enabled` | Requires exact configured Origin + `_csrf` token; Post/Redirect/Get to the receipt. Fails closed when no public origin is configured. |
+| JSON submit: `/api/forms/:templateId/submissions` | `POST` | `forms.submit` | `forms.enabled` | Same submission service as the native path. |
+| Receipt: `/forms/:templateId/receipts/:submissionId` | `GET` | Submitter (or `read_submissions`) | `forms.enabled` | Uniform 404 for non-owners and unknown IDs. |
+
+Templates are file-backed and validated on load (invalid ones are skipped, last
+known good retained). Each accepted submission is one immutable JSON file with a
+capture-time field type and label, option label snapshots, schema digest, and
+optional idempotency key.
+
+Forms builder UI, dynamic option providers, sessions, and reaction dispatch are
+**not** implemented.

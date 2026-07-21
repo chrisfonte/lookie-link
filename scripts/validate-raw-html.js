@@ -227,9 +227,14 @@ async function run() {
         /<iframe[\s\S]*data-embedded-html[\s\S]*src="\/embed\/docs\/flashcards\.html"/,
         '/view frames trusted authored HTML through /embed'
       );
+      // Attribute order is not significant in HTML: assert the framing iframe
+      // carries both the embed src and the sandbox, in whatever order.
+      const embedFrameTag = viewEnabled.text.match(/<iframe[^>]*data-embedded-html[^>]*>/);
+      assert.ok(embedFrameTag, '/view should frame the embed route');
+      assert.match(embedFrameTag[0], /src="\/embed\/docs\/flashcards\.html"/);
       assert.match(
-        viewEnabled.text,
-        /<iframe[\s\S]*src="\/embed\/docs\/flashcards\.html"[\s\S]*sandbox="allow-scripts allow-forms allow-popups"/,
+        embedFrameTag[0],
+        /sandbox="allow-scripts allow-forms allow-popups"/,
         '/view applies the opaque-origin sandbox to the embed frame'
       );
       assert.doesNotMatch(viewEnabled.text, /sandbox="[^"]*allow-same-origin/);

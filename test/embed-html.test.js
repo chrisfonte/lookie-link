@@ -218,7 +218,12 @@ test('document viewer frames HTML through embed while retaining a distinct raw-s
   });
 
   assert.match(html, /<iframe[\s\S]*data-embedded-html[\s\S]*src="\/embed\/alpha\/docs\/page\.html"/);
-  assert.match(html, /<iframe[\s\S]*src="\/embed\/alpha\/docs\/page\.html"[\s\S]*sandbox="allow-scripts allow-forms allow-popups"/);
+  // Attribute order is not significant in HTML: assert the framing iframe carries
+  // both the embed src and the sandbox, independent of the order they appear in.
+  const embedFrame = html.match(/<iframe[^>]*data-embedded-html[^>]*>/);
+  assert.ok(embedFrame, 'the viewer should frame the embed route');
+  assert.match(embedFrame[0], /src="\/embed\/alpha\/docs\/page\.html"/);
+  assert.match(embedFrame[0], /sandbox="allow-scripts allow-forms allow-popups"/);
   assert.doesNotMatch(html, /sandbox="[^"]*allow-same-origin/);
   assert.match(html, /href="\/embed\/alpha\/docs\/page\.html"[^>]*>Open embedded<\/a>/);
   assert.match(html, /href="\/raw\/alpha\/docs\/page\.html"[^>]*>Open raw<\/a>/);
