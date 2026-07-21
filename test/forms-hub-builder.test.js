@@ -517,34 +517,34 @@ test('builder offers server-installed themes, saves the choice, and refuses one 
   }
 });
 
-test('toolbar Go menu offers Files and Forms, and disappears when there is nowhere to choose between', async () => {
+test('toolbar section picker offers Files and Forms and disappears when there is nowhere to choose between', async () => {
   const {setNavLinks, toolbarHtml} = require('../lib/renderer');
 
   const server = await makeServer();
   try {
-    // Reachable from a form page and from a document page alike.
     const page = await browserPage(await server.request('/forms/training-log'));
-    const links = [...page.document.querySelectorAll('.toolbar-nav-panel a')];
-    assert.deepEqual(links.map((link) => link.textContent), ['Files', 'Forms']);
-    assert.deepEqual(links.map((link) => link.getAttribute('href')), ['/', '/forms']);
-    // No inline handler: the dropdown is a native <details>, so it survives CSP.
-    assert.match(page.html, /<details class="toolbar-nav">/);
-    assert.doesNotMatch(page.html, /onclick=/i);
+    const picker = page.document.querySelector('[data-nav-picker]');
+    assert.ok(picker, 'section picker is present');
+    // Same control as the theme picker, so it looks and behaves identically.
+    assert.ok(picker.classList.contains('toolbar-select'));
+    assert.equal(picker.tagName, 'SELECT');
+    assert.deepEqual([...picker.options].map((option) => option.textContent), ['Files', 'Forms']);
+    assert.deepEqual([...picker.options].map((option) => option.value), ['/', '/forms']);
+    assert.doesNotMatch(page.html, /onchange=/i);
   } finally {
     await server.close();
   }
 
-  // A deployment with forms disabled registers only Files. One destination is not
-  // a choice, so the menu is omitted rather than rendered with a single entry.
+  // One destination is not a choice, so the control is omitted rather than
+  // rendered with a single entry.
   setNavLinks([{href: '/', label: 'Files'}]);
-  assert.ok(!toolbarHtml().includes('toolbar-nav'), 'single destination renders no menu');
+  assert.ok(!toolbarHtml().includes('data-nav-picker'), 'single destination renders no picker');
 
   setNavLinks([{href: '/', label: 'Files'}, {href: '/forms', label: 'Forms'}]);
-  assert.ok(toolbarHtml().includes('toolbar-nav'), 'two destinations render the menu');
+  assert.ok(toolbarHtml().includes('data-nav-picker'), 'two destinations render the picker');
 
-  // Malformed entries are dropped rather than emitted as broken links.
+  // Malformed entries are dropped rather than emitted as broken options.
   setNavLinks([{href: '/', label: 'Files'}, {label: 'No href'}, {href: '/forms', label: 'Forms'}]);
-  const html = toolbarHtml();
-  assert.doesNotMatch(html, /No href/);
+  assert.doesNotMatch(toolbarHtml(), /No href/);
   setNavLinks([]);
 });
