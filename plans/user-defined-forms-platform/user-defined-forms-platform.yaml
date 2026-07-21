@@ -1,0 +1,200 @@
+_meta:
+  schema: lookie-link-plan-v1
+  title: User-Defined Forms Platform
+  created: 2026-07-15
+  updated: 2026-07-15
+  version: 0.3.0
+  status: review_incorporated
+  owner: Lookie-Link Project
+  document: ./plan.md
+  changelog: ./CHANGELOG.md
+
+objective: >-
+  Deliver a file-native, API-first forms platform in which authorized users and
+  agents define versioned reusable templates, Lookie-Link renders first-party
+  forms, submissions become durable sovereign records, and optional reactions
+  run only after capture succeeds.
+
+review:
+  required: true
+  reviewer: fable
+  brief: ./review-brief-fable.md
+  report: ./review-fable.md
+  status: complete
+  verdict: approve_with_required_changes
+  blocking_findings: [B1-raw-origin-isolation, B2-fsync-durability, B3-submit-only-receipt-access, B4-pilot-and-static-option-resequencing, B5-deletion-contract-in-93]
+  incorporated: '2026-07-15 (v0.3 reconciliation pass; plan text now matches the review and issue graph)'
+  cross_model_review:
+    reviewer: gpt-5.6
+    date: '2026-07-15'
+    verdict: concur_with_fable_verdict
+    contribution: found plan-text lag behind incorporated issues (8 contradictions, fixed in v0.3); added deletion purge-boundary refinement and branch-protection requirement for CI
+  implementation_ready: false
+
+decisions:
+  - id: AD-1
+    status: accepted_by_review
+    decision: Stable generic endpoints; no generated server code per form.
+  - id: AD-2
+    status: accepted_by_review
+    decision: Lookie-Link renders first-party forms from declarative definitions.
+  - id: AD-3
+    status: accepted_by_review
+    decision: Files are canonical and portable; API is the preferred mutation path.
+  - id: AD-4
+    status: accepted_by_review
+    decision: Templates, immutable template versions, and form instances are separate resources.
+  - id: AD-5
+    status: accepted_by_review
+    decision: Each submission is one immutable JSON file; SQLite is rebuildable support state only.
+  - id: AD-6
+    status: accepted_by_review
+    decision: Server receipt time and user-supplied event time are separate fields.
+  - id: AD-7
+    status: accepted_by_review
+    decision: Persist first; dispatch optional reactions from a durable outbox afterward.
+  - id: AD-8
+    status: accepted_by_review
+    decision: Definitions select logical approved bindings, never arbitrary paths or commands.
+  - id: AD-9
+    status: accepted_by_review
+    decision: Raw HTML receives no implicit forms privileges; boundary held by CSP-sandbox origin isolation of /raw (load-bearing, review B1) with Origin checks primary and CSRF tokens defense-in-depth.
+  - id: AD-10
+    status: accepted_by_review
+    decision: Stabilize schema and API before visual or conversational builders.
+  - id: AD-11
+    status: accepted_by_review
+    decision: Mount forms through dedicated modules and extract narrow shared primitives instead of growing monolith files.
+
+phases:
+  - id: preflight
+    title: Reconcile product baseline
+    status: blocked_open
+    depends_on: []
+  - id: phase-0
+    title: Contract and shared foundations
+    status: planned
+    depends_on: [preflight]
+  - id: phase-1
+    title: Minimal vertical slice
+    status: planned
+    depends_on: [phase-0]
+  - id: phase-2
+    title: User builder and reusable ecosystem
+    status: planned
+    depends_on: [phase-1]
+  - id: phase-3
+    title: Durable reactions and richer capture
+    status: planned
+    depends_on: [phase-1]
+
+existing_dependencies:
+  - number: 53
+    relationship: central access-control foundation
+  - number: 82
+    relationship: authorized artifact/form metadata discovery
+  - number: 83
+    relationship: metadata existence-leak prevention
+  - number: 84
+    relationship: centralized capability separation precedent
+  - number: 85
+    relationship: future operator configuration surface
+
+github:
+  plan_pull_request: 89
+  epic_issue: 90
+  child_issues:
+    - {number: 91, phase: preflight, title: reconcile product baseline}
+    - {number: 92, phase: phase-0, title: ownership permissions CSRF and raw HTML ADR}
+    - {number: 93, phase: phase-0, title: versioned schema file and direct-edit ADR}
+    - {number: 94, phase: phase-0, title: shared safe persistence audit viewer and route seams}
+    - {number: 95, phase: phase-1, title: file-backed template and form registries}
+    - {number: 96, phase: phase-1, title: template and form lifecycle APIs}
+    - {number: 97, phase: phase-1, title: immutable submissions idempotency and receipts}
+    - {number: 98, phase: phase-1, title: first-party form runner}
+    - {number: 99, phase: phase-1, title: session and repeatable-entry workflows}
+    - {number: 100, phase: phase-2, title: approved option providers}
+    - {number: 101, phase: phase-2, title: user builder UI}
+    - {number: 102, phase: phase-3, title: durable outbox and reactions}
+    - {number: 103, phase: phase-2, title: discovery CLI OpenAPI and skills}
+    - {number: 104, phase: phase-3, title: private operational pilot (beta; alpha split to 134)}
+  granular_children:
+    standalone:
+      - {number: 105, title: CI running tests and validators on every PR}
+      - {number: 106, parent: 92, title: CSP-sandbox /raw (review B1)}
+      - {number: 111, parent: 92, title: refuse query-string tokens on mutating routes}
+    umbrella_94:
+      - {number: 107, title: fsync-hardened atomic-replace helper (review B2)}
+      - {number: 108, title: exclusive safe-create with symlink-ancestor protection}
+      - {number: 109, title: annotation test baseline}
+      - {number: 110, title: annotation-create race fix}
+      - {number: 112, title: principal/actor normalization and audit primitive}
+      - {number: 113, title: route-module mounting seam}
+    umbrella_95:
+      - {number: 114, title: schema validator library}
+      - {number: 115, title: canonical serializer}
+      - {number: 116, title: inline static options in core schema (moved from 100, review B4)}
+      - {number: 117, title: template registry with last-known-good}
+      - {number: 118, title: form-instance registry with pinning}
+      - {number: 119, title: bounded rescan and invalidation}
+    umbrella_96:
+      - {number: 120, title: template read APIs}
+      - {number: 121, title: template draft write APIs with revision preconditions}
+      - {number: 122, title: publish/clone with immutability}
+      - {number: 123, title: form-instance lifecycle APIs}
+    umbrella_97:
+      - {number: 124, title: submission schema and pinned-version validation}
+      - {number: 125, title: immutable one-file-per-submission store (incl. deletion contract, review B5)}
+      - {number: 126, title: JSON submission endpoint with durable receipts}
+      - {number: 127, title: idempotency-key replay protection}
+      - {number: 128, title: receipt/list APIs and submit-only receipt access (review B3)}
+      - {number: 129, title: direct-file import marking}
+    umbrella_98:
+      - {number: 130, title: route-scoped urlencoded parsing}
+      - {number: 131, title: first-party form page rendering}
+      - {number: 132, title: native HTML POST with PRG}
+      - {number: 133, title: browser security negative suite (verifies review B1)}
+    pilot:
+      - {number: 134, parent: 104, title: pilot-alpha on phase-1 slice with YAML-authored templates}
+
+operator_decisions_2026_07_15:
+  source: co-design Q&A with the operator after review incorporation
+  decisions:
+    - {topic: principals, decision: multi-user contract per instance from day one — roadmap identity taxonomy, real permissions; v1 runtime single-operator + agent tokens as one provider; signed receipts before a second user principal, recorded_on: 92}
+    - {topic: storage roots, decision: deployment property behind the storage adapter — self-hosted configures repos (reference deployment replicates via its sync mesh); SaaS backs the same adapter with service-managed storage; core never assumes replication semantics, recorded_on: 93}
+    - {topic: deletion, decision: v1 = application deletion + documented purge runbook; purge tooling deferred but tombstones carry an extensible purge-status field as the seam, recorded_on: 93}
+    - {topic: first reaction, decision: webhook is the first dispatcher adapter (HMAC-signed, idempotent event IDs, allowlisted destinations) — works with any agentic system; other patterns become webhook consumers, recorded_on: 102}
+    - {topic: raw artifacts, decision: documents are content and agents are principals — no raw artifact intentionally calls Lookie APIs, so CSP sandbox enforces the intended model with no compatibility casualties, recorded_on: 106}
+    - {topic: workstream sources, decision: v1 parser reads both todo YAML and plan-package sidecars so plans render as workstreams with phase progress; repo list is config, recorded_on: 136}
+
+successor_direction:
+  pages_epic:
+    number: 135
+    title: user-defined pages — declarative API-created pages rendered first-party
+    relationship: not a child of the epic; forms primitives are its foundation; ADR design inputs recorded on 92 and 93
+  interim_workstreams_page:
+    parent: 135
+    decided: '2026-07-15'
+    children:
+      - {number: 136, title: workstream source parser and normalizer}
+      - {number: 137, title: read-only /workstreams page behind own flag}
+      - {number: 138, title: source configuration and ACL filtering}
+
+answered_decisions:
+  answered_by: review-fable.md section 7 (2026-07-15); working decisions recorded in plan.md, ratification in ADR issues
+  answers:
+    - {q: field grammar, a: constrained custom grammar with fixtures — no exposed JSON Schema subset, ratify: 93}
+    - {q: repeatable groups, a: not in v1 — sessions deliver repeated entries as independent submissions, ratify: 93}
+    - {q: minimal principal, a: 'multi-user contract from day one per operator direction 2026-07-15 — roadmap identity taxonomy, real per-principal permissions; v1 runtime = single-operator + agent tokens as one provider; signed receipts before a second user principal', ratify: 92}
+    - {q: definition roots, a: mounted roots only behind a storage-adapter boundary, ratify: 93}
+    - {q: event model + deletion, a: one file per submission + supersessions + delete-with-tombstone; ADR must distinguish application deletion from verified multi-peer/backup purging, ratify: 93}
+    - {q: audit redaction, a: IDs/outcome classes/timestamps only — never values or titles, ratify: 92}
+    - {q: CSRF posture, a: CSP-sandboxed /raw origin isolation load-bearing + Origin checks primary + tokens defense-in-depth + query tokens refused, ratify: 92}
+    - {q: shared interfaces, a: merged-main only — temp+rename (hardened), safeResolve (+safe-create), canAccessPath seam, ratify: 92}
+    - {q: issue decomposition, a: resolved by granular decomposition 105-134}
+    - {q: direct imports, a: marked imports only; server-only attestation fields; provenance not security in single-operator mode, ratify: 93}
+
+acceptance_commands:
+  baseline: npm test
+  forms_contract: npm run validate:forms
+  forms_browser: npm run validate:forms-e2e
