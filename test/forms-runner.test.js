@@ -33,7 +33,7 @@ const everyTypeTemplate = {
   fields: [
     { id: 'summary', type: 'short-text', label: 'Summary', required: true },
     { id: 'notes', type: 'long-text', label: 'Notes', required: true },
-    { id: 'count', type: 'number', label: 'Count', required: true, constraints: { minimum: 1, maximum: 10, integer: true } },
+    { id: 'count', type: 'number', label: 'Count (kg)', required: true, constraints: { minimum: 1, maximum: 10, integer: true } },
     { id: 'confirmed', type: 'checkbox', label: 'Confirmed', required: true },
     { id: 'entry-date', type: 'date', label: 'Entry date', required: true },
     { id: 'entry-time', type: 'time', label: 'Entry time', required: true },
@@ -253,6 +253,15 @@ test('GET renders every field type, required markers, constraints, and a CSRF to
     assert.equal(document.querySelector('#field-count').min, '1');
     assert.equal(document.querySelector('#field-count').max, '10');
     assert.equal(document.querySelector('#field-count').step, '1');
+    assert.equal(document.querySelector('.readout-unit').textContent, 'kg');
+    assert.deepEqual(
+      [...document.querySelectorAll('.form-section')].map((section) => section.className),
+      [
+        'form-section form-section-selection',
+        'form-section form-section-readouts',
+        'form-section form-section-details',
+      ]
+    );
     assert.equal(document.querySelector('#field-confirmed').type, 'checkbox');
     assert.equal(document.querySelector('#field-entry-date').type, 'date');
     assert.equal(document.querySelector('#field-entry-time').type, 'time');
@@ -356,13 +365,16 @@ test('form and receipt use the themed shell, preserve escaping, and offer Log an
     assert.equal(receiptResponse.status, 200);
     const receiptHtml = await receiptResponse.text();
     const receiptDocument = assertSharedFormsShell(receiptResponse, receiptHtml, customThemeMarker);
-    assert.equal(receiptDocument.querySelector('.topbar h1').textContent, 'Submission received');
+    assert.equal(receiptDocument.querySelector('.topbar h1').textContent, 'Entry logged');
     assert.equal(receiptDocument.querySelector('.topbar .back').getAttribute('href'), '/');
     assert.equal(
       receiptDocument.querySelector('.form-primary-action').getAttribute('href'),
       '/forms/gym-session-entry'
     );
     assert.equal(receiptDocument.querySelector('.form-primary-action').textContent, 'Log another');
+    assert.ok(receiptDocument.querySelector('.receipt-table'));
+    assert.equal(receiptDocument.querySelector('.receipt-card').firstElementChild.className, 'receipt-table-wrap');
+    assert.ok(receiptDocument.querySelector('.receipt-meta').textContent.includes('Receipt ID'));
     assert.match(receiptHtml, /&lt;em&gt;Notes&lt;\/em&gt;/);
     assert.match(receiptHtml, /&lt;img src=x onerror=alert\(1\)&gt;/);
     assert.doesNotMatch(receiptHtml, /<dd><img/);
@@ -801,7 +813,7 @@ test('receipt preserves capture-time field labels after a template rename', asyn
     await fs.writeFile(templatePath, yaml.dump(template), 'utf8');
     const receipt = await server.request(accepted.headers.get('location'));
     const html = await receipt.text();
-    assert.match(html, /<dt>Lift<\/dt>/);
+    assert.match(html, /<th scope="row">Lift<\/th>/);
     assert.doesNotMatch(html, /Renamed lift/);
   } finally {
     await cleanup(fixture, server);
@@ -835,9 +847,146 @@ test('receipt authorization conceals submissions from a different principal', as
     const denied = await server.request(accepted.headers.get('location'), { headers: { 'X-Principal': 'other' } });
     assert.equal(denied.status, 404);
     assert.equal(await denied.text(), 'Not found.');
+    const deniedEdit = await server.request(`${accepted.headers.get('location')}/edit`, {
+      headers: { 'X-Principal': 'other' },
+    });
+    assert.equal(deniedEdit.status, 404);
+    assert.equal(await deniedEdit.text(), 'Not found.');
     const reader = await server.request(accepted.headers.get('location'), { headers: { 'X-Read-All': 'yes' } });
     assert.equal(reader.status, 200);
     assert.match(await reader.text(), /Smooth reps/);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('entries page is reverse chronological, grouped with date and time, and strictly owner scoped', async () => {
+  const fixture = await makeFixture();
+  const times = [
+    new Date('2026-07-19T18:15:00.000Z'),
+    new Date('2026-07-20T08:30:00.000Z'),
+    new Date('2026-07-21T12:45:00.000Z'),
+  ];
+  let tick = 0;
+  const formsStore = new SubmissionStore({
+    storageRoot: fixture.submissionsPath,
+    clock: () => times[tick++],
+  });
+  const server = await startServer(fixture, {
+    formsStore,
+    formsTimezone: 'UTC',
+    formsAuthorize: ({ req, capability }) => {
+      req.accessContext = {
+        mode: 'scoped',
+        principal: { id: req.get('x-principal') || 'owner', kind: 'user' },
+      };
+      return capability === 'forms.submit' || capability === 'forms.view';
+    },
+  });
+  try {
+    const form = await server.request('/forms/gym-session-entry', { headers: { 'X-Principal': 'owner' } });
+    const context = browserContext(form, await form.text());
+    const submit = async (principal, values) => {
+      const response = await server.request('/api/forms/gym-session-entry/submissions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: context.cookie,
+          Origin: PUBLIC_ORIGIN,
+          'X-CSRF-Token': context.token,
+          'X-Principal': principal,
+        },
+        body: JSON.stringify({ values }),
+      });
+      assert.equal(response.status, 201);
+    };
+    await submit('owner', jsonValues({ 'top-weight': 205, notes: 'Older own' }));
+    await submit('owner', jsonValues({ 'top-weight': 225, notes: 'Newer own' }));
+    await submit('other', jsonValues({ 'top-weight': 999, notes: 'Foreign secret' }));
+
+    const response = await server.request('/forms/gym-session-entry/entries', {
+      headers: { 'X-Principal': 'owner' },
+    });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    const document = new JSDOM(html).window.document;
+    const rows = [...document.querySelectorAll('.entry-row')];
+    assert.equal(rows.length, 2);
+    assert.match(rows[0].textContent, /225/);
+    assert.match(rows[1].textContent, /205/);
+    assert.doesNotMatch(html, /999|Foreign secret/);
+    assert.equal(document.querySelectorAll('.entries-day').length, 2);
+    for (const time of document.querySelectorAll('.entry-row-heading time')) {
+      assert.match(time.getAttribute('datetime'), /^2026-07-\d{2}T\d{2}:\d{2}/);
+      assert.match(time.textContent, /Jul \d{1,2}, 2026, \d{1,2}:\d{2} [AP]M/);
+    }
+
+    const empty = await server.request('/forms/gym-session-entry/entries', {
+      headers: { 'X-Principal': 'nobody' },
+    });
+    assert.equal(empty.status, 200);
+    assert.match(await empty.text(), /Ready for your first entry\?/);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('receipt edit prefills values and saves an immutable superseding correction', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, { formsTimezone: 'America/New_York' });
+  try {
+    const context = await getBrowserContext(server);
+    const accepted = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: context.cookie,
+        Origin: PUBLIC_ORIGIN,
+      },
+      body: nativeBody(context.token),
+    });
+    assert.equal(accepted.status, 303);
+    const originalId = accepted.headers.get('location').split('/').pop();
+    const originalPath = path.join(fixture.submissionsPath, `${originalId}.json`);
+    const originalBytes = await fs.readFile(originalPath);
+
+    const edit = await server.request(`${accepted.headers.get('location')}/edit`, {
+      headers: { Cookie: context.cookie },
+    });
+    assert.equal(edit.status, 200);
+    const editDocument = new JSDOM(await edit.text()).window.document;
+    assert.equal(editDocument.querySelector('#field-top-weight').value, '225.5');
+    assert.equal(editDocument.querySelector('#field-notes').value, 'Smooth reps');
+    assert.equal(editDocument.querySelector('input[name="_supersedes"]').value, originalId);
+    assert.match(editDocument.querySelector('.correction-note').textContent, /earlier version stays preserved/i);
+    const editToken = editDocument.querySelector('input[name="_csrf"]').value;
+
+    const correctionBody = nativeBody(editToken, { notes: 'Corrected form', 'top-weight': '230' });
+    correctionBody.set('_supersedes', originalId);
+    const correctedResponse = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: context.cookie,
+        Origin: PUBLIC_ORIGIN,
+      },
+      body: correctionBody,
+    });
+    assert.equal(correctedResponse.status, 303);
+    assert.equal(Buffer.compare(originalBytes, await fs.readFile(originalPath)), 0);
+    const correctedId = correctedResponse.headers.get('location').split('/').pop();
+    const corrected = JSON.parse(await fs.readFile(
+      path.join(fixture.submissionsPath, `${correctedId}.json`),
+      'utf8'
+    ));
+    assert.deepEqual(corrected.supersedesRecord, { resourceKind: 'form-submission', id: originalId });
+    assert.equal(corrected.values.find((entry) => entry.fieldId === 'top-weight').value, 230);
+    assert.equal((await submissionFiles(fixture.submissionsPath)).length, 2);
+
+    const receipt = await server.request(correctedResponse.headers.get('location'), {
+      headers: { Cookie: context.cookie },
+    });
+    assert.match(await receipt.text(), /supersedes an earlier version/);
   } finally {
     await cleanup(fixture, server);
   }
