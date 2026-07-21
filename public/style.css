@@ -1342,9 +1342,14 @@ tbody tr:last-child td {
 }
 
 .builder-layout .builder-field-title {
+  /* Grow so the label sits hard left beside the chevron; with space-between
+     alone the title floats to the middle of the row and the labels no longer
+     form a scannable vertical column. */
+  flex: 1 1 auto;
   display: flex;
   min-width: 0;
   align-items: center;
+  justify-content: flex-start;
   gap: 0.55rem;
 }
 
