@@ -194,11 +194,26 @@ async function assertNoClippedControls(page, state) {
         value,
         scrollWidth: element.scrollWidth,
         clientWidth: element.clientWidth,
+        // scrollWidth is BLIND for <select>: the browser visually truncates the
+        // option label without growing scrollWidth, so a 113px option inside an
+        // 85px control still reports scrollWidth === clientWidth. Measure the
+        // widest option against the control's inner width instead. Verified by
+        // reintroducing the oversized-dropdown defect: the scrollWidth check
+        // passed while the text was demonstrably clipped.
+        overflowPx: (() => {
+          if (!(element instanceof HTMLSelectElement) || !element.options.length) return 0;
+          const context = document.createElement('canvas').getContext('2d');
+          context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+          const widest = Math.max(...[...element.options].map((option) => context.measureText(option.text).width));
+          const inner = element.clientWidth
+            - parseFloat(style.paddingLeft || 0) - parseFloat(style.paddingRight || 0);
+          return Math.round(widest - inner);
+        })(),
       };
     })
   );
   const clipped = measurements.filter((measurement) => measurement.visible
-    && measurement.scrollWidth > measurement.clientWidth + 1);
+    && (measurement.scrollWidth > measurement.clientWidth + 1 || measurement.overflowPx > 1));
   assert.deepEqual(clipped, [], `${state}: visible controls must not clip their content`);
   assert.ok(measurements.some((measurement) => measurement.visible), `${state}: expected visible controls`);
 }
