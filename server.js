@@ -134,7 +134,6 @@ const CSV_EXTENSIONS = new Set(['.csv']);
 const JSON_VIEWER_EXTENSIONS = new Set(['.json']);
 const HTML_EXTENSIONS = new Set(['.html', '.htm']);
 const RAW_HTML_MIME_TYPE = 'text/html; charset=utf-8';
-const ARTIFACT_SANDBOX = 'sandbox allow-scripts allow-forms allow-popups';
 
 // Text/source asset mime allowlist. Served as raw bytes via /asset/ so agents
 // (and curl) can fetch markdown, code, and config sources without scraping HTML.
