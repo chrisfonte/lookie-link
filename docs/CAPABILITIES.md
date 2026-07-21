@@ -211,15 +211,19 @@ equality test intentionally does not cover them.
 
 | Route | Method | Effective auth | Enabled by | Notes |
 |---|---|---|---|---|
+| Forms index: `/forms` | `GET` | `forms.submit` or `forms.manage` | `forms.enabled` | Lists active submit-visible forms; managers also see lifecycle metadata, entry counts, actions, and archived templates in a collapsed section. |
+| Create template: `/forms/new`, `/forms` | `GET`, `POST` | `forms.manage` | `forms.enabled` | Single server-rendered creation flow backed by the template API controller; browser writes require exact Origin + CSRF. |
 | Form page: `/forms/:templateId` | `GET` | `forms.submit` or `forms.view` | `forms.enabled` | Server-rendered first-party form; issues the browser context cookie and synchronizer token. |
 | Native submit: `/forms/:templateId` | `POST` | `forms.submit` | `forms.enabled` | Requires exact configured Origin + `_csrf` token; Post/Redirect/Get to the receipt. Fails closed when no public origin is configured. |
 | Entry history: `/forms/:templateId/entries` | `GET` | `forms.submit` or `forms.read_submissions` | `forms.enabled` | Owner-scoped server-rendered history; shares persistent form navigation. |
 | Template builder: `/forms/:templateId/configure` | `GET`, `POST` | `forms.manage` | `forms.enabled` | Server-rendered builder. Browser writes require exact Origin + CSRF and use the template API mutation controller with revision CAS. |
-| First template: `/forms/:templateId/configure/create` | `POST` | `forms.manage` | `forms.enabled` | Available only when no templates exist; destination is selected from configured aliases. |
 | Publish template: `/forms/:templateId/configure/publish` | `POST` | `forms.manage` | `forms.enabled` | Creates an immutable version from the rendered draft revision; stale revisions conflict. |
-| Template collection: `/api/forms/templates` | `GET`, `POST` | `forms.manage` | `forms.enabled` | Lists visible templates or creates a draft. Browser writes require exact Origin + CSRF; bearer agents use JSON. |
+| Clone/lifecycle actions: `/forms/:templateId/clone`, `/forms/:templateId/archive`, `/forms/:templateId/restore` | `POST` | `forms.manage` | `forms.enabled` | Server-rendered actions backed by the JSON API controllers; lifecycle actions require revision CAS. |
+| Template collection: `/api/forms/templates` | `GET`, `POST` | `forms.submit` or `forms.manage` (`GET`); `forms.manage` (`POST`) | `forms.enabled` | Lists submit-visible templates with a minimal projection, lists management metadata for managers, or creates a draft. Browser writes require exact Origin + CSRF; bearer agents use JSON. |
 | Template item: `/api/forms/templates/:templateId` | `GET`, `PATCH` | `forms.manage` | `forms.enabled` | Reads management metadata or revises a draft with required revision CAS. Unauthorized item access is a uniform 404. |
 | Publish API: `/api/forms/templates/:templateId/publish` | `POST` | `forms.manage` | `forms.enabled` | Creates the next immutable version; accepts an optional positive draft revision CAS guard. |
+| Clone API: `/api/forms/templates/:templateId/clone` | `POST` | `forms.manage` | `forms.enabled` | Creates a revision-1 draft with a fresh identity and clone lineage; no submissions or published history are copied. |
+| Archive/restore API: `/api/forms/templates/:templateId/archive`, `/api/forms/templates/:templateId/restore` | `POST` | `forms.manage` | `forms.enabled` | CAS-guarded lifecycle changes. Archived forms refuse new submissions while history and receipts remain readable. |
 | JSON submit: `/api/forms/:templateId/submissions` | `POST` | `forms.submit` | `forms.enabled` | Same submission service as the native path. |
 | Receipt: `/forms/:templateId/receipts/:submissionId` | `GET` | Submitter (or `read_submissions`) | `forms.enabled` | Uniform 404 for non-owners and unknown IDs. |
 

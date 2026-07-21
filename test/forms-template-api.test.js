@@ -111,8 +111,9 @@ async function makeServer() {
     formsRegistry: registry,
     formsPublicOrigin: PUBLIC_ORIGIN,
     formsAudit: () => {},
-    formsAuthorize: ({req, capability}) => req.get('x-manage') === 'yes'
-      && (capability === 'forms.manage' || capability === 'forms.submit'),
+    formsAuthorize: ({req, capability}) => (req.get('x-manage') === 'yes'
+      && (capability === 'forms.manage' || capability === 'forms.submit'))
+      || (req.get('x-submit') === 'yes' && capability === 'forms.submit'),
   });
   return {
     root,
@@ -257,7 +258,9 @@ test('template API lifecycle uses CAS and preserves immutable versions and old r
       title: 'Strength training log',
       revision: 3,
       publishedVersion: 2,
+      destinationId: 'gym-log',
       state: 'published',
+      entryCount: 1,
     }]);
     const fetchedResponse = await server.request('/api/forms/templates/training-log', {headers: AGENT_HEADERS});
     assert.equal(fetchedResponse.status, 200);
@@ -381,6 +384,123 @@ test('managed drafts and version metadata retain their last-known-good registry 
     assert.equal(retained.publishedVersion.templateVersion, 1);
     assert.equal(retained.state, 'published');
     await fs.writeFile(versionPath, versionBytes);
+  } finally {
+    await server.close();
+  }
+});
+
+test('clone and archive APIs preserve source history, receipts, CAS, and authorization boundaries', async () => {
+  const server = await makeServer();
+  try {
+    assert.equal((await server.request('/api/forms/templates', jsonMutation(draftBody()))).status, 201);
+    assert.equal((await server.request(
+      '/api/forms/templates/training-log/publish',
+      jsonMutation({revision: 1}),
+    )).status, 201);
+    const submitted = await server.request('/api/forms/training-log/submissions', jsonMutation({
+      values: {lift: 'bench', notes: 'Keep this receipt'},
+    }));
+    assert.equal(submitted.status, 201);
+    const receiptUrl = (await submitted.json()).receiptUrl;
+    const sourceDraftBefore = await fs.readFile(path.join(server.templatesPath, 'training-log', 'draft.json'));
+    const sourceVersionBefore = await fs.readFile(path.join(server.templatesPath, 'training-log', 'versions', '1.json'));
+
+    const cloneResponse = await server.request(
+      '/api/forms/templates/training-log/clone',
+      jsonMutation({templateVersion: 1}),
+    );
+    assert.equal(cloneResponse.status, 201);
+    const cloned = await cloneResponse.json();
+    assert.notEqual(cloned.template.templateId, 'training-log');
+    assert.equal(cloned.template.revision, 1);
+    assert.equal(cloned.template.title, 'Training log copy');
+    assert.equal(cloned.template.destinationId, 'gym-log');
+    assert.deepEqual(cloned.template.fields, draftBody().fields);
+    assert.deepEqual(cloned.template.lineage, {
+      relation: 'clone',
+      templateId: 'training-log',
+      templateVersion: 1,
+    });
+    assert.equal(cloned.publishedVersion, null);
+    assert.deepEqual(cloned.publishedVersions, []);
+    const cloneSubmissions = await server.request(
+      `/api/forms/${cloned.template.templateId}/submissions`,
+      {headers: AGENT_HEADERS},
+    );
+    assert.deepEqual((await cloneSubmissions.json()).submissions, []);
+    assert.equal(Buffer.compare(sourceDraftBefore, await fs.readFile(path.join(server.templatesPath, 'training-log', 'draft.json'))), 0);
+    assert.equal(Buffer.compare(sourceVersionBefore, await fs.readFile(path.join(server.templatesPath, 'training-log', 'versions', '1.json'))), 0);
+
+    const archivedResponse = await server.request(
+      '/api/forms/templates/training-log/archive',
+      jsonMutation({revision: 1}),
+    );
+    assert.equal(archivedResponse.status, 200);
+    const archived = await archivedResponse.json();
+    assert.equal(archived.state, 'archived');
+    assert.equal(archived.template.archived, true);
+    assert.equal(archived.template.revision, 2);
+
+    const archivedPage = await server.request('/forms/training-log', {headers: AGENT_HEADERS});
+    assert.equal(archivedPage.status, 200);
+    assert.match(await archivedPage.text(), /This form is archived/);
+    const refused = await server.request('/api/forms/training-log/submissions', jsonMutation({
+      values: {lift: 'squat', notes: 'Must not be written'},
+    }));
+    assert.equal(refused.status, 422);
+    assert.equal((await refused.json()).error.code, 'archived');
+    assert.equal((await server.request(receiptUrl, {headers: AGENT_HEADERS})).status, 200);
+    const entries = await server.request('/forms/training-log/entries', {headers: AGENT_HEADERS});
+    assert.equal(entries.status, 200);
+    assert.match(await entries.text(), /Keep this receipt/);
+
+    const staleRestore = await server.request(
+      '/api/forms/templates/training-log/restore',
+      jsonMutation({revision: 1}),
+    );
+    assert.equal(staleRestore.status, 409);
+    assert.equal((await staleRestore.json()).error.code, 'revision_conflict');
+    const restoredResponse = await server.request(
+      '/api/forms/templates/training-log/restore',
+      jsonMutation({revision: 2}),
+    );
+    assert.equal(restoredResponse.status, 200);
+    const restored = await restoredResponse.json();
+    assert.equal(restored.state, 'published');
+    assert.equal(restored.template.archived, undefined);
+    assert.equal(restored.template.revision, 3);
+    assert.equal((await server.request('/api/forms/training-log/submissions', jsonMutation({
+      values: {lift: 'squat', notes: 'Accepted after restore'},
+    }))).status, 201);
+
+    const templatesBeforeDenied = await diskSnapshot(server.templatesPath);
+    const submitOnly = {Authorization: 'Bearer template-secret', 'X-Submit': 'yes'};
+    const deniedClone = await server.request(
+      '/api/forms/templates/training-log/clone',
+      jsonMutation({}, submitOnly),
+    );
+    assert.equal(deniedClone.status, 404);
+    const deniedArchive = await server.request(
+      '/api/forms/templates/training-log/archive',
+      jsonMutation({revision: 3}, submitOnly),
+    );
+    assert.equal(deniedArchive.status, 404);
+    const deniedCreate = await server.request(
+      '/api/forms/templates',
+      jsonMutation(draftBody('denied-clone'), submitOnly),
+    );
+    assert.equal(deniedCreate.status, 403);
+    assert.deepEqual(await diskSnapshot(server.templatesPath), templatesBeforeDenied);
+
+    const submitOnlyList = await server.request('/api/forms/templates', {headers: submitOnly});
+    assert.deepEqual((await submitOnlyList.json()).templates.map((template) => Object.keys(template).sort()), [
+      ['templateId', 'title'],
+      ['templateId', 'title'],
+    ]);
+    assert.equal((await server.request('/api/forms/templates/training-log', {
+      method: 'DELETE',
+      headers: AGENT_HEADERS,
+    })).status, 404);
   } finally {
     await server.close();
   }
