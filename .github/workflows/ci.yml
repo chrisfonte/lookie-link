@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same branch makes the older run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests and validators (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # package.json declares engines.node >= 20, so both ends are covered.
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Unit tests
+        run: node --test test/*.test.js
+
+      # Validators are separate executables, not part of `node --test`. They have
+      # been red on main before without anyone noticing, because their output was
+      # read by eye instead of by exit code.
+      - name: Validate editable mode
+        run: npm run validate:editable
+
+      - name: Validate raw-HTML contracts
+        run: npm run validate:raw-html
+
+      - name: Skill packages match their source spec
+        run: npm run check:skill-packages
+
+  browser:
+    name: Browser tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # The suite skips itself when no browser is available and still exits 0, so
+      # a broken install would report success while testing nothing. Assert that
+      # tests actually ran rather than trusting the exit code alone.
+      - name: Run browser tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:browser 2>&1 | tee browser-output.txt
+          if ! grep -qE '^# skipped 0$' browser-output.txt; then
+            echo "::error::Browser tests were skipped - Chromium is unavailable, so nothing was verified."
+            exit 1
+          fi
+          if ! grep -qE '^# fail 0$' browser-output.txt; then
+            echo "::error::Browser tests reported failures."
+            exit 1
+          fi
+
+      # Failure screenshots are written here by the spec's own handler.
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failure-screenshots
+          path: test/browser/.artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
