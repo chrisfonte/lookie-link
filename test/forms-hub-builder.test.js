@@ -248,6 +248,113 @@ test('hub navigation and builder lifecycle preserve snapshots, option IDs, CAS, 
   }
 });
 
+test('collapsed field rows reorder with CAS and soft-delete identities can only be restored', async () => {
+  const server = await makeServer();
+  try {
+    const formPage = await browserPage(await server.request('/forms/training-log'));
+    const submitted = await browserPost(server, '/forms/training-log', new URLSearchParams({
+      _csrf: formPage.document.querySelector('input[name="_csrf"]').value,
+      lift: 'squat',
+      notes: 'Captured before removal',
+    }), formPage.cookie);
+    assert.equal(submitted.status, 303);
+    const receiptHref = submitted.headers.get('location');
+
+    const first = await browserPage(await server.request('/forms/training-log/configure'));
+    const rows = [...first.document.querySelectorAll('details.builder-field')];
+    assert.equal(rows.length, 2);
+    assert.ok(rows.every((row) => row.open === false));
+    rows[0].open = true;
+    assert.ok(rows[0].querySelector('[name="field.0.label"]'));
+    rows[0].querySelector('[name="field.0.showInList"]').checked = true;
+
+    let response = await browserPost(
+      server,
+      '/forms/training-log/configure',
+      formValues(first.document.querySelector('.builder-form'), 'field-down:0'),
+      first.cookie,
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual((await server.registry.getTemplate('training-log')).fields.map((field) => field.id), ['notes', 'lift']);
+    assert.equal((await server.registry.getTemplate('training-log')).fields[1].showInList, true);
+    assert.match((await browserPage(response)).document.querySelectorAll('.builder-list-marker')[0].textContent, /In list/);
+
+    const stale = await browserPost(
+      server,
+      '/forms/training-log/configure',
+      formValues(first.document.querySelector('.builder-form'), 'save'),
+      first.cookie,
+    );
+    assert.equal(stale.status, 409);
+
+    let latest = await browserPage(response);
+    response = await browserPost(
+      server,
+      '/forms/training-log/configure',
+      formValues(latest.document.querySelector('.builder-form'), 'field-remove:1'),
+      first.cookie,
+    );
+    assert.equal(response.status, 200);
+    let draft = (await server.registry.getManagementTemplate('training-log')).draft;
+    assert.equal(draft.fields[1].id, 'lift');
+    assert.equal(draft.fields[1].isDestroyed, true);
+
+    const currentForm = await browserPage(await server.request('/forms/training-log'));
+    assert.equal(currentForm.document.querySelector('[name="lift"]'), null);
+    assert.ok(currentForm.document.querySelector('[name="notes"]'));
+    const entriesWhileRemoved = await browserPage(await server.request('/forms/training-log/entries'));
+    assert.doesNotMatch(entriesWhileRemoved.document.querySelector('.entries-card').textContent, /Lift <name>|Squat <heavy>/);
+    const oldReceipt = await browserPage(await server.request(receiptHref));
+    assert.match(oldReceipt.document.body.textContent, /Lift <name>|Lift/);
+    assert.match(oldReceipt.document.body.textContent, /Squat <heavy>|Squat/);
+
+    latest = await browserPage(response);
+    assert.equal(latest.document.querySelectorAll('.builder-field-removed').length, 1);
+    assert.match(latest.document.querySelector('.builder-field-removed').textContent, /Restore field/);
+    await assert.rejects(
+      server.registry.reviseDraft('training-log', draft.revision, {fields: draft.fields.filter((field) => field.id !== 'lift')}),
+      (error) => error && error.code === 'EVALIDATION',
+    );
+
+    response = await browserPost(
+      server,
+      '/forms/training-log/configure',
+      formValues(latest.document.querySelector('.builder-form'), 'field-add'),
+      first.cookie,
+    );
+    assert.equal(response.status, 200);
+    latest = await browserPage(response);
+    const addedId = latest.document.querySelector('[name="field.2.id"]').value;
+    assert.notEqual(addedId, 'lift');
+    latest.document.querySelector('[name="field.2.id"]').value = 'lift';
+    response = await browserPost(
+      server,
+      '/forms/training-log/configure',
+      formValues(latest.document.querySelector('.builder-form'), 'save'),
+      first.cookie,
+    );
+    assert.equal(response.status, 200);
+    draft = (await server.registry.getManagementTemplate('training-log')).draft;
+    assert.equal(draft.fields[2].id, addedId);
+    assert.equal(new Set(draft.fields.map((field) => field.id)).size, 3);
+
+    latest = await browserPage(response);
+    response = await browserPost(
+      server,
+      '/forms/training-log/configure',
+      formValues(latest.document.querySelector('.builder-form'), 'field-restore:1'),
+      first.cookie,
+    );
+    assert.equal(response.status, 200);
+    draft = (await server.registry.getManagementTemplate('training-log')).draft;
+    assert.equal(draft.fields[1].id, 'lift');
+    assert.equal(draft.fields[1].isDestroyed, undefined);
+    assert.ok((await browserPage(await server.request('/forms/training-log'))).document.querySelector('[name="lift"]'));
+  } finally {
+    await server.close();
+  }
+});
+
 test('first-run hub offers API-backed creation only to managers and rejects path destinations', async () => {
   const server = await makeServer({empty: true});
   try {

@@ -59,6 +59,21 @@ test('a template and submission covering every field type validate', () => {
   assert.deepEqual(result.normalized.muscles, ['legs', 'core']);
 });
 
+test('showInList and isDestroyed are optional booleans and destroyed fields are not submitted', () => {
+  const template = templateWith([
+    field('visible', 'short-text', {showInList: true}),
+    field('retired', 'short-text', {isDestroyed: true}),
+  ]);
+  assert.equal(validateTemplate(template).valid, true);
+  assert.equal(validateSubmissionValues(template, {visible: 'Current'}).valid, true);
+  assert.ok(paths(validateSubmissionValues(template, {visible: 'Current', retired: 'Forged'})).includes('values.retired'));
+  for (const key of ['showInList', 'isDestroyed']) {
+    const invalid = structuredClone(template);
+    invalid.fields[0][key] = 'yes';
+    assert.ok(paths(validateTemplate(invalid)).includes(`fields[0].${key}`));
+  }
+});
+
 test('unknown template and field keys report their exact paths', () => {
   const unknownRoot = {...everyTypeTemplate, surprise: true};
   assert.ok(paths(validateTemplate(unknownRoot)).includes('surprise'));
