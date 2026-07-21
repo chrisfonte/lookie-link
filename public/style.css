@@ -587,6 +587,137 @@ tbody tr:last-child td {
   font-size: 0.92rem;
 }
 
+/* First-party forms use the viewer shell directly; keep controls phone-friendly. */
+.form-layout {
+  max-width: 42rem;
+}
+
+.form-card {
+  overflow-x: visible;
+  padding: clamp(1rem, 4vw, 2rem);
+}
+
+.form-description {
+  margin-top: 0;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.form-card .field {
+  margin: 1.15rem 0;
+}
+
+.form-card .field label {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-weight: 700;
+}
+
+.form-card .field small {
+  display: block;
+  margin: 0.35rem 0;
+  color: var(--text-soft);
+  line-height: 1.4;
+}
+
+.form-card input:not([type="hidden"]),
+.form-card select,
+.form-card textarea {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-code);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  padding: 0.7rem;
+}
+
+.form-card textarea {
+  resize: vertical;
+}
+
+.form-card input[type="checkbox"] {
+  display: block;
+  width: 48px;
+  height: 48px;
+  accent-color: var(--accent);
+}
+
+.form-card input:focus-visible,
+.form-card select:focus-visible,
+.form-card textarea:focus-visible,
+.form-primary-action:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.form-card .invalid input,
+.form-card .invalid select,
+.form-card .invalid textarea {
+  border: 2px solid #f87171;
+}
+
+.form-card .field .field-error {
+  color: #fecaca;
+  font-weight: 600;
+}
+
+.form-card .errors {
+  border: 1px solid #f87171;
+  border-radius: 9px;
+  background: #431c1c;
+  color: #fee2e2;
+  padding: 0.8rem;
+}
+
+.form-card .errors ul {
+  margin-bottom: 0;
+  padding-left: 1.25rem;
+}
+
+:root[data-theme="light"] .form-card .invalid input,
+:root[data-theme="light"] .form-card .invalid select,
+:root[data-theme="light"] .form-card .invalid textarea,
+:root[data-theme="light"] .form-card .errors {
+  border-color: #b91c1c;
+}
+
+:root[data-theme="light"] .form-card .field .field-error,
+:root[data-theme="light"] .form-card .errors {
+  color: #7f1d1d;
+}
+
+:root[data-theme="light"] .form-card .errors {
+  background: #fef2f2;
+}
+
+.form-primary-action {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 0.7rem;
+  color: var(--bg);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.receipt {
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+
+.receipt-card dt {
+  margin-top: 1rem;
+  font-weight: 700;
+}
+
+.receipt-card dd {
+  margin: 0.25rem 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .content.markdown pre,
 .content.code pre {
   border: 1px solid var(--border);
