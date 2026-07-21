@@ -794,18 +794,23 @@ tbody tr:last-child td {
 }
 
 .form-layout .field-readout .stepped-select {
-  height: 5rem;
-  padding: 0.5rem 2.4rem 0.5rem 0.6rem;
+  /* A dropdown must fit its widest OPTION TEXT, not just a number. At readout
+     size the placeholder ("Select...") overflowed and was clipped mid-word.
+     Keep the numerals prominent and tabular, but sized so the empty state and
+     any option label still fit inside the control. */
+  height: 4rem;
+  padding: 0.5rem 2.2rem 0.5rem 0.6rem;
   font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
-  font-size: clamp(1.6rem, 7.5vw, 2.5rem);
+  font-size: clamp(1.05rem, 4.5vw, 1.5rem);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.02em;
   line-height: 1;
+  text-overflow: ellipsis;
 }
 
 .form-layout .readout-control-select .stepped-select {
-  padding-right: 5rem;
+  padding-right: 4rem;
 }
 
 .form-layout .readout-control-select .readout-unit {
