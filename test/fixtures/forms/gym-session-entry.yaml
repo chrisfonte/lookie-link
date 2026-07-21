@@ -1,0 +1,53 @@
+contractVersion: 1
+resourceKind: form-template
+templateId: gym-session-entry
+ownerId: operator
+revision: 1
+grammarVersion: 1
+title: Gym Session Entry
+fields:
+  - id: session-date
+    type: date
+    label: Session date
+    required: true
+  - id: lift
+    type: select
+    label: Lift
+    required: true
+    options:
+      - id: squat
+        label: Squat
+      - id: bench
+        label: Bench press
+      - id: deadlift
+        label: Deadlift
+      - id: ohp
+        label: Overhead press
+  - id: top-weight
+    type: number
+    label: Top weight
+    required: true
+    constraints:
+      minimum: 0
+  - id: top-reps
+    type: number
+    label: Top reps
+    required: true
+    constraints:
+      minimum: 0
+      integer: true
+  - id: rpe
+    type: number
+    label: RPE
+    required: true
+    constraints:
+      minimum: 1
+      maximum: 10
+  - id: felt-strong
+    type: checkbox
+    label: Felt strong
+    required: true
+  - id: notes
+    type: long-text
+    label: Notes
+    required: true

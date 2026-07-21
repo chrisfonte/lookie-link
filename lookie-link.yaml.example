@@ -98,6 +98,13 @@ repositories:
 #   maxMetadataBytes: 65536
 #   maxRevisions: 20
 
+# Optional first-party forms runner. Enabling this on an unrestricted instance
+# grants every device that can reach it local Operator authority.
+# forms:
+#   enabled: true
+#   templatesPath: ~/.local/share/lookie-link/form-templates
+#   submissionsPath: ~/.local/share/lookie-link/form-submissions
+
 # Custom themes
 # Each theme needs dark and/or light variants.
 # CSS property names use underscores (bg_elev → --bg-elev).

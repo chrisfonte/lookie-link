@@ -15,6 +15,7 @@ const {
   getAccessConfig,
   getManagedReposConfig,
   getPublishConfig,
+  getFormsConfig,
   loadCustomThemes,
   generateCustomThemeCss,
   BUILT_IN_THEMES,
@@ -80,6 +81,10 @@ const {
   buildAgentDiscoveryDocument,
   buildWhoAmIDocument,
 } = require('./lib/agent-discovery');
+const { TemplateRegistry } = require('./lib/forms/template-registry');
+const { SubmissionStore } = require('./lib/forms/submission-store');
+const { SubmissionService } = require('./lib/forms/submission-service');
+const { createFormsRouter } = require('./lib/forms/routes');
 
 const { version: LOOKIE_LINK_VERSION } = require('./package.json');
 
@@ -604,6 +609,7 @@ function createApp(options = {}) {
   const rawAccessConfig = options.accessConfig === undefined ? getAccessConfig() : options.accessConfig;
   const rawManagedReposConfig = options.managedReposConfig === undefined ? getManagedReposConfig() : options.managedReposConfig;
   const rawPublishConfig = options.publishConfig === undefined ? getPublishConfig() : options.publishConfig;
+  const formsConfig = options.formsConfig === undefined ? getFormsConfig() : options.formsConfig;
   const accessConfig = parseAccessConfig(rawAccessConfig);
   const apiKeyStore = options.apiKeyStore === undefined
     ? ApiKeyStore.fromAccessConfig(rawAccessConfig.apiKeys)
@@ -764,6 +770,22 @@ function createApp(options = {}) {
     req.accessContext = resolveAccessContext(req);
     next();
   });
+  if (formsConfig && formsConfig.enabled === true) {
+    if (!formsConfig.templatesPath || !formsConfig.submissionsPath) {
+      throw new Error('forms.templatesPath and forms.submissionsPath are required when forms are enabled.');
+    }
+    const formsRegistry = options.formsRegistry || new TemplateRegistry({ templatesPath: formsConfig.templatesPath });
+    const formsStore = options.formsStore || new SubmissionStore({ storageRoot: formsConfig.submissionsPath });
+    const formsService = options.formsService || new SubmissionService({ registry: formsRegistry, store: formsStore });
+    app.use(createFormsRouter({
+      registry: formsRegistry,
+      store: formsStore,
+      service: formsService,
+      authorize: options.formsAuthorize,
+      publicOrigin: options.formsPublicOrigin,
+      contexts: options.formsCsrfContexts,
+    }));
+  }
   app.use('/public', express.static(path.join(__dirname, 'public'), {
     etag: true,
     maxAge: '1h',
@@ -2658,6 +2680,7 @@ function startServer() {
   const rawHtmlEnabled = getRawHtmlEnabled();
   const accessConfig = getAccessConfig();
   const managedReposConfig = getManagedReposConfig();
+  const formsConfig = getFormsConfig();
 
   const customThemes = loadCustomThemes();
   const customThemeCss = generateCustomThemeCss(customThemes);
@@ -2669,7 +2692,7 @@ function startServer() {
   const allThemes = [...builtInThemes, ...customThemes.map((t) => ({ slug: t.slug, label: t.label }))];
   setThemeList(allThemes);
 
-  const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss, accessConfig, managedReposConfig });
+  const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss, accessConfig, managedReposConfig, formsConfig, formsPublicOrigin: `http://${hostname}:${port}` });
 
   app.listen(port, '0.0.0.0', () => {
     console.log(`Lookie Link listening on http://${hostname}:${port}`);
