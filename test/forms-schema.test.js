@@ -216,3 +216,28 @@ test('selection fields require exactly one option source and non-selection field
   const extra = validateTemplate(templateWith([field('text', 'short-text', {options: [{id: 'one', label: 'One'}]})]));
   assert.ok(paths(extra).includes('fields[0].options'));
 });
+
+test('presentation accepts an operator-installed theme slug and a dark or light mode', () => {
+  const withTheme = templateWith([field('note', 'short-text')]);
+  withTheme.presentation = {theme: 'the-bic', themeMode: 'dark'};
+  assert.equal(validateTemplate(withTheme).valid, true);
+
+  const modeOnly = templateWith([field('note', 'short-text')]);
+  modeOnly.presentation = {themeMode: 'light'};
+  assert.equal(validateTemplate(modeOnly).valid, true);
+});
+
+test('presentation rejects a theme that is a path rather than a slug, and a bogus mode', () => {
+  // The template SELECTS a theme; it must never be able to name a location.
+  const pathy = templateWith([field('note', 'short-text')]);
+  pathy.presentation = {theme: '../../etc/passwd'};
+  assert.ok(paths(validateTemplate(pathy)).includes('presentation.theme'));
+
+  const urlish = templateWith([field('note', 'short-text')]);
+  urlish.presentation = {theme: 'https://example.com/theme.css'};
+  assert.ok(paths(validateTemplate(urlish)).includes('presentation.theme'));
+
+  const badMode = templateWith([field('note', 'short-text')]);
+  badMode.presentation = {themeMode: 'sepia'};
+  assert.ok(paths(validateTemplate(badMode)).includes('presentation.themeMode'));
+});
