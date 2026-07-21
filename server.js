@@ -134,6 +134,7 @@ const CSV_EXTENSIONS = new Set(['.csv']);
 const JSON_VIEWER_EXTENSIONS = new Set(['.json']);
 const HTML_EXTENSIONS = new Set(['.html', '.htm']);
 const RAW_HTML_MIME_TYPE = 'text/html; charset=utf-8';
+const ARTIFACT_SANDBOX = 'sandbox allow-scripts allow-forms allow-popups';
 
 // Text/source asset mime allowlist. Served as raw bytes via /asset/ so agents
 // (and curl) can fetch markdown, code, and config sources without scraping HTML.
@@ -307,6 +308,7 @@ function sendAccessError(res, accessContext, asJson = false) {
 }
 
 function sendRawHtmlResponse(res, sourceBuffer) {
+  res.set('Content-Security-Policy', ARTIFACT_SANDBOX);
   res.status(200).type(RAW_HTML_MIME_TYPE).send(sourceBuffer);
 }
 
@@ -601,6 +603,7 @@ function getRouteAvailability(app) {
 
 function createApp(options = {}) {
   const app = express();
+  const logger = options.logger || console;
   const mappings = { ...(options.mappings || loadRootMappings()) };
   const editingEnabled = options.editingEnabled === undefined ? getEditingEnabled() : Boolean(options.editingEnabled);
   const annotationsEnabled = options.annotationsEnabled === undefined ? getAnnotationsEnabled() : Boolean(options.annotationsEnabled);
@@ -750,7 +753,7 @@ function createApp(options = {}) {
   };
 
   app.disable('x-powered-by');
-  app.set('trust proxy', true);
+  app.set('trust proxy', options.trustProxy === undefined ? false : options.trustProxy);
 
   if (publishStore && publishStore.isEnabled()) {
     const limits = publishStore.getLimits();
@@ -758,7 +761,6 @@ function createApp(options = {}) {
     const manifestBudget = limits.maxMetadataBytes * 2 + limits.maxFiles * 1024 + 64 * 1024;
     app.use('/api/publish', express.json({ limit: encodedContentBudget + manifestBudget }));
   }
-  app.use(express.json({ limit: '2mb' }));
   app.use((req, res, next) => {
     if (mutationUsesQueryToken(req)) {
       res.status(400).json({ ok: false, error: 'Mutation credentials must use the Authorization header.' });
@@ -777,15 +779,36 @@ function createApp(options = {}) {
     const formsRegistry = options.formsRegistry || new TemplateRegistry({ templatesPath: formsConfig.templatesPath });
     const formsStore = options.formsStore || new SubmissionStore({ storageRoot: formsConfig.submissionsPath });
     const formsService = options.formsService || new SubmissionService({ registry: formsRegistry, store: formsStore });
+    const formsAudit = typeof options.formsAudit === 'function'
+      ? options.formsAudit
+      : (event, req) => {
+        const persisted = recordApiKeyAuditEvent(event.type, req.accessContext, {
+          resourceKind: 'form',
+          resourceId: event.templateId || null,
+        }, {
+          outcome: event.outcome,
+          requestId: event.requestId,
+          byteCount: event.byteCount,
+          submissionId: event.submissionId,
+          templateVersion: event.templateVersion,
+          schemaDigest: event.schemaDigest,
+        });
+        if (!persisted) logger.info('Forms audit', event);
+      };
     app.use(createFormsRouter({
       registry: formsRegistry,
       store: formsStore,
       service: formsService,
       authorize: options.formsAuthorize,
-      publicOrigin: options.formsPublicOrigin,
+      publicOrigin: options.formsPublicOrigin === undefined
+        ? formsConfig.publicOrigins
+        : options.formsPublicOrigin,
       contexts: options.formsCsrfContexts,
+      audit: formsAudit,
+      logger,
     }));
   }
+  app.use(express.json({ limit: '2mb' }));
   app.use('/public', express.static(path.join(__dirname, 'public'), {
     etag: true,
     maxAge: '1h',
@@ -2542,6 +2565,7 @@ function createApp(options = {}) {
         ),
       });
       res.set('X-Lookie-Content-Mode', 'transformed-embed');
+      res.set('Content-Security-Policy', ARTIFACT_SANDBOX);
       res.status(200).type(RAW_HTML_MIME_TYPE).send(html);
     } catch (error) {
       console.error('Failed to transform embed HTML', { repo, relativePath, error });
@@ -2664,7 +2688,14 @@ function createApp(options = {}) {
   });
 
   app.use((error, _req, res, _next) => {
-    console.error('Unhandled error', error);
+    if (error && (error.status === 413 || error.type === 'entity.too.large')) {
+      res.status(413).type('text/plain').send('Request body is too large.');
+      return;
+    }
+    logger.error('Unhandled request error.', {
+      name: error && error.name || 'Error',
+      code: error && error.code || 'EUNHANDLED',
+    });
     res.status(500).type('text/plain').send('Internal server error.');
   });
 
@@ -2692,7 +2723,7 @@ function startServer() {
   const allThemes = [...builtInThemes, ...customThemes.map((t) => ({ slug: t.slug, label: t.label }))];
   setThemeList(allThemes);
 
-  const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss, accessConfig, managedReposConfig, formsConfig, formsPublicOrigin: `http://${hostname}:${port}` });
+  const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss, accessConfig, managedReposConfig, formsConfig });
 
   app.listen(port, '0.0.0.0', () => {
     console.log(`Lookie Link listening on http://${hostname}:${port}`);

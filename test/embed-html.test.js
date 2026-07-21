@@ -218,6 +218,8 @@ test('document viewer frames HTML through embed while retaining a distinct raw-s
   });
 
   assert.match(html, /<iframe[\s\S]*data-embedded-html[\s\S]*src="\/embed\/alpha\/docs\/page\.html"/);
+  assert.match(html, /<iframe[\s\S]*src="\/embed\/alpha\/docs\/page\.html"[\s\S]*sandbox="allow-scripts allow-forms allow-popups"/);
+  assert.doesNotMatch(html, /sandbox="[^"]*allow-same-origin/);
   assert.match(html, /href="\/embed\/alpha\/docs\/page\.html"[^>]*>Open embedded<\/a>/);
   assert.match(html, /href="\/raw\/alpha\/docs\/page\.html"[^>]*>Open raw<\/a>/);
   assert.match(html, /lookie-link:set-theme/);

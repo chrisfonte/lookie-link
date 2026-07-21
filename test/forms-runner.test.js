@@ -4,18 +4,23 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const http = require('node:http');
+const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
+const { execFile } = require('node:child_process');
 const { Duplex } = require('node:stream');
+const { promisify } = require('node:util');
 const yaml = require('js-yaml');
 const { JSDOM } = require('jsdom');
 
 const { createApp } = require('../server');
+const { renderReceiptPage } = require('../lib/forms/routes');
 const { TemplateRegistry } = require('../lib/forms/template-registry');
 const { SubmissionStore } = require('../lib/forms/submission-store');
 
 const PUBLIC_ORIGIN = 'http://forms.example.test';
 const GYM_FIXTURE = path.join(__dirname, 'fixtures', 'forms', 'gym-session-entry.yaml');
+const execFileAsync = promisify(execFile);
 
 const everyTypeTemplate = {
   contractVersion: 1,
@@ -60,6 +65,7 @@ async function startServer(fixture, overrides = {}) {
       submissionsPath: fixture.submissionsPath,
     },
     formsPublicOrigin: PUBLIC_ORIGIN,
+    formsAudit: () => {},
     ...overrides,
   });
   return listenApp(app, fixture.root);
@@ -187,6 +193,31 @@ async function submissionFiles(submissionsPath) {
   }
 }
 
+async function availablePort() {
+  const probe = net.createServer();
+  await new Promise((resolve, reject) => {
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', resolve);
+  });
+  const { port } = probe.address();
+  await new Promise((resolve) => probe.close(resolve));
+  return port;
+}
+
+async function runBrowser(url, profilePath) {
+  return execFileAsync(process.env.CHROME_BIN || 'google-chrome', [
+    '--headless=new',
+    '--no-sandbox',
+    '--disable-gpu',
+    '--disable-dev-shm-usage',
+    '--no-proxy-server',
+    `--user-data-dir=${profilePath}`,
+    '--virtual-time-budget=3000',
+    '--dump-dom',
+    url,
+  ], { maxBuffer: 4 * 1024 * 1024, timeout: 15000 });
+}
+
 test('GET renders every field type, required markers, constraints, and a CSRF token', async () => {
   const fixture = await makeFixture({ everyType: true });
   const server = await startServer(fixture);
@@ -272,6 +303,33 @@ test('native validation failure preserves entered values, renders errors, and wr
   }
 });
 
+test('native validation re-render survives browser-context eviction', async () => {
+  const fixture = await makeFixture();
+  const contexts = new Map();
+  const server = await startServer(fixture, {
+    formsCsrfContexts: contexts,
+    formsService: {
+      submit: async () => {
+        contexts.clear();
+        return { error: { code: 'validation_error', message: 'Submission validation failed.', details: [{ path: 'values.notes', message: 'is required' }] } };
+      },
+    },
+  });
+  try {
+    const context = await getBrowserContext(server);
+    const response = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: nativeBody(context.token),
+    });
+    assert.equal(response.status, 422);
+    assert.match(response.headers.get('set-cookie'), /^lookie_forms_context=/);
+    assert.match(await response.text(), /Please correct/);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
 test('JSON POST uses the shared service for success and structured validation errors', async () => {
   const fixture = await makeFixture();
   const server = await startServer(fixture);
@@ -295,6 +353,7 @@ test('JSON POST uses the shared service for success and structured validation er
     assert.deepEqual(created.receipt.values.find((entry) => entry.fieldId === 'lift').selectedOptions, [
       { optionId: 'deadlift', optionLabel: 'Deadlift' },
     ]);
+    assert.equal(created.receipt.values.find((entry) => entry.fieldId === 'lift').fieldLabel, 'Lift');
 
     const invalid = await server.request('/api/forms/gym-session-entry/submissions', {
       method: 'POST',
@@ -315,6 +374,36 @@ test('JSON POST uses the shared service for success and structured validation er
     assert.equal(partialTime.status, 422);
     assert.equal((await partialTime.json()).error.details[0].path, 'eventTime');
     assert.equal((await submissionFiles(fixture.submissionsPath)).length, 1);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('JSON clients cannot forge server fields or capture-time labels', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture);
+  try {
+    const context = await getBrowserContext(server);
+    const headers = { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'X-CSRF-Token': context.token };
+    const forgedMetadata = await server.request('/api/forms/gym-session-entry/submissions', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        values: jsonValues(),
+        actor: { id: 'attacker', type: 'user' },
+        submissionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        receiptAt: '2020-01-01T00:00:00.000Z',
+      }),
+    });
+    assert.equal(forgedMetadata.status, 400);
+
+    const forgedLabel = await server.request('/api/forms/gym-session-entry/submissions', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ values: jsonValues({ lift: { optionId: 'bench', optionLabel: 'Forged label' } }) }),
+    });
+    assert.equal(forgedLabel.status, 422);
+    assert.deepEqual(await submissionFiles(fixture.submissionsPath), []);
   } finally {
     await cleanup(fixture, server);
   }
@@ -390,9 +479,258 @@ test('enabled forms isolate raw HTML with the opaque-origin sandbox profile', as
     const policy = response.headers.get('content-security-policy');
     assert.equal(policy, 'sandbox allow-scripts allow-forms allow-popups');
     assert.doesNotMatch(policy, /allow-same-origin/);
+    const embed = await server.request('/embed/artifacts/page.html');
+    assert.equal(embed.status, 200);
+    assert.equal(embed.headers.get('content-security-policy'), policy);
+    const view = await server.request('/view/artifacts/page.html');
+    const document = new JSDOM(await view.text()).window.document;
+    assert.equal(document.querySelector('iframe[data-embedded-html]').getAttribute('sandbox'), 'allow-scripts allow-forms allow-popups');
+
+    const asset = await server.request('/asset/artifacts/page.html');
+    assert.equal(asset.status, 200);
+    assert.match(asset.headers.get('content-type'), /^text\/plain/);
   } finally {
     await cleanup(fixture, server);
   }
+});
+
+test('real browser canary blocks artifact token harvesting through embed and view', { timeout: 45000 }, async (t) => {
+  const fixture = await makeFixture();
+  const artifactsPath = path.join(fixture.root, 'artifacts');
+  await fs.mkdir(artifactsPath);
+  const attack = `<!doctype html><body data-attack="started"><script>
+(async () => {
+  try {
+    const form = await fetch('/forms/gym-session-entry', { credentials: 'include' });
+    const html = await form.text();
+    const token = /name="_csrf" value="([^"]+)"/.exec(html)[1];
+    const body = new URLSearchParams({_csrf: token, 'session-date':'2026-07-20', lift:'bench', 'top-weight':'225', 'top-reps':'5', rpe:'8', 'felt-strong':'true', notes:'artifact attack'});
+    await fetch('/forms/gym-session-entry', { method:'POST', credentials:'include', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
+    document.body.dataset.attack = 'sent';
+  } catch (_error) {
+    document.body.dataset.attack = 'blocked';
+  }
+})();
+</script></body>`;
+  await fs.writeFile(path.join(artifactsPath, 'attack.html'), attack, 'utf8');
+  let port;
+  try {
+    port = await availablePort();
+  } catch (error) {
+    if (error && error.code === 'EPERM') {
+      t.skip('loopback listeners are prohibited by this execution sandbox');
+      await cleanup(fixture, null);
+      return;
+    }
+    throw error;
+  }
+  const origin = `http://127.0.0.1:${port}`;
+  const app = createApp({
+    mappings: { artifacts: artifactsPath },
+    rawHtmlEnabled: true,
+    accessConfig: { humanDefault: 'full' },
+    formsConfig: { enabled: true, templatesPath: fixture.templatesPath, submissionsPath: fixture.submissionsPath },
+    formsPublicOrigin: origin,
+    formsAudit: () => {},
+  });
+  const browserServer = await new Promise((resolve, reject) => {
+    const listening = app.listen(port, '127.0.0.1', () => resolve(listening));
+    listening.once('error', reject);
+  });
+  try {
+    const embed = await runBrowser(`${origin}/embed/artifacts/attack.html`, path.join(fixture.root, 'chrome-embed'));
+    assert.match(embed.stdout, /data-attack="blocked"/);
+    assert.deepEqual(await submissionFiles(fixture.submissionsPath), []);
+
+    await runBrowser(`${origin}/view/artifacts/attack.html`, path.join(fixture.root, 'chrome-view'));
+    assert.deepEqual(await submissionFiles(fixture.submissionsPath), []);
+  } finally {
+    await new Promise((resolve) => browserServer.close(resolve));
+    await cleanup(fixture, null);
+  }
+});
+
+test('browser mutations fail closed without configured public origins despite matching hostile Host', async () => {
+  const fixture = await makeFixture();
+  const warnings = [];
+  const server = await startServer(fixture, {
+    formsPublicOrigin: undefined,
+    formsAudit: () => {},
+    logger: { warn: (message) => warnings.push(message), info() {}, error() {} },
+  });
+  try {
+    const form = await server.request('/forms/gym-session-entry', { headers: { Host: 'evil.test' } });
+    const context = browserContext(form, await form.text());
+    const response = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: {
+        Host: 'evil.test',
+        Origin: 'http://evil.test',
+        'X-Forwarded-Proto': 'http',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: context.cookie,
+      },
+      body: nativeBody(context.token),
+    });
+    assert.equal(response.status, 403);
+    assert.deepEqual(await submissionFiles(fixture.submissionsPath), []);
+    assert.ok(warnings.some((message) => /without an explicit valid public origin/.test(message)));
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('temporal validation, idempotency conflict, and oversized JSON map without path leaks', async () => {
+  const fixture = await makeFixture();
+  const logs = [];
+  const server = await startServer(fixture, {
+    formsAudit: () => {},
+    logger: { warn() {}, info() {}, error: (...args) => logs.push(args) },
+  });
+  try {
+    const context = await getBrowserContext(server);
+    const headers = { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'X-CSRF-Token': context.token };
+    const invalidTimes = [
+      { eventAt: 'garbage', timezone: 'America/New_York', clientOffsetMinutes: -240 },
+      { eventAt: '2026-07-20T09:30:00-04:00', timezone: 'Not/AZone', clientOffsetMinutes: -240 },
+      { eventAt: '2026-07-20T09:30:00-04:00', timezone: 'America/New_York', clientOffsetMinutes: 0 },
+      { eventAt: '2026-07-20T09:30:00-04:00', timezone: 'America/New_York', clientOffsetMinutes: -240.5 },
+    ];
+    const bodies = [];
+    for (const eventTime of invalidTimes) {
+      const response = await server.request('/api/forms/gym-session-entry/submissions', {
+        method: 'POST', headers, body: JSON.stringify({ values: jsonValues(), ...eventTime }),
+      });
+      bodies.push(await response.text());
+      assert.equal(response.status, 400);
+    }
+
+    const first = await server.request('/api/forms/gym-session-entry/submissions', {
+      method: 'POST', headers, body: JSON.stringify({ values: jsonValues(), idempotencyKey: 'conflict-route-key-0001' }),
+    });
+    assert.equal(first.status, 201);
+    const conflict = await server.request('/api/forms/gym-session-entry/submissions', {
+      method: 'POST', headers, body: JSON.stringify({ values: jsonValues({ notes: 'different' }), idempotencyKey: 'conflict-route-key-0001' }),
+    });
+    bodies.push(await conflict.text());
+    assert.equal(conflict.status, 409);
+
+    const oversized = await server.request('/api/forms/gym-session-entry/submissions', {
+      method: 'POST', headers, body: JSON.stringify({ values: { notes: 'x'.repeat(3 * 1024 * 1024) } }),
+    });
+    bodies.push(await oversized.text());
+    assert.equal(oversized.status, 413);
+    assert.doesNotMatch(bodies.join('\n'), new RegExp(fixture.root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.doesNotMatch(JSON.stringify(logs), /submission-store\.js|forms-runner\.test\.js/);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('form audit events cover reads, submissions, and denials without sensitive material', async () => {
+  const fixture = await makeFixture();
+  const events = [];
+  const server = await startServer(fixture, { formsAudit: (event) => events.push(event) });
+  try {
+    const context = await getBrowserContext(server);
+    const accepted = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: nativeBody(context.token),
+    });
+    assert.equal(accepted.status, 303);
+    assert.equal((await server.request(accepted.headers.get('location'))).status, 200);
+    const denied = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: 'http://evil.test' },
+      body: nativeBody(context.token),
+    });
+    assert.equal(denied.status, 403);
+    assert.ok(events.some((event) => event.type === 'form.render' && event.outcome === 'accepted'));
+    assert.ok(events.some((event) => event.type === 'form.submit' && event.outcome === 'accepted'));
+    assert.ok(events.some((event) => event.type === 'form.receipt.read' && event.outcome === 'accepted'));
+    assert.ok(events.some((event) => event.outcome === 'rejected_origin'));
+    const serialized = JSON.stringify(events);
+    for (const secret of [context.token, 'Smooth reps', 'Session date', 'Bench press', fixture.root]) {
+      assert.equal(serialized.includes(secret), false, secret);
+    }
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('receipt preserves capture-time field labels after a template rename', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, { formsAudit: () => {} });
+  try {
+    const context = await getBrowserContext(server);
+    const accepted = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: nativeBody(context.token),
+    });
+    const templatePath = path.join(fixture.templatesPath, 'gym-session-entry.yaml');
+    const template = yaml.load(await fs.readFile(templatePath, 'utf8'));
+    template.fields.find((field) => field.id === 'lift').label = 'Renamed lift';
+    await fs.writeFile(templatePath, yaml.dump(template), 'utf8');
+    const receipt = await server.request(accepted.headers.get('location'));
+    const html = await receipt.text();
+    assert.match(html, /<dt>Lift<\/dt>/);
+    assert.doesNotMatch(html, /Renamed lift/);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('receipt authorization conceals submissions from a different principal', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, {
+    formsAuthorize: ({ req, capability }) => {
+      if (capability === 'forms.submit' || capability === 'forms.view') {
+        req.accessContext = { mode: 'scoped', principal: { id: req.get('x-principal') || 'owner', kind: 'user' } };
+        return true;
+      }
+      return capability === 'forms.read_submissions' && req.get('x-read-all') === 'yes';
+    },
+  });
+  try {
+    const form = await server.request('/forms/gym-session-entry', { headers: { 'X-Principal': 'owner' } });
+    const context = browserContext(form, await form.text());
+    const accepted = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: {
+        'X-Principal': 'owner',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: context.cookie,
+        Origin: PUBLIC_ORIGIN,
+      },
+      body: nativeBody(context.token),
+    });
+    const denied = await server.request(accepted.headers.get('location'), { headers: { 'X-Principal': 'other' } });
+    assert.equal(denied.status, 404);
+    assert.equal(await denied.text(), 'Not found.');
+    const reader = await server.request(accepted.headers.get('location'), { headers: { 'X-Read-All': 'yes' } });
+    assert.equal(reader.status, 200);
+    assert.match(await reader.text(), /Smooth reps/);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('capture-time receipt labels and values remain HTML escaped', () => {
+  const html = renderReceiptPage(null, {
+    submissionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    receiptAt: '2026-07-20T00:00:00.000Z',
+    values: [{
+      fieldId: 'notes',
+      fieldType: 'long-text',
+      fieldLabel: '<script>label()</script>',
+      value: '<img src=x onerror=alert(1)>',
+    }],
+  });
+  assert.doesNotMatch(html, /<script>label|<img src/);
+  assert.match(html, /&lt;script&gt;label\(\)&lt;\/script&gt;/);
+  assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
 });
 
 test('template traversal is a uniform not-found and never indexes the filesystem', async () => {

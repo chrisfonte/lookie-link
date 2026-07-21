@@ -24,11 +24,12 @@ function submission(overrides = {}) {
       {
         fieldId: 'activity',
         fieldType: 'select',
+        fieldLabel: 'Activity',
         value: 'walk',
         selectedOptions: [{ optionId: 'walk', optionLabel: 'Walk' }],
       },
-      { fieldId: 'duration', fieldType: 'number', value: 30 },
-      { fieldId: 'notes', fieldType: 'long-text', value: 'Easy pace' },
+      { fieldId: 'duration', fieldType: 'number', fieldLabel: 'Duration', value: 30 },
+      { fieldId: 'notes', fieldType: 'long-text', fieldLabel: 'Notes', value: 'Easy pace' },
     ],
     ...overrides,
   };
@@ -79,6 +80,10 @@ test('submission records round-trip with exact capture-time contract fields', as
     assert.match(created.requestDigest, /^sha256:[0-9a-f]{64}$/);
     assert.doesNotMatch(JSON.stringify(created), /round-trip-request-0001/);
 
+    const recordStat = await fs.stat(store.recordPath(created.submissionId));
+    assert.equal(recordStat.mode & 0o777, 0o600);
+    assert.equal(recordStat.nlink, 1);
+
     assert.deepEqual(await store.getSubmission(created.submissionId), created);
     const listed = await store.listSubmissions({ templateId: 'activity-log' });
     assert.deepEqual(listed, [{
@@ -127,7 +132,7 @@ test('an existing submission ID cannot be overwritten and its bytes remain ident
 
     await assert.rejects(
       store.createSubmission(submission({ submissionId, values: [
-        { fieldId: 'notes', fieldType: 'long-text', value: 'Replacement' },
+        { fieldId: 'notes', fieldType: 'long-text', fieldLabel: 'Notes', value: 'Replacement' },
       ] }), { idempotencyKey: 'second-immutable-write-0002' }),
       (error) => error.code === 'EEXIST'
     );
@@ -175,7 +180,7 @@ test('reusing an idempotency key for different payload is a side-effect-free con
 
     await assert.rejects(
       store.createSubmission(submission({ values: [
-        { fieldId: 'notes', fieldType: 'long-text', value: 'Different intent' },
+        { fieldId: 'notes', fieldType: 'long-text', fieldLabel: 'Notes', value: 'Different intent' },
       ] }), { idempotencyKey: 'conflict-request-key-0001' }),
       (error) => error.code === 'ECONFLICT'
     );
@@ -200,6 +205,7 @@ test('selected option labels are immutable snapshots of capture-time template me
       values: [{
         fieldId: template.fields[0].id,
         fieldType: template.fields[0].type,
+        fieldLabel: 'Activity',
         value: template.fields[0].options[0].id,
         selectedOptions: [{
           optionId: template.fields[0].options[0].id,
@@ -246,6 +252,7 @@ test('a rejected invalid write has no filesystem side effects', async () => {
         values: [{
           fieldId: 'activity',
           fieldType: 'select',
+          fieldLabel: 'Activity',
           value: 'walk',
           selectedOptions: [{ optionId: 'walk', optionLabel: 'Walk' }],
           unexpected: 'rejected',
