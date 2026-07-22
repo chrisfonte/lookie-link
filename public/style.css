@@ -2503,7 +2503,7 @@ tbody tr:last-child td {
   gap: 0.15rem;
   padding: 0.5rem;
   background: var(--bg-elev);
-  background-color: color-mix(in srgb, var(--bg-elev) 82%, transparent);
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--bg-elev) 86%, var(--text-soft)) 84%, transparent);
   backdrop-filter: blur(10px);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -2552,7 +2552,7 @@ tbody tr:last-child td {
   margin: 0.7rem 0 0;
   padding: 0.85rem 0.95rem;
   background: var(--bg-elev);
-  background-color: color-mix(in srgb, var(--bg-elev) 82%, transparent);
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--bg-elev) 86%, var(--text-soft)) 84%, transparent);
   backdrop-filter: blur(10px);
   border: 1px solid var(--border);
   border-radius: 10px;
