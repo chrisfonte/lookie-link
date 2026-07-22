@@ -28,14 +28,14 @@ test('the header no longer repeats the location three times', () => {
   assert.doesNotMatch(html, /Back to directory/);
 });
 
-test('file facts move out of the header into Properties', () => {
+test('file facts live in the toolbar Properties control, not the header', () => {
   const html = render();
 
   // The old meta line is gone...
   assert.doesNotMatch(html, /<p class="doc-meta">/);
   // ...and the same facts are available, collapsed, in Properties.
-  assert.match(html, /<details class="doc-properties">/);
-  assert.match(html, /<summary>Properties<\/summary>/);
+  assert.match(html, /<details class="doc-properties toolbar-properties">/);
+  assert.match(html, /<summary class="toolbar-btn">Properties<\/summary>/);
   assert.match(html, /<dt>Size<\/dt><dd>4\.1 KB<\/dd>/);
   assert.match(html, /<dt>Modified<\/dt><dd>2026-07-21<\/dd>/);
   assert.match(html, /<dt>File<\/dt><dd>guide\.md<\/dd>/);

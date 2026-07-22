@@ -2431,10 +2431,64 @@ tbody tr:last-child td {
 
 
 
+/* The final breadcrumb segment is the document's name and the page's <h1>. It sits
+   inline in the trail rather than being repeated on a line below. */
+.breadcrumbs .crumb-title {
+  display: inline;
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.breadcrumbs .crumb-title a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.breadcrumbs .crumb-title a:hover,
+.breadcrumbs .crumb-title a:focus-visible {
+  text-decoration: underline;
+}
+
 /* Properties: file facts, collapsed by default. Same disclosure interaction as the
    frontmatter panel, because they are the same kind of thing to a reader. */
 .doc-properties {
   margin: 0.5rem 0 0;
+}
+
+/* In the toolbar the control sits beside Files, the theme picker and Annotate, so
+   it must not take part in the toolbar's flex flow when open -- the panel is
+   anchored beneath the toolbar instead of stretching it. */
+.toolbar-properties {
+  /* No positioning context here on purpose: the panel anchors to .viewer-toolbar
+     (position:fixed, so it is a containing block) and spans its width. Anchoring to
+     the button instead pushed the panel off the left edge when right-aligned and off
+     the right edge when left-aligned -- the toolbar is on screen by definition. */
+  margin: 0;
+}
+
+.toolbar-properties > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.toolbar-properties > summary::-webkit-details-marker,
+.toolbar-properties > summary::marker {
+  display: none;
+  content: "";
+}
+
+.toolbar-properties .doc-properties-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  z-index: 40;
+  width: auto;
+  max-height: min(60vh, 28rem);
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 .doc-properties > summary {
