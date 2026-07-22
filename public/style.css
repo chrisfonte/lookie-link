@@ -431,6 +431,18 @@ a:hover {
 
 .topbar {
   margin-bottom: 1rem;
+  /* The viewer toolbar is position:fixed at the top right and floats over content.
+     The header used to lead with a short filename heading that fit beside it; it now
+     leads with breadcrumbs, which are long enough to run underneath. Reserve the
+     toolbar's height so the first line of the header always clears it. */
+  padding-top: 2.9rem;
+}
+
+/* The toolbar wraps to a second row on narrow viewports, so it needs more clearance. */
+@media (max-width: 640px) {
+  .topbar {
+    padding-top: 5rem;
+  }
 }
 
 .topbar h1 {

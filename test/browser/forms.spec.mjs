@@ -102,6 +102,17 @@ async function startFixture() {
   });
   await registry.createDraft(structuredClone(gymTemplate));
 
+  // A mapped repo with a document, so browser tests can cover document pages too.
+  // Without this the fixture serves forms only, and a header assertion written
+  // against a form page passes vacuously when the document header is broken.
+  const docsPath = path.join(root, 'docs-repo');
+  await fs.mkdir(path.join(docsPath, 'guides'), {recursive: true});
+  await fs.writeFile(
+    path.join(docsPath, 'guides', 'a-fairly-long-document-name.md'),
+    '---\nTitle: Sample\n---\n\n# Sample\n\nBody.\n',
+    'utf8'
+  );
+
   const listener = http.createServer();
   await new Promise((resolve, reject) => {
     listener.once('error', reject);
@@ -109,7 +120,12 @@ async function startFixture() {
   });
   const origin = `http://127.0.0.1:${listener.address().port}`;
   const app = createApp({
-    mappings: {},
+    mappings: {docs: docsPath},
+    // Match production's toolbar: annotations and editing add buttons, which makes
+    // the toolbar taller and wider. A fixture with fewer buttons never reproduces
+    // the overlap it is meant to guard against.
+    annotationsEnabled: true,
+    editingEnabled: true,
     accessConfig: {humanDefault: 'full'},
     formsConfig: {
       enabled: true,
@@ -370,4 +386,34 @@ browserTest('builder field rows start collapsed and expand without clipped contr
   assert.equal(await fields.first().getAttribute('open'), '');
   assert.equal(await fields.first().locator('.builder-field-settings').isVisible(), true);
   await assertNoClippedControls(page, 'expanded builder');
+});
+
+browserTest('the header clears the floating toolbar instead of running underneath it', async ({page, fixture}) => {
+  // The toolbar is position:fixed at the top right and floats over content. The
+  // header must start below it -- a long first line (breadcrumbs on document
+  // pages) otherwise disappears under the controls. Caught by screenshot once;
+  // asserted here so it stays caught.
+  await page.goto(`${fixture.origin}/view/docs/guides/a-fairly-long-document-name.md`, {waitUntil: 'networkidle'});
+
+  const geometry = await page.evaluate(() => {
+    const toolbar = document.querySelector('.viewer-toolbar');
+    const topbar = document.querySelector('.topbar');
+    if (!toolbar || !topbar) return null;
+    const t = toolbar.getBoundingClientRect();
+    const h = topbar.getBoundingClientRect();
+    const first = topbar.firstElementChild;
+    const f = first ? first.getBoundingClientRect() : null;
+    return {
+      toolbarBottom: t.bottom,
+      topbarTop: h.top,
+      firstChildTop: f ? f.top : null,
+      firstChildTag: first ? first.tagName : null,
+    };
+  });
+
+  assert.ok(geometry, 'expected a toolbar and a header');
+  assert.ok(
+    geometry.firstChildTop >= geometry.toolbarBottom,
+    `header content must start below the toolbar (${geometry.firstChildTag} top ${geometry.firstChildTop} vs toolbar bottom ${geometry.toolbarBottom})`
+  );
 });
