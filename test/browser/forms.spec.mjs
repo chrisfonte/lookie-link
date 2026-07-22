@@ -109,7 +109,8 @@ async function startFixture() {
   await fs.mkdir(path.join(docsPath, 'guides'), {recursive: true});
   await fs.writeFile(
     path.join(docsPath, 'guides', 'a-fairly-long-document-name.md'),
-    '---\nTitle: Sample\n---\n\n# Sample\n\nBody.\n',
+    '---\nTitle: Sample\n---\n\n# Sample\n\nBody.\n\n'
+    + Array.from({length: 12}, (_, i) => `## Section ${i + 1}\n\nText for section ${i + 1}.\n\n`).join(''),
     'utf8'
   );
 
@@ -457,4 +458,31 @@ browserTest('the header clears the floating toolbar instead of running underneat
     geometry.firstChildTop >= geometry.toolbarBottom,
     `header content must start below the toolbar (${geometry.firstChildTag} top ${geometry.firstChildTop} vs toolbar bottom ${geometry.toolbarBottom})`
   );
+});
+
+browserTest('the contents menu opens over the document instead of replacing it', async ({page, fixture}) => {
+  await page.setViewportSize({width: 1100, height: 700});
+  await page.goto(`${fixture.origin}/view/docs/guides/a-fairly-long-document-name.md`, {waitUntil: 'networkidle'});
+
+  const toggle = await page.$('[data-toc-toggle]');
+  if (!toggle) return; // document has too few headings for a contents menu
+
+  await toggle.click();
+  await page.waitForSelector('.toc-list .toc-item', {timeout: 5000});
+
+  const state = await page.evaluate(() => {
+    const list = document.querySelector('.toc-list');
+    const doc = document.querySelector('[data-rendered-view]');
+    const rect = list.getBoundingClientRect();
+    return {
+      documentStillVisible: doc ? !doc.hidden : null,
+      onScreen: rect.left >= 0 && rect.right <= window.innerWidth,
+      scrollsInternally: list.scrollHeight > 0 && getComputedStyle(list).overflowY === 'auto',
+    };
+  });
+
+  // The point of the change: it is a menu, not a view swap. The document must stay.
+  assert.equal(state.documentStillVisible, true, 'the document stays visible behind the menu');
+  assert.ok(state.onScreen, 'the contents menu stays on screen');
+  assert.ok(state.scrollsInternally, 'a long contents list scrolls inside the menu');
 });

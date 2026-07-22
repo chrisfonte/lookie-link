@@ -2480,6 +2480,29 @@ tbody tr:last-child td {
   content: "";
 }
 
+/* The contents menu shares the Properties menu shell but holds a long list, so it
+   scrolls internally rather than growing past the viewport. */
+.toolbar-toc .toc-list {
+  position: absolute;
+  left: 0;
+  right: auto;
+  top: calc(100% + 0.5rem);
+  z-index: 40;
+  width: max-content;
+  min-width: 16rem;
+  max-width: min(30rem, calc(100vw - 1.6rem));
+  max-height: min(60vh, 26rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
 .toolbar-properties .doc-properties-grid {
   position: absolute;
   left: 0;
