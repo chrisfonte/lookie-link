@@ -2465,8 +2465,13 @@ tbody tr:last-child td {
 /* In the toolbar the control sits beside Files, the theme picker and Annotate, so
    it must not take part in the toolbar's flex flow when open -- the panel is
    anchored beneath the toolbar instead of stretching it. */
+/* Every toolbar disclosure. Each carries .doc-properties for the shared menu shell,
+   which brings a standalone top margin -- that margin pushes the control down AND
+   stops it stretching to the flex line height. Adding a new menu without listing it
+   here has now caused that misalignment twice. */
 .toolbar-properties,
-.toolbar-toc {
+.toolbar-toc,
+.toolbar-menu {
   /* No positioning context here on purpose: the panel anchors to .viewer-toolbar
      (position:fixed, so it is a containing block) and spans its width. Anchoring to
      the button instead pushed the panel off the left edge when right-aligned and off
@@ -2495,7 +2500,7 @@ tbody tr:last-child td {
   z-index: 40;
   min-width: 11rem;
   max-width: min(22rem, calc(100vw - 1.6rem));
-  max-height: min(60vh, 22rem);
+  max-height: min(72vh, 32rem);
   overflow-y: auto;
   display: flex;
   flex-direction: column;

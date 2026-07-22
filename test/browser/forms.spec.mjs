@@ -524,3 +524,55 @@ browserTest('theme and section menus behave like menus, not native selects', asy
   });
   assert.ok(box.left >= 0 && box.right <= box.viewport, 'section menu stays on screen at 390px');
 });
+
+browserTest('every toolbar control sits on the same line', async ({page, fixture}) => {
+  // Each disclosure carries .doc-properties for the shared menu shell, which brings a
+  // standalone top margin. Forgetting to reset it for a NEW menu pushes that control
+  // down and stops it stretching to the line height. That has happened twice, so it
+  // is asserted for every control rather than for the ones that broke.
+  await page.setViewportSize({width: 1200, height: 800});
+  await page.goto(`${fixture.origin}/view/docs/guides/a-fairly-long-document-name.md`, {waitUntil: 'networkidle'});
+
+  const controls = await page.evaluate(() => {
+    const bar = document.querySelector('.viewer-toolbar').getBoundingClientRect();
+    return [...document.querySelectorAll('.viewer-toolbar > *')].map((el) => ({
+      label: (el.textContent || '').trim().slice(0, 16) || el.tagName,
+      top: Math.round(el.getBoundingClientRect().top - bar.top),
+      height: Math.round(el.getBoundingClientRect().height),
+    }));
+  });
+
+  assert.ok(controls.length > 3, 'expected a populated toolbar');
+  const offsets = [...new Set(controls.map((c) => c.top))];
+  assert.equal(offsets.length, 1, `controls must share one top offset, got ${JSON.stringify(controls)}`);
+  const heights = [...new Set(controls.map((c) => c.height))];
+  assert.equal(heights.length, 1, `controls must share one height, got ${JSON.stringify(controls)}`);
+});
+
+browserTest('the theme menu shows every installed theme without silent truncation', async ({page, fixture}) => {
+  // The fixture would otherwise carry only the built-in themes, which fit in any
+  // plausible height -- so it could not reproduce a deployment with custom themes
+  // installed, which is exactly where the list started hiding entries.
+  const {setThemeList, getThemeList} = require('../../lib/renderer.js');
+  const installed = getThemeList();
+  setThemeList([...installed, ...['alpha', 'beta', 'gamma', 'delta'].map((slug) => ({slug, label: `Theme ${slug}`}))]);
+
+  await page.setViewportSize({width: 1200, height: 800});
+  await page.goto(`${fixture.origin}/view/docs/guides/a-fairly-long-document-name.md`, {waitUntil: 'networkidle'});
+  await page.click('[data-theme-menu] > summary');
+  await page.waitForSelector('[data-theme-item]');
+
+  const menu = await page.evaluate(() => {
+    const list = document.querySelector('[data-theme-menu] .toolbar-menu-list');
+    return {items: list.children.length, scrollHeight: list.scrollHeight, clientHeight: list.clientHeight};
+  });
+
+  assert.ok(menu.items >= 10, 'expected the built-in themes at least');
+  // Scrolling is acceptable, but not while there is room to show them.
+  assert.ok(
+    menu.scrollHeight <= menu.clientHeight + 1,
+    `all ${menu.items} themes should fit (needs ${menu.scrollHeight}px, has ${menu.clientHeight}px)`
+  );
+
+  setThemeList(installed);
+});
