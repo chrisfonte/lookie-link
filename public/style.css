@@ -2461,7 +2461,8 @@ tbody tr:last-child td {
 /* In the toolbar the control sits beside Files, the theme picker and Annotate, so
    it must not take part in the toolbar's flex flow when open -- the panel is
    anchored beneath the toolbar instead of stretching it. */
-.toolbar-properties {
+.toolbar-properties,
+.toolbar-toc {
   /* No positioning context here on purpose: the panel anchors to .viewer-toolbar
      (position:fixed, so it is a containing block) and spans its width. Anchoring to
      the button instead pushed the panel off the left edge when right-aligned and off
@@ -2498,6 +2499,8 @@ tbody tr:last-child td {
   gap: 0.15rem;
   padding: 0.5rem;
   background: var(--bg-elev);
+  background-color: color-mix(in srgb, var(--bg-elev) 82%, transparent);
+  backdrop-filter: blur(10px);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
@@ -2545,6 +2548,8 @@ tbody tr:last-child td {
   margin: 0.7rem 0 0;
   padding: 0.85rem 0.95rem;
   background: var(--bg-elev);
+  background-color: color-mix(in srgb, var(--bg-elev) 82%, transparent);
+  backdrop-filter: blur(10px);
   border: 1px solid var(--border);
   border-radius: 10px;
 }
