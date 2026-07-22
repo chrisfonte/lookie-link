@@ -2215,7 +2215,11 @@ tbody tr:last-child td {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 8px;
+  /* Translucent so the menu's own backdrop blur reads through. An opaque item
+     background tiled over the whole panel and made a translucent container look
+     solid -- the container was translucent, its contents were not. */
   background: var(--bg-code);
+  background-color: color-mix(in srgb, var(--bg-code) 45%, transparent);
   color: var(--text);
   text-align: left;
   font-size: 0.92rem;

@@ -844,7 +844,16 @@ function createApp(options = {}) {
   app.use(express.json({ limit: '2mb' }));
   app.use('/public', express.static(path.join(__dirname, 'public'), {
     etag: true,
-    maxAge: '1h',
+    // `no-cache` means "revalidate before using", not "do not store". Paired with
+    // the ETag above, an unchanged file costs a 304 and no body.
+    //
+    // This replaced `maxAge: '1h'`, under which the browser would not even ASK for
+    // up to an hour, so the ETag never got a chance to work. A deployed stylesheet
+    // fix stayed invisible until the cache expired, which repeatedly read as "the
+    // fix did not work" when the server was already serving the corrected file.
+    setHeaders(res) {
+      res.setHeader('Cache-Control', 'no-cache');
+    },
   }));
 
   app.get('/api/managed-repos', (req, res) => {
