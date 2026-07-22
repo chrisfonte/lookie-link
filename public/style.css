@@ -2490,6 +2490,31 @@ tbody tr:last-child td {
   content: "";
 }
 
+/* The toolbar renders every theme's name and CSS reveals the active one, keyed off
+   the data-color-scheme the head script sets before first paint. Assigning the label
+   from script instead meant the control rendered before it knew which theme was
+   active, showing a placeholder first. Custom themes emit their own rule from
+   lib/config.js alongside their variables. */
+.toolbar-menu [data-theme-name] {
+  display: none;
+}
+
+:root[data-color-scheme="slate"] [data-theme-name="slate"] { display: inline; }
+:root[data-color-scheme="teal"] [data-theme-name="teal"] { display: inline; }
+:root[data-color-scheme="nord"] [data-theme-name="nord"] { display: inline; }
+:root[data-color-scheme="rose-pine"] [data-theme-name="rose-pine"] { display: inline; }
+:root[data-color-scheme="monokai"] [data-theme-name="monokai"] { display: inline; }
+:root[data-color-scheme="solarized"] [data-theme-name="solarized"] { display: inline; }
+:root[data-color-scheme="github"] [data-theme-name="github"] { display: inline; }
+:root[data-color-scheme="ember"] [data-theme-name="ember"] { display: inline; }
+:root[data-color-scheme="noir"] [data-theme-name="noir"] { display: inline; }
+:root[data-color-scheme="indigo"] [data-theme-name="indigo"] { display: inline; }
+
+/* Nothing matched -- an unknown or not-yet-applied scheme still needs a label. */
+:root:not([data-color-scheme]) [data-theme-name="slate"] {
+  display: inline;
+}
+
 /* Files and theme menus: same surface as the other toolbar menus. Native <select>
    popups are drawn by the OS and cannot take this treatment, which is why these are
    custom disclosures. */
