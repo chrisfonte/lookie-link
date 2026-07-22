@@ -505,7 +505,9 @@ browserTest('theme and section menus behave like menus, not native selects', asy
     const state = await page.evaluate(() => ({
       scheme: document.documentElement.getAttribute('data-color-scheme'),
       stored: localStorage.getItem('lookie-link-color-scheme'),
-      label: document.querySelector('[data-theme-label]').textContent.trim(),
+      // innerText, not textContent: every theme name is in the DOM and CSS reveals
+      // one, so textContent would concatenate all of them.
+      label: document.querySelector('[data-theme-label]').innerText.trim(),
       open: document.querySelector('[data-theme-menu]').open,
     }));
     assert.equal(state.scheme, 'nord', 'theme applied');
@@ -575,4 +577,40 @@ browserTest('the theme menu shows every installed theme without silent truncatio
   );
 
   setThemeList(installed);
+});
+
+browserTest('the theme control is labelled before script runs, not after', async ({page, fixture}) => {
+  // Regression: the label used to be assigned by script, so the control rendered
+  // showing a placeholder and only became correct once JS ran -- visible as a flash,
+  // and permanently wrong if the script never got there. It is now server-rendered
+  // for every theme with CSS revealing the active one, keyed off the attribute the
+  // head script sets before first paint.
+  await page.goto(`${fixture.origin}/view/docs/guides/a-fairly-long-document-name.md`, {waitUntil: 'domcontentloaded'});
+  await page.evaluate(() => localStorage.setItem('lookie-link-color-scheme', 'nord'));
+  await page.reload({waitUntil: 'networkidle'});
+
+  const state = await page.evaluate(() => {
+    const summary = document.querySelector('[data-theme-label]');
+    const names = [...summary.querySelectorAll('[data-theme-name]')];
+    return {
+      total: names.length,
+      visible: names.filter((n) => getComputedStyle(n).display !== 'none').map((n) => n.textContent),
+      label: summary.innerText.trim(),
+    };
+  });
+
+  assert.ok(state.total >= 10, 'every theme name is rendered, not just the active one');
+  assert.deepEqual(state.visible, ['Nord'], 'exactly one name is revealed, by CSS');
+  assert.equal(state.label, 'Nord');
+
+  // Choosing a theme must relabel without a script assignment.
+  await page.click('[data-theme-menu] > summary');
+  await page.waitForSelector('[data-theme-item]');
+  await page.click('[data-theme-item][value="ember"]');
+  await page.waitForTimeout(100);
+  assert.equal(
+    await page.evaluate(() => document.querySelector('[data-theme-label]').innerText.trim()),
+    'Ember',
+    'the label follows the applied theme'
+  );
 });
