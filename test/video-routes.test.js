@@ -133,7 +133,10 @@ test('video page renderer builds a dedicated player with escaped metadata', () =
   assert.match(html, /<article class="content video-view">/);
   assert.match(html, /<video controls preload="metadata" src="\/asset\/demo\/media\/demo%3Cclip%3E\.webm\?token=read-only" type="video\/webm">/);
   assert.match(html, /demo&lt;clip&gt;\.webm/);
-  assert.match(html, /12 KB · 2026-07-20 · video/);
+  // File facts now live in the Properties disclosure rather than a meta line.
+  assert.match(html, /<dt>Size<\/dt><dd>12 KB<\/dd>/);
+  assert.match(html, /<dt>Modified<\/dt><dd>2026-07-20<\/dd>/);
+  assert.match(html, /<dt>Type<\/dt><dd>video<\/dd>/);
 });
 
 test('document renderer embeds linked and authored video with asset URLs', async () => {
