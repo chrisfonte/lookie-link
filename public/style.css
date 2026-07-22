@@ -431,18 +431,13 @@ a:hover {
 
 .topbar {
   margin-bottom: 1rem;
-  /* The viewer toolbar is position:fixed at the top right and floats over content.
-     The header used to lead with a short filename heading that fit beside it; it now
-     leads with breadcrumbs, which are long enough to run underneath. Reserve the
-     toolbar's height so the first line of the header always clears it. */
-  padding-top: 2.9rem;
-}
-
-/* The toolbar wraps to a second row on narrow viewports, so it needs more clearance. */
-@media (max-width: 640px) {
-  .topbar {
-    padding-top: 5rem;
-  }
+  /* The toolbar is position:fixed and floats over content, and the header leads with
+     breadcrumbs long enough to run underneath it. Clearance is MEASURED rather than
+     guessed: --toolbar-height is set from the live element, because how many rows the
+     toolbar wraps to depends on viewport width, the button set, and even the length of
+     the selected theme's name. A fixed value is a guess that goes stale the next time
+     a control is added. The fallback covers the moment before script runs. */
+  padding-top: calc(var(--toolbar-height, 3.1rem) + 1.1rem);
 }
 
 .topbar h1 {
@@ -2482,10 +2477,11 @@ tbody tr:last-child td {
 .toolbar-properties .doc-properties-grid {
   position: absolute;
   left: 0;
-  right: 0;
+  right: auto;
   top: calc(100% + 0.5rem);
   z-index: 40;
-  width: auto;
+  width: max-content;
+  max-width: min(26rem, calc(100vw - 1.6rem));
   max-height: min(60vh, 28rem);
   overflow-y: auto;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
@@ -2520,8 +2516,9 @@ tbody tr:last-child td {
 
 .doc-properties-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.7rem 1.2rem;
+  grid-template-columns: max-content 1fr;
+  gap: 0.45rem 0.9rem;
+  align-items: baseline;
   margin: 0.7rem 0 0;
   padding: 0.85rem 0.95rem;
   background: var(--bg-elev);
@@ -2529,12 +2526,17 @@ tbody tr:last-child td {
   border-radius: 10px;
 }
 
+.doc-properties-grid > div {
+  display: contents;
+}
+
 .doc-properties-grid dt {
   color: var(--text-soft);
   font-size: 0.7rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  margin: 0 0 0.15rem;
+  margin: 0;
+  white-space: nowrap;
 }
 
 .doc-properties-grid dd {

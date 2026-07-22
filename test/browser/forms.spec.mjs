@@ -388,6 +388,47 @@ browserTest('builder field rows start collapsed and expand without clipped contr
   await assertNoClippedControls(page, 'expanded builder');
 });
 
+browserTest('the header clears the toolbar while the window is resized, not just on load', async ({page, fixture}) => {
+  // Resizing is the case a fixed-width sweep misses: the toolbar rewraps as the
+  // window narrows, and clearance measured only at load time goes stale. Walk a
+  // live page down through the range rather than loading fresh at each width.
+  await page.setViewportSize({width: 1400, height: 800});
+  await page.goto(`${fixture.origin}/view/docs/guides/a-fairly-long-document-name.md`, {waitUntil: 'networkidle'});
+
+  const overlapping = [];
+  for (let width = 1400; width >= 330; width -= 40) {
+    await page.setViewportSize({width, height: 800});
+    await page.waitForTimeout(60);
+    const geometry = await page.evaluate(() => {
+      const toolbar = document.querySelector('.viewer-toolbar').getBoundingClientRect();
+      const crumbs = document.querySelector('.breadcrumbs').getBoundingClientRect();
+      return {toolbarBottom: Math.round(toolbar.bottom), crumbTop: Math.round(crumbs.top)};
+    });
+    if (geometry.crumbTop < geometry.toolbarBottom) {
+      overlapping.push(`${width}px (crumb ${geometry.crumbTop} < toolbar ${geometry.toolbarBottom})`);
+    }
+  }
+
+  assert.deepEqual(overlapping, [], 'header must clear the toolbar at every width while resizing');
+});
+
+browserTest('the Properties menu stays on screen at every width', async ({page, fixture}) => {
+  for (const width of [1400, 1000, 700, 430, 330]) {
+    await page.setViewportSize({width, height: 800});
+    await page.goto(`${fixture.origin}/view/docs/guides/a-fairly-long-document-name.md`, {waitUntil: 'networkidle'});
+    await page.click('.toolbar-properties > summary');
+    await page.waitForTimeout(80);
+    const box = await page.evaluate(() => {
+      const panel = document.querySelector('.doc-properties-grid').getBoundingClientRect();
+      return {left: Math.round(panel.left), right: Math.round(panel.right), viewport: window.innerWidth};
+    });
+    assert.ok(
+      box.left >= 0 && box.right <= box.viewport,
+      `Properties menu must stay on screen at ${width}px (left ${box.left}, right ${box.right})`
+    );
+  }
+});
+
 browserTest('the header clears the floating toolbar instead of running underneath it', async ({page, fixture}) => {
   // The toolbar is position:fixed at the top right and floats over content. The
   // header must start below it -- a long first line (breadcrumbs on document
