@@ -2141,7 +2141,12 @@ tbody tr:last-child td {
 
 .toolbar-btn {
   border: 1px solid var(--border);
+  /* Solid first as the fallback, then a translucent mix so the toolbar's own
+     backdrop-blur reads through the controls the way it does through the bar.
+     color-mix keeps this theme-aware -- the tint still comes from the theme token
+     rather than a hardcoded overlay that would only suit dark palettes. */
   background: var(--toolbar-btn-bg);
+  background-color: color-mix(in srgb, var(--toolbar-btn-bg) 55%, transparent);
   color: var(--toolbar-btn-text);
   border-radius: 999px;
   padding: 0.2rem 0.6rem;
@@ -2153,13 +2158,14 @@ tbody tr:last-child td {
 
 .toolbar-btn:hover {
   background: var(--toolbar-btn-hover);
+  background-color: color-mix(in srgb, var(--toolbar-btn-hover) 80%, transparent);
 }
 
 .toolbar-select {
   border: 1px solid var(--border);
   /* background-color, not the `background` shorthand: the shorthand resets
      background-image and would erase the chevron below. */
-  background-color: var(--toolbar-btn-bg);
+  background-color: color-mix(in srgb, var(--toolbar-btn-bg) 55%, transparent);
   color: var(--text);
   border-radius: 999px;
   padding: 0.2rem 1.45rem 0.2rem 0.6rem;
@@ -2181,7 +2187,7 @@ tbody tr:last-child td {
 }
 
 .toolbar-select:hover {
-  background-color: var(--toolbar-btn-hover);
+  background-color: color-mix(in srgb, var(--toolbar-btn-hover) 80%, transparent);
 }
 
 .toolbar-select:focus-visible {
