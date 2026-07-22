@@ -2418,3 +2418,150 @@ tbody tr:last-child td {
 }
 
 
+
+/* ============================================================================
+   Document components
+   ----------------------------------------------------------------------------
+   The Ops HTML Kit's component vocabulary, made available to rendered documents
+   so a markdown file can use a card or a stat tile without carrying its own
+   <style> block.
+
+   Two rules make this safe:
+
+   1. Scoped to .content, where rendered documents live, so a class in a document
+      can never restyle viewer chrome.
+   2. Every colour resolves from a theme token. Documents borrow the kit's
+      COMPONENT VOCABULARY, not its palette -- the reader still owns the colours
+      and the theme picker keeps working. A hardcoded colour here would be an
+      author-side decision leaking into reader-controlled chrome, which is the
+      merge the theme architecture deliberately avoids.
+   ========================================================================== */
+
+.content .eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  margin: 0 0 0.4rem;
+}
+
+.content .lead {
+  color: var(--text-soft);
+  margin: 0.2rem 0 0;
+}
+
+.content .grid-2,
+.content .grid-3 {
+  display: grid;
+  gap: 14px;
+  margin: 0 0 14px;
+}
+
+.content .grid-2 {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.content .grid-3 {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.content .card,
+.content .tile {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.content .tile .stat {
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--accent);
+}
+
+.content .tile .stat small {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.content .callout {
+  border-left: 3px solid var(--accent);
+  background: var(--bg-elev);
+  border-radius: 0 10px 10px 0;
+  padding: 12px 14px;
+  margin: 0 0 14px;
+}
+
+.content .badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.content .badge,
+.content .pill,
+.content .chip {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.18rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.content .pill {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.content .chip {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+.content .scorebar {
+  height: 9px;
+  border-radius: 999px;
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin: 0.4rem 0 0.9rem;
+}
+
+.content .scorebar > i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.content .timeline {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-left: 2px solid var(--border);
+}
+
+.content .timeline li {
+  position: relative;
+  padding: 0 0 1rem 1.1rem;
+}
+
+.content .timeline li::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 0.35rem;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.content .timeline .when {
+  color: var(--text-soft);
+  font-size: 0.8rem;
+}
