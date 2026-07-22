@@ -69,3 +69,26 @@ test('Properties is collapsed by default so it costs no vertical space', () => {
   // <details> without an `open` attribute renders collapsed.
   assert.doesNotMatch(html, /<details class="doc-properties" open/);
 });
+
+test('static assets revalidate instead of being cached blind', async () => {
+  // A stylesheet fix must be visible on the next load, not up to an hour later.
+  // Regression guard: this was `maxAge: '1h'`, which stopped the browser asking at
+  // all, so deployed CSS changes appeared not to have worked when the server was
+  // already serving the corrected file.
+  const http = require('node:http');
+  const {createApp} = require('../server');
+
+  const app = createApp({mappings: {}, accessConfig: {humanDefault: 'full'}});
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const {port} = server.address();
+    const response = await fetch(`http://127.0.0.1:${port}/public/style.css`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('cache-control'), /no-cache/);
+    assert.ok(response.headers.get('etag'), 'an ETag makes revalidation cheap');
+    assert.doesNotMatch(response.headers.get('cache-control'), /max-age=[1-9]/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
