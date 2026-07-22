@@ -486,3 +486,41 @@ browserTest('the contents menu opens over the document instead of replacing it',
   assert.ok(state.onScreen, 'the contents menu stays on screen');
   assert.ok(state.scrollsInternally, 'a long contents list scrolls inside the menu');
 });
+
+browserTest('theme and section menus behave like menus, not native selects', async ({page, fixture}) => {
+  await page.setViewportSize({width: 1200, height: 800});
+  await page.goto(`${fixture.origin}/view/docs/guides/a-fairly-long-document-name.md`, {waitUntil: 'networkidle'});
+
+  // The section menu labels itself with where you are.
+  const navLabel = await page.textContent('[data-nav-label]');
+  assert.equal(navLabel.trim(), 'Files', 'a document page reads as Files');
+
+  // Switching theme through the menu applies it, persists it, and relabels.
+  await page.click('[data-theme-menu] > summary');
+  await page.waitForSelector('[data-theme-item]');
+  const target = await page.$('[data-theme-item][value="nord"]');
+  if (target) {
+    await target.click();
+    await page.waitForTimeout(120);
+    const state = await page.evaluate(() => ({
+      scheme: document.documentElement.getAttribute('data-color-scheme'),
+      stored: localStorage.getItem('lookie-link-color-scheme'),
+      label: document.querySelector('[data-theme-label]').textContent.trim(),
+      open: document.querySelector('[data-theme-menu]').open,
+    }));
+    assert.equal(state.scheme, 'nord', 'theme applied');
+    assert.equal(state.stored, 'nord', 'theme persisted');
+    assert.equal(state.label, 'Nord', 'control relabels to the active theme');
+    assert.equal(state.open, false, 'menu closes after choosing');
+  }
+
+  // Menus stay on screen at phone width.
+  await page.setViewportSize({width: 390, height: 800});
+  await page.click('[data-nav-menu] > summary');
+  await page.waitForTimeout(120);
+  const box = await page.evaluate(() => {
+    const list = document.querySelector('[data-nav-menu] .toolbar-menu-list').getBoundingClientRect();
+    return {left: list.left, right: list.right, viewport: window.innerWidth};
+  });
+  assert.ok(box.left >= 0 && box.right <= box.viewport, 'section menu stays on screen at 390px');
+});
