@@ -154,7 +154,7 @@ function browserContext(response, html) {
 function assertSharedFormsShell(response, html, customThemeMarker) {
   const document = new JSDOM(html).window.document;
   assert.ok(document.querySelector('link[rel="stylesheet"][href="/public/style.css"]'));
-  assert.ok(document.querySelector('[data-theme-picker]'));
+  assert.ok(document.querySelector('[data-theme-menu]'));
   assert.ok(document.querySelector('[data-theme-toggle]'));
   assert.match(html, /lookie-link-color-scheme/);
   assert.match(html, new RegExp(customThemeMarker));

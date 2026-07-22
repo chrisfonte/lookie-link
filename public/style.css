@@ -2485,6 +2485,64 @@ tbody tr:last-child td {
   content: "";
 }
 
+/* Files and theme menus: same surface as the other toolbar menus. Native <select>
+   popups are drawn by the OS and cannot take this treatment, which is why these are
+   custom disclosures. */
+.toolbar-menu .toolbar-menu-list {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 0.5rem);
+  z-index: 40;
+  min-width: 11rem;
+  max-width: min(22rem, calc(100vw - 1.6rem));
+  max-height: min(60vh, 22rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.35rem;
+  background: var(--bg-elev);
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--bg-elev) 86%, var(--text-soft)) 84%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* Menus anchor to the toolbar rather than to their own button, which keeps them on
+   screen at any width. The theme control sits at the right end, so its menu aligns
+   to the right edge -- opening it at the far left, under an unrelated control, reads
+   as belonging to something else. */
+.toolbar-menu[data-theme-menu] .toolbar-menu-list {
+  left: auto;
+  right: 0;
+}
+
+.toolbar-menu .toolbar-menu-list > * {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  text-align: left;
+  text-decoration: none;
+  padding: 0.4rem 0.6rem;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.toolbar-menu .toolbar-menu-list > *:hover,
+.toolbar-menu .toolbar-menu-list > *:focus-visible {
+  background: var(--toolbar-btn-hover);
+}
+
+.toolbar-menu .toolbar-menu-list > [aria-current="true"],
+.toolbar-menu .toolbar-menu-list > [aria-current="page"] {
+  color: var(--accent);
+  font-weight: 700;
+}
+
 /* The contents menu shares the Properties menu shell but holds a long list, so it
    scrolls internally rather than growing past the viewport. */
 .toolbar-toc .toc-list {
