@@ -548,3 +548,56 @@ test('toolbar section picker offers Files and Forms and disappears when there is
   assert.doesNotMatch(toolbarHtml(), /No href/);
   setNavLinks([]);
 });
+
+test('a form carries its own Properties, reporting facts rather than claims', async () => {
+  const {setThemeList} = require('../lib/renderer');
+  setThemeList([{slug: 'slate', label: 'Slate'}, {slug: 'planet-fitness', label: 'Planet Fitness'}]);
+
+  const server = await makeServer();
+  try {
+    const page = await browserPage(await server.request('/forms/training-log'));
+    const doc = page.document;
+    const panel = doc.querySelector('.toolbar-properties');
+    assert.ok(panel, 'a form page exposes Properties in the toolbar');
+
+    const rows = new Map([...panel.querySelectorAll('div')].map((row) => [
+      row.querySelector('dt').textContent,
+      row.querySelector('dd').textContent,
+    ]));
+    assert.equal(rows.get('Form'), 'training-log');
+    assert.equal(rows.get('Revision'), '1');
+    assert.equal(rows.get('Published'), 'not published', 'reports reality, not intent');
+    assert.equal(rows.get('Destination'), 'gym-log');
+    assert.equal(rows.get('Fields'), '2');
+    assert.equal(rows.has('Theme'), false, 'no theme set, so no theme row');
+  } finally {
+    setThemeList(null);
+    await server.close();
+  }
+});
+
+test('Properties reports a theme only when that theme is actually installed', async () => {
+  const {setThemeList} = require('../lib/renderer');
+  const server = await makeServer();
+  try {
+    const before = await server.registry.getManagementTemplate('training-log');
+    await server.registry.reviseDraft('training-log', before.draft.revision, {
+      presentation: {theme: 'planet-fitness'},
+    });
+
+    setThemeList([{slug: 'slate', label: 'Slate'}, {slug: 'planet-fitness', label: 'Planet Fitness'}]);
+    let page = await browserPage(await server.request('/forms/training-log'));
+    let text = page.document.querySelector('.toolbar-properties').textContent;
+    assert.match(text, /planet-fitness/, 'installed theme is reported');
+
+    // The same template on a deployment without that theme: the form does NOT render
+    // in it, so Properties must not claim it does.
+    setThemeList([{slug: 'slate', label: 'Slate'}]);
+    page = await browserPage(await server.request('/forms/training-log'));
+    text = page.document.querySelector('.toolbar-properties').textContent;
+    assert.doesNotMatch(text, /planet-fitness/, 'uninstalled theme is not reported as applied');
+  } finally {
+    setThemeList(null);
+    await server.close();
+  }
+});
