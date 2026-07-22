@@ -413,7 +413,7 @@ test('html and htm files render as sanitized documents with raw toggle and edit 
     assert.doesNotMatch(viewHtml, /<script>alert\(1\)<\/script>/);
     assert.match(viewHtml, /data-raw-toggle/);
     assert.match(viewHtml, /language-xml" data-raw-code/);
-    assert.match(viewHtml, /· html<\/p>/);
+    assert.match(viewHtml, /<dt>Type<\/dt><dd>html<\/dd>/);
 
     const editResponse = await server.request('/edit/alpha/docs/landing.htm');
     assert.equal(editResponse.status, 200);
@@ -532,7 +532,7 @@ test('pdf files render in a dedicated viewer page and stream from the asset rout
     assert.match(viewHtml, /class="content pdf-view"/);
     assert.match(viewHtml, /<iframe[\s\S]*class="pdf-frame"/);
     assert.match(viewHtml, /\/asset\/alpha\/docs\/manual\.pdf\?token=viewer-token#view=FitH/);
-    assert.match(viewHtml, /· pdf<\/p>/);
+    assert.match(viewHtml, /<dt>Type<\/dt><dd>pdf<\/dd>/);
     assert.doesNotMatch(viewHtml, />Edit</);
 
     const assetResponse = await server.request('/asset/alpha/docs/manual.pdf?token=viewer-token');

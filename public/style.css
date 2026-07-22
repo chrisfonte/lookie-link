@@ -2419,6 +2419,68 @@ tbody tr:last-child td {
 
 
 
+/* Properties: file facts, collapsed by default. Same disclosure interaction as the
+   frontmatter panel, because they are the same kind of thing to a reader. */
+.doc-properties {
+  margin: 0.5rem 0 0;
+}
+
+.doc-properties > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-block;
+  border: 1px solid var(--border);
+  background-color: var(--toolbar-btn-bg);
+  color: var(--text-soft);
+  border-radius: 999px;
+  padding: 0.16rem 0.7rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.doc-properties > summary::-webkit-details-marker,
+.doc-properties > summary::marker {
+  display: none;
+  content: "";
+}
+
+.doc-properties > summary:hover,
+.doc-properties > summary:focus-visible {
+  background-color: var(--toolbar-btn-hover);
+  color: var(--text);
+}
+
+.doc-properties-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.7rem 1.2rem;
+  margin: 0.7rem 0 0;
+  padding: 0.85rem 0.95rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.doc-properties-grid dt {
+  color: var(--text-soft);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 0.15rem;
+}
+
+.doc-properties-grid dd {
+  margin: 0;
+  font-size: 0.86rem;
+  word-break: break-word;
+}
+
+.doc-properties-grid a {
+  color: var(--link);
+}
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------
