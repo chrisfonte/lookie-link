@@ -2283,6 +2283,11 @@ tbody tr:last-child td {
 .lookie-annotate-btn:hover, .lookie-annotate-btn:focus {
   opacity: 1; color: var(--accent); border-color: var(--accent);
 }
+.doc-properties[open] > summary.toolbar-btn {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .toolbar-btn-annotation-count[aria-pressed="true"],
 [data-annotation-mode-toggle][aria-pressed="true"] {
   border-color: var(--accent);
@@ -2441,12 +2446,19 @@ tbody tr:last-child td {
 .breadcrumbs .crumb-title {
   display: inline;
   margin: 0;
-  font-size: 1.35rem;
-  font-weight: 700;
-  line-height: 1.2;
+  /* Same size and weight as the rest of the trail; the current file is marked by
+     colour, not by growing. It is the last segment, so its position already says
+     it is where you are. */
+  font-size: inherit;
+  font-weight: 600;
+  line-height: inherit;
 }
 
 .breadcrumbs .crumb-title a {
+  /* The current file uses the main text colour, not the accent: body text is
+     distinct from the link colour in every theme by design (that is what makes a
+     link identifiable), so the filename always reads apart from the path -- even in
+     themes where accent and link are near-identical, as in The BIC. */
   color: var(--text);
   text-decoration: none;
 }

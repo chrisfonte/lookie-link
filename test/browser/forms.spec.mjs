@@ -351,7 +351,10 @@ browserTest('machine strength entry reaches its receipt and entries list', async
     page.locator('.form-primary-action').click(),
   ]);
 
-  assert.equal((await page.locator('h1').textContent()).trim(), 'Entry logged');
+  // The receipt header is now a breadcrumb ending in the form title, not a bare
+  // "Entry logged" heading; the receipt table below confirms the submission landed.
+  assert.equal((await page.locator('.crumb-title').textContent()).trim(), TEMPLATE_TITLE);
+  assert.equal((await page.locator('.breadcrumbs a[href="/forms"]').textContent()).trim(), 'Forms');
   const receipt = Object.fromEntries(await page.locator('.receipt-table tbody tr').evaluateAll((rows) =>
     rows.map((row) => {
       const label = row.querySelector('th').textContent.trim();

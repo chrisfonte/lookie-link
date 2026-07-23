@@ -637,9 +637,10 @@ test('form and receipt use the themed shell, preserve escaping, and offer Log an
     const formHtml = await formResponse.text();
     const formDocument = assertSharedFormsShell(formResponse, formHtml, customThemeMarker);
     const context = browserContext(formResponse, formHtml);
-    assert.equal(formDocument.querySelector('.topbar h1').textContent, 'Gym Session Entry');
-    assert.equal(formDocument.querySelector('.topbar .subtitle'), null);
-    assert.equal(formDocument.querySelector('.topbar .back').getAttribute('href'), '/');
+    // Header is a breadcrumb ending in the form title (the coloured current crumb),
+    // matching the document header. Sub-view is shown by the hub-nav tabs.
+    assert.equal(formDocument.querySelector('.topbar .crumb-title').textContent, 'Gym Session Entry');
+    assert.equal(formDocument.querySelector('.topbar .breadcrumbs a[href="/forms"]').textContent, 'Forms');
     assert.equal(formDocument.querySelector('.form-primary-action').textContent, 'Submit');
     assert.equal(formDocument.querySelector('label[for="field-notes"]').textContent, '<em>Notes</em> *');
     assert.match(formHtml, /&lt;em&gt;Notes&lt;\/em&gt;/);
@@ -665,8 +666,8 @@ test('form and receipt use the themed shell, preserve escaping, and offer Log an
     assert.equal(receiptResponse.status, 200);
     const receiptHtml = await receiptResponse.text();
     const receiptDocument = assertSharedFormsShell(receiptResponse, receiptHtml, customThemeMarker);
-    assert.equal(receiptDocument.querySelector('.topbar h1').textContent, 'Entry logged');
-    assert.equal(receiptDocument.querySelector('.topbar .back').getAttribute('href'), '/');
+    assert.equal(receiptDocument.querySelector('.topbar .crumb-title').textContent, 'Gym Session Entry');
+    assert.equal(receiptDocument.querySelector('.topbar .breadcrumbs a[href="/forms"]').textContent, 'Forms');
     assert.equal(
       receiptDocument.querySelector('.form-primary-action').getAttribute('href'),
       '/forms/gym-session-entry'
