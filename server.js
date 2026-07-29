@@ -316,6 +316,13 @@ function sendAccessError(res, accessContext, asJson = false) {
 // origin; allow-same-origin must never be added (ADR-92 B1 + operator decision).
 const ARTIFACT_SANDBOX = 'sandbox allow-scripts allow-forms allow-popups';
 
+// The /embed document additionally gets click-gated top navigation so the link
+// rewriter's target="_top" links actually work inside the /view frame (#232).
+// This does NOT weaken the opaque-origin boundary: no allow-same-origin, and
+// navigation requires a real user gesture. /raw and scriptable assets keep the
+// stricter ARTIFACT_SANDBOX.
+const EMBED_SANDBOX = `${ARTIFACT_SANDBOX} allow-top-navigation-by-user-activation`;
+
 // Asset MIME types a browser will execute as a document when navigated to
 // directly (SVG carries <script>; HTML/XHTML/XML can execute inline or via
 // XSLT). Served same-origin these are the same write primitive as /embed was,
@@ -2611,7 +2618,7 @@ function createApp(options = {}) {
         ),
       });
       res.set('X-Lookie-Content-Mode', 'transformed-embed');
-      res.set('Content-Security-Policy', ARTIFACT_SANDBOX);
+      res.set('Content-Security-Policy', EMBED_SANDBOX);
       res.status(200).type(RAW_HTML_MIME_TYPE).send(html);
     } catch (error) {
       console.error('Failed to transform embed HTML', { repo, relativePath, error });
