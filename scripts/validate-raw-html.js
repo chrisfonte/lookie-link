@@ -177,7 +177,8 @@ async function run() {
       );
       assert.equal(embedResp.status, 200, '/embed/<.html> should 200 when enabled');
       assert.equal(embedResp.headers['x-lookie-content-mode'], 'transformed-embed');
-      assert.equal(embedResp.headers['content-security-policy'], 'sandbox allow-scripts allow-forms allow-popups');
+      // #232: /embed grants click-gated top navigation so rewritten target="_top" links work in the /view frame.
+      assert.equal(embedResp.headers['content-security-policy'], 'sandbox allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation');
       assert.match(embedResp.text, /<base href="\/asset\/docs\/">/, '/embed injects an opaque asset base');
       assert.match(embedResp.text, /id="lookie-link-embed-theme"/, '/embed injects theme tokens');
       assert.match(embedResp.text, /data-lookie-link-theme="light"/, '/embed accepts the framed theme mode');
@@ -234,7 +235,7 @@ async function run() {
       assert.match(embedFrameTag[0], /src="\/embed\/docs\/flashcards\.html"/);
       assert.match(
         embedFrameTag[0],
-        /sandbox="allow-scripts allow-forms allow-popups"/,
+        /sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation"/,
         '/view applies the opaque-origin sandbox to the embed frame'
       );
       assert.doesNotMatch(viewEnabled.text, /sandbox="[^"]*allow-same-origin/);

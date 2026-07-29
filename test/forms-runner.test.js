@@ -918,12 +918,17 @@ test('enabled forms isolate raw HTML with the opaque-origin sandbox profile', as
     const policy = response.headers.get('content-security-policy');
     assert.equal(policy, 'sandbox allow-scripts allow-forms allow-popups');
     assert.doesNotMatch(policy, /allow-same-origin/);
+    // /embed additionally grants click-gated top navigation (#232) — /raw stays stricter.
     const embed = await server.request('/embed/artifacts/page.html');
     assert.equal(embed.status, 200);
-    assert.equal(embed.headers.get('content-security-policy'), policy);
+    assert.equal(
+      embed.headers.get('content-security-policy'),
+      `${policy} allow-top-navigation-by-user-activation`
+    );
+    assert.doesNotMatch(embed.headers.get('content-security-policy'), /allow-same-origin/);
     const view = await server.request('/view/artifacts/page.html');
     const document = new JSDOM(await view.text()).window.document;
-    assert.equal(document.querySelector('iframe[data-embedded-html]').getAttribute('sandbox'), 'allow-scripts allow-forms allow-popups');
+    assert.equal(document.querySelector('iframe[data-embedded-html]').getAttribute('sandbox'), 'allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation');
 
     const asset = await server.request('/asset/artifacts/page.html');
     assert.equal(asset.status, 200);
