@@ -1926,3 +1926,53 @@ test('numeric-less forms keep the selection heading and body-sized text metrics 
     await cleanup(fixture, server);
   }
 });
+
+test('form and receipt pages render tag-based related-forms navigation (#234 interim)', async () => {
+  const fixture = await makeFixture();
+  const sibling = {
+    contractVersion: 1,
+    resourceKind: 'form-template',
+    templateId: 'mobility-log',
+    ownerId: 'operator',
+    revision: 1,
+    grammarVersion: 1,
+    title: 'Mobility Log',
+    tags: ['gym'],
+    fields: [{id: 'notes', type: 'long-text', label: 'Notes', required: true}],
+  };
+  const stranger = { ...sibling, templateId: 'pantry-log', title: 'Pantry Log', tags: ['kitchen'] };
+  await fs.writeFile(path.join(fixture.templatesPath, 'mobility-log.yaml'), yaml.dump(sibling), 'utf8');
+  await fs.writeFile(path.join(fixture.templatesPath, 'pantry-log.yaml'), yaml.dump(stranger), 'utf8');
+  // tag the gym fixture so it participates
+  const gymPath = path.join(fixture.templatesPath, 'gym-session-entry.yaml');
+  const gym = yaml.load(await fs.readFile(gymPath, 'utf8'), {schema: yaml.JSON_SCHEMA});
+  gym.tags = ['gym'];
+  await fs.writeFile(gymPath, yaml.dump(gym), 'utf8');
+  const server = await startServer(fixture, {formsTimezone: 'America/New_York'});
+  try {
+    const context = await getBrowserContext(server);
+    const page = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
+    const document = new JSDOM(page).window.document;
+    const links = [...document.querySelectorAll('.related-forms .related-form-link')];
+    assert.deepEqual(links.map((a) => a.textContent), ['Mobility Log'], 'same-tag sibling only');
+    assert.equal(links[0].getAttribute('href'), '/forms/mobility-log');
+    assert.ok(!page.includes('Pantry Log'), 'unrelated tags stay out');
+
+    // receipt carries the same nav
+    const accepted = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: nativeBody(context.token),
+    });
+    assert.equal(accepted.status, 303);
+    const receiptPath = accepted.headers.get('location');
+    const receipt = await (await server.request(receiptPath, {headers: {Cookie: context.cookie}})).text();
+    assert.ok(new JSDOM(receipt).window.document.querySelector('.related-forms .related-form-link'), 'receipt shows related forms');
+
+    // untagged sibling-less form renders no nav block
+    const strangerPage = await (await server.request('/forms/pantry-log', {headers: {Cookie: context.cookie}})).text();
+    assert.ok(!strangerPage.includes('related-forms-list') || !new JSDOM(strangerPage).window.document.querySelector('.related-form-link'), 'no siblings, no nav');
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
