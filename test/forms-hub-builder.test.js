@@ -420,7 +420,7 @@ test('forms index separates archived templates and removes management detail for
     assert.equal(submitted.status, 303);
 
     const managerIndex = await browserPage(await server.request('/forms'));
-    assert.equal(managerIndex.document.querySelectorAll('.forms-index-list[aria-label="Active templates"] > .forms-index-item').length, 2);
+    assert.equal(managerIndex.document.querySelectorAll('.forms-index-groups[aria-label="Active templates"] .forms-index-item').length, 2);
     assert.ok(managerIndex.document.querySelector('a[href="/forms/new"]'));
     const trainingCard = [...managerIndex.document.querySelectorAll('.forms-index-item')]
       .find((card) => /Training <log>/.test(card.textContent));

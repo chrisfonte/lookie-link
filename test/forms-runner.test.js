@@ -1976,3 +1976,71 @@ test('form and receipt pages render tag-based related-forms navigation (#234 int
     await cleanup(fixture, server);
   }
 });
+
+test('container forms: lifecycle, page, membership nav, root grouping, guards (#234)', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, {formsTimezone: 'America/New_York'});
+  try {
+    const context = await getBrowserContext(server);
+    const post = (route, body) => server.request(route, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'x-csrf-token': context.token },
+      body: JSON.stringify(body),
+    });
+    // create a container through the same template API
+    const created = await post('/api/forms/templates', {templateId: 'gym', title: 'Gym', kind: 'container', grammarVersion: 1});
+    assert.equal(created.status, 201);
+    // bad containerId fails closed
+    const bad = await server.request('/api/forms/templates/gym-session-entry', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'x-csrf-token': context.token },
+      body: JSON.stringify({revision: 1, containerId: 'nope'}),
+    });
+    assert.equal(bad.status, 422);
+    // membership via PATCH
+    const joined = await server.request('/api/forms/templates/gym-session-entry', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'x-csrf-token': context.token },
+      body: JSON.stringify({revision: 1, containerId: 'gym'}),
+    });
+    assert.equal(joined.status, 200);
+
+    // container page renders the member; submissions to it are refused
+    const page = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
+    assert.match(page, /container-member-title/);
+    assert.match(page, /gym-session-entry/);
+    const submit = await server.request('/forms/gym', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: nativeBody(context.token),
+    });
+    assert.equal(submit.status, 404);
+    assert.equal((await server.request('/forms/gym/entries', {headers: {Cookie: context.cookie}})).status, 404);
+
+    // member form carries the back-to-container button
+    const member = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
+    assert.match(member, /related-container-link/);
+    assert.match(member, /← Gym/);
+
+    // root groups: container section with the member inside
+    const root = await (await server.request('/forms', {headers: {Cookie: context.cookie}})).text();
+    assert.match(root, /forms-index-container-head/);
+    assert.match(root, /1 form</);
+
+    // container Configure: member checkboxes; unchecking releases membership
+    const configure = await (await server.request('/forms/gym/configure', {headers: {Cookie: context.cookie}})).text();
+    assert.match(configure, /container-member-choice/);
+    assert.match(configure, /checked/);
+    const gymRev = JSON.parse(await (await server.request('/api/forms/templates/gym')).text()).template.revision;
+    const saved = await server.request('/forms/gym/configure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: new URLSearchParams({_csrf: context.token, revision: String(gymRev), title: 'Gym'}),
+    });
+    assert.equal(saved.status, 200);
+    const released = JSON.parse(await (await server.request('/api/forms/templates/gym-session-entry')).text());
+    assert.equal(released.template.containerId, undefined);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});

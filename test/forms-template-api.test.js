@@ -261,6 +261,8 @@ test('template API lifecycle uses CAS and preserves immutable versions and old r
       destinationId: 'gym-log',
       state: 'published',
       entryCount: 1,
+      kind: 'form',
+      containerId: null,
     }]);
     const fetchedResponse = await server.request('/api/forms/templates/training-log', {headers: AGENT_HEADERS});
     assert.equal(fetchedResponse.status, 200);
@@ -494,8 +496,8 @@ test('clone and archive APIs preserve source history, receipts, CAS, and authori
 
     const submitOnlyList = await server.request('/api/forms/templates', {headers: submitOnly});
     assert.deepEqual((await submitOnlyList.json()).templates.map((template) => Object.keys(template).sort()), [
-      ['templateId', 'title'],
-      ['templateId', 'title'],
+      ['containerId', 'kind', 'templateId', 'title'],
+      ['containerId', 'kind', 'templateId', 'title'],
     ]);
     assert.equal((await server.request('/api/forms/templates/training-log', {
       method: 'DELETE',
