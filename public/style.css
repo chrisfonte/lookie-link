@@ -2721,6 +2721,62 @@ tbody tr:last-child td {
   background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev));
 }
 
+/* #234: container forms — container page, root grouping, configure members. */
+.form-layout .container-members {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+.form-layout .container-member {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 0.7rem;
+  background: var(--bg-elev);
+  text-decoration: none;
+  color: var(--text);
+}
+.form-layout .container-member:hover { border-color: var(--accent); }
+.form-layout .container-member-title {
+  font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.form-layout .container-empty { color: var(--text-soft); }
+.form-layout .related-container-link {
+  display: inline-block;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.6rem;
+  text-decoration: none;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-elev));
+  font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+.form-layout .forms-index-container { margin-bottom: 1.4rem; }
+.form-layout .forms-index-container-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  margin-bottom: 0.6rem;
+}
+.form-layout .forms-index-container-head a { text-decoration: none; color: var(--text); }
+.form-layout .forms-index-container-head h2 { margin: 0; }
+.form-layout .forms-index-container-count { color: var(--text-soft); font-size: 0.85rem; }
+.form-layout .forms-index-container-configure { margin-left: auto; font-size: 0.85rem; color: var(--text-soft); }
+.form-layout .forms-index-ungrouped-head { margin: 1.2rem 0 0.6rem; }
+.form-layout .container-member-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------
