@@ -599,3 +599,37 @@ test('Properties reports a theme only when that theme is actually installed', as
     await server.close();
   }
 });
+
+test('reviseDraft merges presentation patches instead of replacing wholesale (#225)', async () => {
+  const server = await makeServer();
+  try {
+    const before = await server.registry.getManagementTemplate('training-log');
+    await server.registry.reviseDraft('training-log', before.draft.revision, {
+      presentation: {theme: 'planet-fitness', themeMode: 'dark', submitLabel: 'Log it'},
+    });
+
+    // A patch stating only themeMode must not drop theme or submitLabel.
+    let current = await server.registry.getManagementTemplate('training-log');
+    await server.registry.reviseDraft('training-log', current.draft.revision, {
+      presentation: {themeMode: 'light'},
+    });
+    current = await server.registry.getManagementTemplate('training-log');
+    assert.deepEqual(current.draft.presentation, {
+      theme: 'planet-fitness', themeMode: 'light', submitLabel: 'Log it',
+    });
+
+    // null inside the patch unsets exactly that key.
+    await server.registry.reviseDraft('training-log', current.draft.revision, {
+      presentation: {submitLabel: null},
+    });
+    current = await server.registry.getManagementTemplate('training-log');
+    assert.deepEqual(current.draft.presentation, {theme: 'planet-fitness', themeMode: 'light'});
+
+    // Top-level null still clears the whole object (existing semantic).
+    await server.registry.reviseDraft('training-log', current.draft.revision, {presentation: null});
+    current = await server.registry.getManagementTemplate('training-log');
+    assert.equal(current.draft.presentation, undefined);
+  } finally {
+    await server.close();
+  }
+});
