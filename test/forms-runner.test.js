@@ -1817,3 +1817,55 @@ test('a template cannot smuggle a script through the theme slug', () => {
   const html = renderReceiptPage(hostile, record, {});
   assert.ok(!html.includes('alert(1)'), 'hostile slug is not emitted into the page');
 });
+
+test('datetimes humanize on receipts/metrics and the recent panel day-prefixes non-today rows (#231)', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, {
+    formsTimezone: 'America/New_York',
+    formsClock: () => new Date('2026-07-29T18:00:00Z'), // 2:00 PM EDT — "today"
+  });
+  try {
+    const context = await getBrowserContext(server);
+    for (const stamp of ['2026-07-29T09:30', '2026-07-28T11:05']) {
+      const resp = await server.request('/forms/gym-session-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+        body: nativeBody(context.token, {
+          'session-date': stamp,
+          'session-date__offset': '-240',
+          'session-date__timezone': 'America/New_York',
+        }),
+      });
+      assert.equal(resp.status, 303);
+    }
+    const records = await Promise.all((await submissionFiles(fixture.submissionsPath)).map(async (fileName) => (
+      JSON.parse(await fs.readFile(path.join(fixture.submissionsPath, fileName), 'utf8'))
+    )));
+    const yesterday = records.find((record) => record.eventAt.startsWith('2026-07-28'));
+
+    // Receipt: captured datetime renders humanized, never as a raw ISO text node.
+    const receipt = await server.request(`/forms/gym-session-entry/receipts/${yesterday.submissionId}`, {
+      headers: { Cookie: context.cookie },
+    });
+    assert.equal(receipt.status, 200);
+    const receiptHtml = await receipt.text();
+    assert.match(receiptHtml, /Jul 28, 2026, 11:05 AM/);
+    assert.doesNotMatch(receiptHtml, />2026-07-28T11:05/);
+
+    // Form-page recent panel: yesterday's row day-prefixed, today's row stays a bare time.
+    const formPage = await (await server.request('/forms/gym-session-entry', {
+      headers: { Cookie: context.cookie },
+    })).text();
+    assert.match(formPage, /Jul 28 · 11:05 AM/);
+    assert.doesNotMatch(formPage, /Jul 29 · 9:30 AM/);
+    assert.match(formPage, />9:30 AM</);
+
+    // Entries page groups by day already — rows there must NOT gain the prefix.
+    const entriesPage = await (await server.request('/forms/gym-session-entry/entries', {
+      headers: { Cookie: context.cookie },
+    })).text();
+    assert.doesNotMatch(entriesPage, /Jul 28 · /);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
