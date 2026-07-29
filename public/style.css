@@ -2692,6 +2692,38 @@ tbody tr:last-child td {
   color: var(--link);
 }
 
+/* #234 (interim): tag-based related-forms navigation on form and receipt pages. */
+.form-layout .related-forms {
+  margin-top: 1.4rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.form-layout .related-forms h2 {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  margin: 0 0 0.6rem;
+}
+.form-layout .related-forms-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.form-layout .related-form-link {
+  display: inline-block;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  text-decoration: none;
+  color: var(--text);
+  background: var(--bg-elev);
+  font-size: 0.85rem;
+}
+.form-layout .related-form-link:hover {
+  border-color: var(--accent);
+}
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------
