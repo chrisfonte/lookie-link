@@ -1135,6 +1135,17 @@ tbody tr:last-child td {
   letter-spacing: -0.03em;
 }
 
+/* #230: text values keep body scale and clamp to one line — stat sizing is for numbers. */
+.form-layout .entry-metric-text strong {
+  font-family: inherit;
+  font-size: 0.95rem;
+  letter-spacing: normal;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .form-layout .entry-metric-unit {
   color: var(--text-soft);
   font-size: 0.68rem;

@@ -1291,11 +1291,16 @@ test('showInList fields drive recent and history rows in template order', async 
     for (const route of ['/forms/gym-session-entry', '/forms/gym-session-entry/entries']) {
       const response = await server.request(route, {headers: {Cookie: context.cookie}});
       const document = new JSDOM(await response.text()).window.document;
+      // #230: the selection renders in the heading (not suppressed by showInList),
+      // and the metrics never duplicate it — so 'Lift' appears as the bold heading
+      // label while the marked metrics reduce to the remaining fields, in order.
+      const summary = document.querySelector('.entry-row-summary');
+      assert.ok(summary.querySelector('strong'), 'heading keeps the selection label');
       assert.deepEqual(
         [...document.querySelectorAll('.entry-row-summary .entry-metric-label')].slice(0, 2).map((label) => label.textContent),
-        ['Lift', 'Top reps'],
+        ['Top reps'],
       );
-      assert.equal(document.querySelector('.entry-row-summary').textContent.includes('Top weight'), false);
+      assert.equal(summary.textContent.includes('Top weight'), false);
     }
   } finally {
     await cleanup(fixture, server);
@@ -1865,6 +1870,58 @@ test('datetimes humanize on receipts/metrics and the recent panel day-prefixes n
       headers: { Cookie: context.cookie },
     })).text();
     assert.doesNotMatch(entriesPage, /Jul 28 · /);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('numeric-less forms keep the selection heading and body-sized text metrics (#230)', async () => {
+  const fixture = await makeFixture();
+  const doseTemplate = {
+    contractVersion: 1,
+    resourceKind: 'form-template',
+    templateId: 'dose-log',
+    ownerId: 'operator',
+    revision: 1,
+    grammarVersion: 1,
+    title: 'Dose Log',
+    fields: [
+      {id: 'taken-at', type: 'datetime', label: 'Taken at', required: true},
+      {id: 'med', type: 'select', label: 'Meds', required: true, options: [
+        {id: 'alpha', label: 'Alpha 100'}, {id: 'beta', label: 'Beta 200'},
+      ]},
+      {id: 'notes', type: 'long-text', label: 'Notes', required: false},
+    ],
+  };
+  await fs.writeFile(path.join(fixture.templatesPath, 'dose-log.yaml'), yaml.dump(doseTemplate), 'utf8');
+  const server = await startServer(fixture, {formsTimezone: 'America/New_York'});
+  try {
+    const context = await getBrowserContext(server);
+    const accepted = await server.request('/forms/dose-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: new URLSearchParams({
+        _csrf: context.token,
+        'taken-at': '2026-07-29T11:05',
+        'taken-at__offset': '-240',
+        'taken-at__timezone': 'America/New_York',
+        med: 'alpha',
+      }),
+    });
+    assert.equal(accepted.status, 303);
+    const page = await (await server.request('/forms/dose-log', {headers: {Cookie: context.cookie}})).text();
+    const document = new JSDOM(page).window.document;
+    const summary = document.querySelector('.entry-row-summary');
+    // Heading carries the selection, gym-style.
+    assert.equal(summary.querySelector('strong').textContent, 'Alpha 100');
+    // The selection is not duplicated into the metrics.
+    const metricLabels = [...summary.querySelectorAll('.entry-metric-label')].map((n) => n.textContent);
+    assert.ok(!metricLabels.includes('Meds'), 'selection must not repeat as a metric');
+    // The datetime metric renders humanized and carries the text-metric class.
+    const textMetric = summary.querySelector('.entry-metric-text strong');
+    assert.ok(textMetric, 'non-number metrics carry the text class');
+    assert.match(textMetric.textContent, /Jul 29, 2026/);
+    assert.doesNotMatch(textMetric.textContent, /2026-07-29T/);
   } finally {
     await cleanup(fixture, server);
   }
