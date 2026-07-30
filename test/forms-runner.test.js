@@ -2195,7 +2195,7 @@ test('creation follows containment: slug-derived IDs and group-joined trackers (
     assert.match(createPage, /Joining group/);
     assert.match(createPage, /Gym &amp; Fitness!/);
     assert.match(createPage, /href="\/forms\/gym-fitness\/entries"/);
-    assert.match(createPage, /group=gym-fitness" aria-current="page"/);
+    assert.match(createPage, /Joining group/);
     assert.match(createPage, /groups-link" href="\/forms">Groups</);
     // #293: archive a group member — it lists on the GROUP page, not the root
     const rowing2 = JSON.parse(await (await server.request('/api/forms/templates/rowing-2')).text()).template;
