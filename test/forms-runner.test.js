@@ -2199,7 +2199,7 @@ test('creation follows containment: slug-derived IDs and group-joined trackers (
     assert.match(createPage, /groups-link" href="\/forms">Groups</);
     // the root create page carries the Browse escape
     const rootCreate = await (await server.request('/forms/new?kind=container', {headers: {Cookie: context.cookie}})).text();
-    assert.match(rootCreate, /href="\/forms">Browse</);
+    assert.match(rootCreate, /groups-link" href="\/forms">Groups</);
     assert.match(rootCreate, /New group/);
   } finally {
     await cleanup(fixture, server);
