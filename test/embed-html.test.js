@@ -294,6 +294,21 @@ test('document viewer frames HTML through embed while retaining a distinct raw-s
   assert.match(html, /lookie-link:scroll-to/);
   assert.match(html, /lookie-link:set-hash/);
   assert.match(html, /\^#\[A-Za-z0-9_-\]\*\$/);
+  // Every inline script the viewer emits must be syntactically valid JS — the
+  // wrapper script lives in a template literal where escaped regex slashes
+  // silently collapse (\/ -> /), which once shipped a parse error that killed
+  // height sizing, theme delivery, and zoom all at once.
+  const { Script } = require('node:vm');
+  const inlineScripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
+    .map((m) => m[1])
+    .filter((s) => s.trim() && !/^\s*\{/.test(s.trim()));
+  assert.ok(inlineScripts.length >= 1, 'expected inline scripts to check');
+  for (const body of inlineScripts) {
+    new Script(body); // throws on any syntax error
+  }
+  // Protocol-relative smuggling (//host and /\host) must fail the open-image
+  // src validation; the string-prefix check handles the backslash variant.
+  assert.match(html, /fromCharCode\(92\)/);
   // Embed image zoom drives the page's own [data-lightbox] overlay — the same
   // one markdown files use — for identical viewport-centered behavior.
   assert.match(html, /lookie-link:open-image/);
