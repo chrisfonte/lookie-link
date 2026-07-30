@@ -2821,6 +2821,14 @@ tbody tr:last-child td {
    element, translucent like the toolbar so content reads as sliding under it. */
 .form-layout > .form-hub-nav { position: sticky; top: calc(var(--toolbar-height, 3.1rem) + 0.5rem); z-index: 15; backdrop-filter: blur(6px); background: color-mix(in srgb, var(--bg-elev) 82%, transparent); margin: 0 0 1rem; }
 
+/* #269: tracker jump menu — the Files contextual-menu idiom for the trackers world. */
+.tracker-jump-list { max-height: 60vh; overflow-y: auto; min-width: 12rem; }
+.tracker-jump-list .tracker-jump-group { font-weight: 600; }
+.tracker-jump-list .tracker-jump-group:not(:first-child) { border-top: 1px solid var(--border); margin-top: 0.3rem; padding-top: 0.45rem; }
+.tracker-jump-list .tracker-jump-member { padding-left: 1.4rem; }
+.tracker-jump-list .tracker-jump-head { display: block; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-soft); border-top: 1px solid var(--border); margin-top: 0.3rem; padding: 0.45rem 0.6rem 0.1rem; }
+.tracker-jump-list [aria-current="page"] { color: var(--accent); }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------
