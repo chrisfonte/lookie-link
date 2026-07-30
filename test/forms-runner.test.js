@@ -2053,19 +2053,16 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     const containerPage = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
     assert.match(containerPage, /<a class="container-member-title" href="\/forms\/gym-session-entry"/);
     assert.match(containerPage, /container-member-configure/);
-    // #275: groups stack in one theme-style dropdown, current lit; groups carry Properties
-    assert.match(containerPage, /data-group-menu/);
-    assert.match(containerPage, /href="\/forms\/gym" aria-current="page"/);
-    assert.match(containerPage, /group-menu-root" href="\/forms">All trackers</);
-    assert.doesNotMatch(containerPage, /group-menu-new/);
-    assert.doesNotMatch(containerPage, /tracker-jump-member/);
+    // #285: hierarchy lives in the bars — a group's bar leads with Groups; no dropdown
+    assert.match(containerPage, /groups-link" href="\/forms">Groups</);
+    assert.doesNotMatch(containerPage, /data-group-menu/);
     assert.match(containerPage, /toolbar-properties/);
     assert.match(containerPage, /<dt>Group<\/dt>|Group<\/dt>/);
     const exclusives = (containerPage.match(/name="lookie-toolbar"/g) || []).length;
     assert.ok(exclusives >= 3, `expected >=3 exclusive toolbar disclosures, got ${exclusives}`);
-    // the member form's dropdown lights its group too
+    // #284/#285: a tracker's bar leads with the way up to its group
     const memberToolbar = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
-    assert.match(memberToolbar, /href="\/forms\/gym" aria-current="page"/);
+    assert.match(memberToolbar, /up-link" href="\/forms\/gym">← Gym</);
     // #273: the ancestor path is gone — the heading is title-only; the toolbar navigates
     assert.match(containerPage, /<nav class="breadcrumbs"><h1 class="crumb-title">/);
     assert.doesNotMatch(containerPage, /breadcrumbs"><a href="\/forms">Trackers/);
@@ -2199,7 +2196,7 @@ test('creation follows containment: slug-derived IDs and group-joined trackers (
     assert.match(createPage, /Gym &amp; Fitness!/);
     assert.match(createPage, /href="\/forms\/gym-fitness\/entries"/);
     assert.match(createPage, /group=gym-fitness" aria-current="page"/);
-    assert.match(createPage, /data-group-menu/);
+    assert.match(createPage, /groups-link" href="\/forms">Groups</);
     // the root create page carries the Browse escape
     const rootCreate = await (await server.request('/forms/new?kind=container', {headers: {Cookie: context.cookie}})).text();
     assert.match(rootCreate, /href="\/forms">Browse</);
