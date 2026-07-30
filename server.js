@@ -642,7 +642,7 @@ function createApp(options = {}) {
   // Forms only appears when the deployment actually serves them.
   setNavLinks([
     { href: '/', label: 'Files' },
-    ...(formsConfig && formsConfig.enabled === true ? [{ href: '/forms', label: 'Forms' }] : []),
+    ...(formsConfig && formsConfig.enabled === true ? [{ href: '/forms', label: 'Trackers' }] : []),
   ]);
   const accessConfig = parseAccessConfig(rawAccessConfig);
   const apiKeyStore = options.apiKeyStore === undefined
