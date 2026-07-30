@@ -2064,3 +2064,81 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     await cleanup(fixture, server);
   }
 });
+
+test('parent/sub-form inheritance: resolution, overrides, live edits, detach, guards (#245)', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, {formsTimezone: 'America/New_York'});
+  try {
+    const context = await getBrowserContext(server);
+    const jsonHeaders = { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'x-csrf-token': context.token };
+    const post = (route, body) => server.request(route, {method: 'POST', headers: jsonHeaders, body: JSON.stringify(body)});
+    const patch = (route, body) => server.request(route, {method: 'PATCH', headers: jsonHeaders, body: JSON.stringify(body)});
+
+    // child of the fixture form: one override (lift narrowed + default) + one extra
+    const created = await post('/api/forms/templates', {
+      templateId: 'bench-day', title: 'Bench day', grammarVersion: 1, destinationId: 'default',
+      parentId: 'gym-session-entry',
+      fields: [
+        {id: 'lift', type: 'select', label: 'Lift', required: true, default: 'bench', options: [{id: 'bench', label: 'Bench press'}]},
+        {id: 'spotter', type: 'short-text', label: 'Spotter', required: false},
+      ],
+    });
+    assert.equal(created.status, 201);
+    await post('/api/forms/templates/bench-day/publish', {revision: 1});
+
+    // resolved serving: parent fields present, override in the parent's position,
+    // extra appended; the draft keeps only the child's OWN fields.
+    const got = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text());
+    assert.equal(got.template.parentId, 'gym-session-entry');
+    assert.equal(got.template.fields.length, 2);
+    const ids = got.resolvedFields.map((field) => field.id);
+    assert.ok(ids.includes('session-date') && ids.includes('notes'), `inherited fields missing: ${ids}`);
+    assert.equal(ids.indexOf('lift'), JSON.parse(await (await server.request('/api/forms/templates/gym-session-entry')).text()).template.fields.map((f) => f.id).indexOf('lift'));
+    assert.equal(ids.at(-1), 'spotter');
+    assert.equal(got.resolvedFields.find((field) => field.id === 'lift').options.length, 1);
+    assert.match(String(got.resolvedSchemaDigest), /./);
+    const digestBefore = got.resolvedSchemaDigest;
+
+    // the child form page renders inherited fields and accepts a submission
+    const page = await (await server.request('/forms/bench-day', {headers: {Cookie: context.cookie}})).text();
+    assert.match(page, /Session date|session-date/);
+    assert.match(page, /Spotter/);
+    const submitted = await server.request('/forms/bench-day', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: nativeBody(context.token, {spotter: 'Sam'}),
+    });
+    assert.equal(submitted.status, 303);
+
+    // live inheritance: revise the parent, the child's resolved schema follows
+    const parentRev = JSON.parse(await (await server.request('/api/forms/templates/gym-session-entry')).text()).template.revision;
+    const parentFields = JSON.parse(await (await server.request('/api/forms/templates/gym-session-entry')).text()).template.fields;
+    const grown = await patch('/api/forms/templates/gym-session-entry', {
+      revision: parentRev,
+      fields: [...parentFields, {id: 'warmup-done', type: 'checkbox', label: 'Warmed up', required: false}],
+    });
+    assert.equal(grown.status, 200);
+    const after = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text());
+    assert.ok(after.resolvedFields.some((field) => field.id === 'warmup-done'), 'child did not inherit the new parent field');
+    assert.notEqual(after.resolvedSchemaDigest, digestBefore);
+
+    // guards: nesting refused; archiving a parent with children refused
+    const nested = await post('/api/forms/templates', {templateId: 'nested-kid', title: 'Nested', grammarVersion: 1, parentId: 'bench-day', fields: []});
+    assert.equal(nested.status, 422);
+    const benchRevForArchive = JSON.parse(await (await server.request('/api/forms/templates/gym-session-entry')).text()).template.revision;
+    const archived = await post('/api/forms/templates/gym-session-entry/archive', {revision: benchRevForArchive});
+    assert.ok(archived.status === 422 || archived.status === 409, `parent archive not refused: ${archived.status}`);
+
+    // detach materializes the resolved fields onto the child
+    const childRev = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template.revision;
+    const detached = await patch('/api/forms/templates/bench-day', {revision: childRev, parentId: null});
+    assert.equal(detached.status, 200);
+    assert.equal(detached.headers.get('content-type').includes('json'), true);
+    const solo = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template;
+    assert.equal(solo.parentId, undefined);
+    assert.ok(solo.fields.some((field) => field.id === 'warmup-done'), 'detach did not materialize inherited fields');
+    assert.equal(solo.fields.at(-1).id, 'spotter');
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
