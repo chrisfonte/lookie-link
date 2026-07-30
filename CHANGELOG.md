@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-30 — Unreleased — Public/private product-information boundary
+
+- Removed product-planning packages, historical build prompts, product research,
+  and the Paperclip organizational grant workflow from the current public tree.
+  Their prior publication remains truthfully recorded in Git history and older
+  changelog entries; no history rewrite was performed.
+- Kept source, tests, generated skill packages, examples, and implemented
+  contributor, operator, security, configuration, feature, and API documentation
+  in the public repository.
+- Added `AGENTS.md` so future contributors and agents can discover the public
+  boundary before adding product-planning material.
+
 ## Unreleased — Content-height embeds and viewer-lightbox zoom (#246)
 
 - Fixed the raw-HTML `/view` embed sizing broken by the sandbox hardening: the sandboxed (opaque-origin) frame cannot be measured from the wrapper, so the injected embed runtime now self-reports its scroll height over `postMessage` (`lookie-link:content-height`; load + ResizeObserver + slow interval) and the wrapper applies it only from its own frame, clamped. Short pages no longer show a blank tail; long pages no longer clip behind an inner scrollbar. The sandbox is unchanged — still no `allow-same-origin`.

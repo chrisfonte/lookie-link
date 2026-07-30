@@ -397,7 +397,7 @@ test('edit-scoped token can save while restricted humans and invalid tokens are 
   }
 });
 
-test('html and htm files render as sanitized documents with raw toggle and edit access', async () => {
+test('html and htm files render through the sandboxed embed viewer with raw and edit access', async () => {
   const fixture = await makeFixture();
   const server = await startTestServer({
     mappings: fixture.mappings,
@@ -408,12 +408,11 @@ test('html and htm files render as sanitized documents with raw toggle and edit 
     const viewResponse = await server.request('/view/alpha/docs/landing.htm');
     assert.equal(viewResponse.status, 200);
     const viewHtml = await viewResponse.text();
-    assert.match(viewHtml, /<article class="content html" data-rendered-view>/);
-    assert.match(viewHtml, /<section>\s*<h1 id="hello">Hello<a class="anchor-link"/);
+    assert.match(viewHtml, /<article class="content html-embed-view">/);
+    assert.match(viewHtml, /<iframe[\s\S]*data-embedded-html[\s\S]*sandbox=/);
     assert.doesNotMatch(viewHtml, /<script>alert\(1\)<\/script>/);
-    assert.match(viewHtml, /data-raw-toggle/);
-    assert.match(viewHtml, /language-xml" data-raw-code/);
-    assert.match(viewHtml, /<dt>Type<\/dt><dd>html<\/dd>/);
+    assert.match(viewHtml, /href="\/raw\/alpha\/docs\/landing\.htm"/);
+    assert.match(viewHtml, /href="\/edit\/alpha\/docs\/landing\.htm"/);
 
     const editResponse = await server.request('/edit/alpha/docs/landing.htm');
     assert.equal(editResponse.status, 200);
