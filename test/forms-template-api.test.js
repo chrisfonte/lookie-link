@@ -264,6 +264,8 @@ test('template API lifecycle uses CAS and preserves immutable versions and old r
       kind: 'form',
       containerId: null,
       parentId: null,
+      theme: '',
+      themeMode: '',
     }]);
     const fetchedResponse = await server.request('/api/forms/templates/training-log', {headers: AGENT_HEADERS});
     assert.equal(fetchedResponse.status, 200);
