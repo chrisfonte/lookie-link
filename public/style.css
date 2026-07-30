@@ -2822,6 +2822,18 @@ tbody tr:last-child td {
 .form-layout > .form-hub-nav { position: sticky; top: calc(var(--toolbar-height, 3.1rem) + 0.5rem); z-index: 15; backdrop-filter: blur(6px); background: color-mix(in srgb, var(--bg-elev) 82%, transparent); margin: 0 0 1rem; }
 
 
+/* #289: forms pages keep the platform heading face under every theme (themes
+   reset --heading-font for document pages; the trackers world stays uniform).
+   #290: the root's New group tab takes the primary-action emphasis, in-spec. */
+.form-layout { --heading-font: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif; }
+.forms-index-layout .form-hub-nav .configure-link { background: var(--accent); color: var(--bg); }
+
+/* #291: member name owns the row (thumb-size quick-entry); chevron zone toggles.
+   Lifecycle actions on Configure. */
+.form-layout .container-member-row > .container-member .container-member-title { flex: 1; padding: 0.9rem 0; margin: -0.9rem 0; }
+.form-layout .container-member-row > .container-member span[aria-hidden] { padding: 0.9rem 0 0.9rem 1.4rem; margin: -0.9rem 0; }
+.form-layout .configure-lifecycle { display: flex; gap: 0.8rem; margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid var(--border); }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------
