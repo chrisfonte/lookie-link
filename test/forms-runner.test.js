@@ -2053,11 +2053,15 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     const containerPage = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
     assert.match(containerPage, /<a class="container-member-title" href="\/forms\/gym-session-entry"/);
     assert.match(containerPage, /container-member-configure/);
-    // #269: the toolbar carries the contextual jump menu (Files idiom) with exclusivity
-    assert.match(containerPage, /data-tracker-menu/);
-    assert.match(containerPage, /tracker-jump-member/);
+    // #271: direct group buttons in the toolbar, current group lit; groups carry Properties
+    assert.match(containerPage, /group-nav-btn" href="\/forms\/gym" aria-current="page"/);
+    assert.match(containerPage, /toolbar-properties/);
+    assert.match(containerPage, /<dt>Group<\/dt>|Group<\/dt>/);
     const exclusives = (containerPage.match(/name="lookie-toolbar"/g) || []).length;
     assert.ok(exclusives >= 3, `expected >=3 exclusive toolbar disclosures, got ${exclusives}`);
+    // the member form's toolbar lights its group too
+    const memberToolbar = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
+    assert.match(memberToolbar, /group-nav-btn" href="\/forms\/gym" aria-current="page"/);
     // #262: trails encode containment — container page links home; member pages carry the container crumb
     assert.match(containerPage, /<nav class="breadcrumbs"><a href="\/forms">Trackers<\/a>/);
     const memberPage = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
