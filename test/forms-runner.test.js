@@ -2042,10 +2042,14 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     assert.match(member, /related-container-link/);
     assert.match(member, /← Gym/);
 
-    // root groups: container section with the member inside
+    // #260: the root is a container page — the container is a tap-in row with its count
     const root = await (await server.request('/forms', {headers: {Cookie: context.cookie}})).text();
-    assert.match(root, /forms-index-container-head/);
+    assert.match(root, /forms-root-row/);
     assert.match(root, /1 form</);
+    // member titles are direct entry links inside the container page
+    const containerPage = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
+    assert.match(containerPage, /<a class="container-member-title" href="\/forms\/gym-session-entry"/);
+    assert.match(containerPage, /container-member-configure/);
 
     // container Configure: member checkboxes; unchecking releases membership
     const configure = await (await server.request('/forms/gym/configure', {headers: {Cookie: context.cookie}})).text();

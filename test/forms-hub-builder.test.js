@@ -420,8 +420,13 @@ test('forms index separates archived templates and removes management detail for
     assert.equal(submitted.status, 303);
 
     const managerIndex = await browserPage(await server.request('/forms'));
-    assert.equal(managerIndex.document.querySelectorAll('.forms-index-groups[aria-label="Active templates"] .forms-index-item').length, 2);
+    // #260: the browse view is tap-in rows; managed cards sit in the Manage section
+    assert.equal(managerIndex.document.querySelectorAll('.container-members .forms-root-row').length, 2);
+    const manageCards = managerIndex.document.querySelectorAll('.forms-index-manage .forms-index-item');
+    const archivedCards = managerIndex.document.querySelectorAll('.forms-index-archived .forms-index-item');
+    assert.equal(manageCards.length - archivedCards.length, 2);
     assert.ok(managerIndex.document.querySelector('a[href="/forms/new"]'));
+    assert.ok(managerIndex.document.querySelector('a[href="/forms/new?kind=container"]'));
     const trainingCard = [...managerIndex.document.querySelectorAll('.forms-index-item')]
       .find((card) => /Training <log>/.test(card.querySelector('.forms-index-title h2').textContent));
     assert.ok(trainingCard);
@@ -444,7 +449,7 @@ test('forms index separates archived templates and removes management detail for
     assert.equal(submitOnly.document.querySelector('.forms-index-meta'), null);
     assert.equal(submitOnly.document.querySelector('.forms-index-archived'), null);
     assert.deepEqual(
-      [...submitOnly.document.querySelectorAll('.forms-index-simple')].map((link) => link.textContent.trim().replace(/›$/, '')),
+      [...submitOnly.document.querySelectorAll('.forms-root-row .container-member-title')].map((node) => node.textContent.trim()),
       ['Daily log', 'Training <log>'],
     );
     assert.doesNotMatch(submitOnly.document.body.textContent, /Old log|Entries|Destination|Configure|Archive/);
