@@ -2053,15 +2053,18 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     const containerPage = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
     assert.match(containerPage, /<a class="container-member-title" href="\/forms\/gym-session-entry"/);
     assert.match(containerPage, /container-member-configure/);
-    // #271: direct group buttons in the toolbar, current group lit; groups carry Properties
-    assert.match(containerPage, /group-nav-btn" href="\/forms\/gym" aria-current="page"/);
+    // #275: groups stack in one theme-style dropdown, current lit; groups carry Properties
+    assert.match(containerPage, /data-group-menu/);
+    assert.match(containerPage, /href="\/forms\/gym" aria-current="page"/);
+    assert.match(containerPage, /group-menu-new" href="\/forms\/new\?kind=container"/);
+    assert.doesNotMatch(containerPage, /tracker-jump-member/);
     assert.match(containerPage, /toolbar-properties/);
     assert.match(containerPage, /<dt>Group<\/dt>|Group<\/dt>/);
     const exclusives = (containerPage.match(/name="lookie-toolbar"/g) || []).length;
     assert.ok(exclusives >= 3, `expected >=3 exclusive toolbar disclosures, got ${exclusives}`);
-    // the member form's toolbar lights its group too
+    // the member form's dropdown lights its group too
     const memberToolbar = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
-    assert.match(memberToolbar, /group-nav-btn" href="\/forms\/gym" aria-current="page"/);
+    assert.match(memberToolbar, /href="\/forms\/gym" aria-current="page"/);
     // #273: the ancestor path is gone — the heading is title-only; the toolbar navigates
     assert.match(containerPage, /<nav class="breadcrumbs"><h1 class="crumb-title">/);
     assert.doesNotMatch(containerPage, /breadcrumbs"><a href="\/forms">Trackers/);
