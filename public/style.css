@@ -2777,6 +2777,16 @@ tbody tr:last-child td {
   margin-top: 0.6rem;
 }
 
+/* #234 follow-up: expandable member previews on container pages. */
+.form-layout .container-member-row { border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 0.7rem; background: var(--bg-elev); }
+.form-layout .container-member-row > .container-member { border: 0; background: transparent; cursor: pointer; list-style: none; }
+.form-layout .container-member-row > .container-member::-webkit-details-marker { display: none; }
+.form-layout .container-member-row[open] > .container-member { border-bottom: 1px solid var(--border); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.form-layout .container-member-preview { padding: 0.9rem 1.1rem 1.1rem; }
+.form-layout .container-form-preview { border: 0; margin: 0 0 0.8rem; padding: 0; display: grid; gap: 0.7rem; opacity: 0.85; }
+.form-layout .container-form-preview .field label { display: block; margin-bottom: 0.25rem; color: var(--text-soft); font-size: 0.85rem; }
+.form-layout .container-member-open { display: inline-block; }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------

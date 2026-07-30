@@ -2009,6 +2009,10 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     const page = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
     assert.match(page, /container-member-title/);
     assert.match(page, /gym-session-entry/);
+    // member rows expand to a disabled live preview of the form's fields
+    assert.match(page, /<fieldset disabled class="container-form-preview"/);
+    assert.match(page, /preview-gym-session-entry-lift/);
+    assert.match(page, /container-member-open/);
     const submit = await server.request('/forms/gym', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
