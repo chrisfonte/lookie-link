@@ -2821,9 +2821,9 @@ tbody tr:last-child td {
    element, translucent like the toolbar so content reads as sliding under it. */
 .form-layout > .form-hub-nav { position: sticky; top: calc(var(--toolbar-height, 3.1rem) + 0.5rem); z-index: 15; backdrop-filter: blur(6px); background: color-mix(in srgb, var(--bg-elev) 82%, transparent); margin: 0 0 1rem; }
 
-/* #271: direct group buttons in the toolbar — current group lit. */
-.viewer-toolbar .group-nav-btn { text-decoration: none; }
-.viewer-toolbar .group-nav-btn[aria-current="page"] { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); color: var(--accent); }
+/* #275: groups stack in one theme-style dropdown; the shared [aria-current]
+   menu styling lights the current one. New-group row reads as an action. */
+.toolbar-menu[data-group-menu] .group-menu-new { border-top: 1px solid var(--border); margin-top: 0.2rem; padding-top: 0.5rem; color: var(--accent); }
 
 /* ============================================================================
    Document components
