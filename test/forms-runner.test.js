@@ -2167,3 +2167,37 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     await cleanup(fixture, server);
   }
 });
+
+test('creation follows containment: slug-derived IDs and group-joined trackers (#279)', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, {formsTimezone: 'America/New_York'});
+  try {
+    const context = await getBrowserContext(server);
+    const post = (body) => server.request('/forms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: new URLSearchParams(body),
+    });
+    // group via the GUI, no ID typed — slug derives from the name
+    const group = await post({_csrf: context.token, title: 'Gym & Fitness!', kind: 'container'});
+    assert.equal(group.status, 303);
+    assert.match(group.headers.get('location'), /^\/forms\/gym-fitness\/configure$/);
+    // tracker created from inside the group joins it; duplicate name gets a suffix
+    const first = await post({_csrf: context.token, title: 'Rowing', destinationId: 'default', group: 'gym-fitness'});
+    assert.equal(first.status, 303);
+    const second = await post({_csrf: context.token, title: 'Rowing', destinationId: 'default', group: 'gym-fitness'});
+    assert.equal(second.status, 303);
+    assert.match(second.headers.get('location'), /^\/forms\/rowing-2\/configure$/);
+    const rowing = JSON.parse(await (await server.request('/api/forms/templates/rowing')).text()).template;
+    assert.equal(rowing.containerId, 'gym-fitness');
+    // group page carries the New tracker action, preset to the group
+    const groupPage = await (await server.request('/forms/gym-fitness', {headers: {Cookie: context.cookie}})).text();
+    assert.match(groupPage, /href="\/forms\/new\?group=gym-fitness"/);
+    // the create page shows the joining note
+    const createPage = await (await server.request('/forms/new?group=gym-fitness', {headers: {Cookie: context.cookie}})).text();
+    assert.match(createPage, /Joining group/);
+    assert.match(createPage, /Gym &amp; Fitness!/);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
