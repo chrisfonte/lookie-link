@@ -2850,9 +2850,10 @@ tbody tr:last-child td {
 .form-layout .related-picker-group > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 0.4rem; }
 .form-layout .related-picker-group > summary::before { content: '›'; color: var(--text-soft); transition: transform 0.12s; }
 .form-layout .related-picker-group[open] > summary::before { transform: rotate(90deg); }
+.form-layout .builder-related input[type="checkbox"] { width: 1.05rem; height: 1.05rem; margin: 0; flex: none; accent-color: var(--accent); }
 .form-layout .related-group-box { display: inline-flex; align-items: center; gap: 0.45rem; }
 .form-layout .related-own-note { color: var(--text-soft); font-size: 0.8rem; }
-.form-layout .related-picker-group .container-member-choice { display: flex; gap: 0.45rem; padding: 0.15rem 0 0.15rem 1.5rem; }
+.form-layout .related-picker-group .container-member-choice { display: flex; align-items: center; justify-content: flex-start; gap: 0.45rem; padding: 0.15rem 0 0.15rem 1.5rem; }
 
 /* ============================================================================
    Document components
