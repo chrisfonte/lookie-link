@@ -2802,6 +2802,16 @@ tbody tr:last-child td {
 .forms-index-layout .quick-configure-actions { display: flex; align-items: center; gap: 0.9rem; }
 .forms-index-layout .forms-index-container > .quick-configure { margin: 0 0 0.6rem; border-top: 0; padding-top: 0; }
 
+/* #260: the root is a container page — tap-in rows + tucked Manage section. */
+.form-layout .forms-root-count { font-size: 0.78rem; color: var(--text-soft); margin-left: auto; padding-right: 0.6rem; }
+.form-layout a.container-member-title { color: inherit; text-decoration: none; }
+.form-layout a.container-member-title:hover { text-decoration: underline; }
+.form-layout .container-member-actions { display: flex; align-items: center; gap: 0.9rem; }
+.form-layout .container-member-configure { font-size: 0.85rem; }
+.form-layout .forms-index-manage { margin-top: 1.4rem; }
+.form-layout .forms-index-manage > summary { cursor: pointer; color: var(--text-soft); font-size: 0.9rem; }
+.form-layout .forms-index-manage > .forms-index-list { margin-top: 0.8rem; }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------
