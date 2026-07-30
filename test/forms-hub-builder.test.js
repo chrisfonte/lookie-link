@@ -423,7 +423,7 @@ test('forms index separates archived templates and removes management detail for
     assert.equal(managerIndex.document.querySelectorAll('.forms-index-groups[aria-label="Active templates"] .forms-index-item').length, 2);
     assert.ok(managerIndex.document.querySelector('a[href="/forms/new"]'));
     const trainingCard = [...managerIndex.document.querySelectorAll('.forms-index-item')]
-      .find((card) => /Training <log>/.test(card.textContent));
+      .find((card) => /Training <log>/.test(card.querySelector('.forms-index-title h2').textContent));
     assert.ok(trainingCard);
     assert.match(trainingCard.textContent, /Draft\s*r1/);
     assert.match(trainingCard.textContent, /Destination\s*gym-log/);
@@ -629,6 +629,72 @@ test('reviseDraft merges presentation patches instead of replacing wholesale (#2
     await server.registry.reviseDraft('training-log', current.draft.revision, {presentation: null});
     current = await server.registry.getManagementTemplate('training-log');
     assert.equal(current.draft.presentation, undefined);
+  } finally {
+    await server.close();
+  }
+});
+
+test('root quick-configure: inline basics + membership, publishes in one tap (#257)', async () => {
+  const server = await makeServer();
+  try {
+    // second top-level form so the parent select renders (regression surface for #251)
+    await server.registry.createDraft({
+      contractVersion: 1, resourceKind: 'form-template', templateId: 'cardio-log',
+      ownerId: 'operator', revision: 1, grammarVersion: 1, destinationId: 'default',
+      title: 'Cardio log',
+      fields: [{id: 'minutes', type: 'number', label: 'Minutes', required: true}],
+    });
+    await server.registry.createDraft({
+      contractVersion: 1, resourceKind: 'form-template', templateId: 'fitness',
+      ownerId: 'operator', revision: 1, grammarVersion: 1, title: 'Fitness', kind: 'container',
+    });
+
+    // the root carries quick-configure sections with the basics controls
+    const root = await browserPage(await server.request('/forms'));
+    const quick = root.document.querySelectorAll('.quick-configure');
+    assert.ok(quick.length >= 3, `expected quick-configure per managed card, got ${quick.length}`);
+    assert.ok(root.document.querySelector('.quick-configure-form input[name="title"]'));
+    assert.ok(root.document.querySelector('.quick-configure-form select[name="container"]'));
+    assert.ok(root.document.querySelector('.quick-configure-form select[name="parent"]'));
+    assert.ok(root.document.querySelector('.quick-configure-members input[name="member"]'));
+
+    // #251 regression: a FULL configure save with the parent select present must not 400
+    const configure = await browserPage(await server.request('/forms/training-log/configure'));
+    assert.ok(configure.document.querySelector('.builder-form select[name="parent"]'), 'parent select missing on configure');
+    const fullSave = await browserPost(server, '/forms/training-log/configure',
+      formValues(configure.document.querySelector('.builder-form'), 'save'), configure.cookie);
+    assert.equal(fullSave.status, 200);
+
+    // basics save on a form: title + container membership, published, back to the root
+    // (refetched — the full save above bumped the draft revision)
+    const rootFresh = await browserPage(await server.request('/forms'));
+    const trainingForm = [...rootFresh.document.querySelectorAll('.quick-configure-form')]
+      .find((form) => form.action.includes('/forms/training-log/'));
+    const values = formValues(trainingForm, 'basics');
+    values.set('title', 'Training log (renamed)');
+    values.set('container', 'fitness');
+    const saved = await browserPost(server, '/forms/training-log/configure', values, rootFresh.cookie);
+    assert.equal(saved.status, 303);
+    assert.equal(saved.headers.get('location'), '/forms');
+    const record = await server.registry.getManagementTemplate('training-log');
+    assert.equal(record.draft.title, 'Training log (renamed)');
+    assert.equal(record.draft.containerId, 'fitness');
+    assert.equal(record.state, 'published');
+    assert.deepEqual(record.draft.fields.map((field) => field.id), ['lift', 'notes'], 'basics save must not touch fields');
+
+    // container basics: member checkboxes drive membership diffs, then 303 to the root
+    const root2 = await browserPage(await server.request('/forms'));
+    const containerForm = [...root2.document.querySelectorAll('.quick-configure-form')]
+      .find((form) => form.action.includes('/forms/fitness/'));
+    const containerValues = formValues(containerForm, 'basics');
+    containerValues.delete('member');
+    containerValues.append('member', 'cardio-log');
+    const containerSaved = await browserPost(server, '/forms/fitness/configure', containerValues, root2.cookie);
+    assert.equal(containerSaved.status, 303);
+    const cardio = await server.registry.getManagementTemplate('cardio-log');
+    assert.equal(cardio.draft.containerId, 'fitness');
+    const training = await server.registry.getManagementTemplate('training-log');
+    assert.equal(training.draft.containerId, undefined, 'unchecked member must be released');
   } finally {
     await server.close();
   }
