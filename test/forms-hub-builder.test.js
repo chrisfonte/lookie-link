@@ -522,7 +522,7 @@ test('builder offers server-installed themes, saves the choice, and refuses one 
   }
 });
 
-test('toolbar section menu offers Files and Forms and disappears when there is nowhere to choose between', async () => {
+test('toolbar section menu offers Files and Trackers and disappears when there is nowhere to choose between', async () => {
   const {setNavLinks, toolbarHtml} = require('../lib/renderer');
 
   const server = await makeServer();
@@ -534,7 +534,7 @@ test('toolbar section menu offers Files and Forms and disappears when there is n
     // toolbar's translucency and blur.
     assert.equal(menu.tagName, 'DETAILS');
     const items = [...menu.querySelectorAll('[data-nav-item]')];
-    assert.deepEqual(items.map((item) => item.textContent), ['Files', 'Forms']);
+    assert.deepEqual(items.map((item) => item.textContent), ['Files', 'Trackers']);
     assert.deepEqual(items.map((item) => item.getAttribute('href')), ['/', '/forms']);
     assert.doesNotMatch(page.html, /onchange=|onclick=/i);
   } finally {
