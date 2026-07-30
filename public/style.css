@@ -2823,7 +2823,7 @@ tbody tr:last-child td {
 
 /* #275: groups stack in one theme-style dropdown; the shared [aria-current]
    menu styling lights the current one. New-group row reads as an action. */
-.toolbar-menu[data-group-menu] .group-menu-new { border-top: 1px solid var(--border); margin-top: 0.2rem; padding-top: 0.5rem; color: var(--accent); }
+.toolbar-menu[data-group-menu] .group-menu-root { border-bottom: 1px solid var(--border); margin-bottom: 0.2rem; padding-bottom: 0.5rem; }
 
 /* ============================================================================
    Document components

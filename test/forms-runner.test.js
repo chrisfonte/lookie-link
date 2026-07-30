@@ -2056,7 +2056,8 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     // #275: groups stack in one theme-style dropdown, current lit; groups carry Properties
     assert.match(containerPage, /data-group-menu/);
     assert.match(containerPage, /href="\/forms\/gym" aria-current="page"/);
-    assert.match(containerPage, /group-menu-new" href="\/forms\/new\?kind=container"/);
+    assert.match(containerPage, /group-menu-root" href="\/forms">All trackers</);
+    assert.doesNotMatch(containerPage, /group-menu-new/);
     assert.doesNotMatch(containerPage, /tracker-jump-member/);
     assert.match(containerPage, /toolbar-properties/);
     assert.match(containerPage, /<dt>Group<\/dt>|Group<\/dt>/);
