@@ -2261,11 +2261,34 @@ test('related-strip config: all-in-group default, cross-group picks, API roundtr
     assert.match(page, /related-form-link" href="\/forms\/weight"/);
     assert.match(page, /related-container-link/);
 
-    // configure carries the section; bad include ids are refused
+    // configure carries the compact disclosure; bad include ids are refused
     const configure = await (await server.request('/forms/gym-session-entry/configure', {headers: {Cookie: context.cookie}})).text();
     assert.match(configure, /builder-related/);
     assert.match(configure, /name="relatedAll"/);
     assert.match(configure, /name="related" value="weight" checked/);
+    // #302: group rows are checkable (another group's id includes it whole, live)
+    assert.match(configure, /related-group-box/);
+
+    // #302: the GUI save path — scrape the real builder form, tick a box, save
+    const {JSDOM} = require('jsdom');
+    const guiPage = await (await server.request('/forms/gym-session-entry/configure', {headers: {Cookie: context.cookie}})).text();
+    const dom = new JSDOM(guiPage);
+    const builderForm = dom.window.document.querySelector('.builder-form');
+    const guiValues = new URLSearchParams();
+    for (const control of builderForm.querySelectorAll('input, select, textarea')) {
+      if (!control.name || control.disabled) continue;
+      if (control.type === 'checkbox' && !control.checked) continue;
+      guiValues.append(control.name, control.value);
+    }
+    guiValues.set('_action', 'save');
+    const guiSave = await server.request('/forms/gym-session-entry/configure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: guiValues.toString(),
+    });
+    assert.equal(guiSave.status, 200, (await guiSave.text()).slice(0, 300));
+    const afterGui = JSON.parse(await (await server.request('/api/forms/templates/gym-session-entry')).text()).template;
+    assert.deepEqual(afterGui.related, {group: false, include: ['weight']}, 'GUI save must preserve the related config');
     const rev3 = JSON.parse(await (await server.request('/api/forms/templates/gym-session-entry')).text()).template.revision;
     assert.equal((await patch('/api/forms/templates/gym-session-entry', {revision: rev3, related: {include: ['NOT AN ID']}})).status, 422);
   } finally {
