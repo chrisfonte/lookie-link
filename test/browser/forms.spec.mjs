@@ -351,10 +351,10 @@ browserTest('machine strength entry reaches its receipt and entries list', async
     page.locator('.form-primary-action').click(),
   ]);
 
-  // The receipt header is now a breadcrumb ending in the form title, not a bare
-  // "Entry logged" heading; the receipt table below confirms the submission landed.
+  // The receipt header carries the form title. Section navigation now lives in
+  // the toolbar, which superseded the breadcrumb path.
   assert.equal((await page.locator('.crumb-title').textContent()).trim(), TEMPLATE_TITLE);
-  assert.equal((await page.locator('.breadcrumbs a[href="/forms"]').textContent()).trim(), 'Forms');
+  assert.equal((await page.locator('[data-nav-item][href="/forms"]').textContent()).trim(), 'Trackers');
   const receipt = Object.fromEntries(await page.locator('.receipt-table tbody tr').evaluateAll((rows) =>
     rows.map((row) => {
       const label = row.querySelector('th').textContent.trim();

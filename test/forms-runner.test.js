@@ -7,11 +7,10 @@ const http = require('node:http');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
-const { execFile } = require('node:child_process');
 const { Duplex } = require('node:stream');
-const { promisify } = require('node:util');
 const yaml = require('js-yaml');
 const { JSDOM } = require('jsdom');
+const { chromium } = require('playwright');
 
 const { createApp } = require('../server');
 const { renderReceiptPage } = require('../lib/forms/routes');
@@ -20,7 +19,6 @@ const { SubmissionStore } = require('../lib/forms/submission-store');
 
 const PUBLIC_ORIGIN = 'http://forms.example.test';
 const GYM_FIXTURE = path.join(__dirname, 'fixtures', 'forms', 'gym-session-entry.yaml');
-const execFileAsync = promisify(execFile);
 
 const everyTypeTemplate = {
   contractVersion: 1,
@@ -276,17 +274,19 @@ async function availablePort() {
 }
 
 async function runBrowser(url, profilePath) {
-  return execFileAsync(process.env.CHROME_BIN || 'google-chrome', [
-    '--headless=new',
-    '--no-sandbox',
-    '--disable-gpu',
-    '--disable-dev-shm-usage',
-    '--no-proxy-server',
-    `--user-data-dir=${profilePath}`,
-    '--virtual-time-budget=3000',
-    '--dump-dom',
-    url,
-  ], { maxBuffer: 4 * 1024 * 1024, timeout: 15000 });
+  const context = await chromium.launchPersistentContext(profilePath, {
+    headless: true,
+    executablePath: process.env.CHROME_BIN || undefined,
+  });
+  try {
+    const pages = context.pages();
+    const page = pages[0] || await context.newPage();
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(500);
+    return { stdout: await page.content(), stderr: '' };
+  } finally {
+    await context.close();
+  }
 }
 
 test('GET renders every field type, required markers, constraints, and a CSRF token', async () => {

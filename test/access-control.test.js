@@ -402,6 +402,11 @@ test('html and htm files render as sanitized documents with raw toggle and edit 
   const server = await startTestServer({
     mappings: fixture.mappings,
     editingEnabled: true,
+    // Pin the raw-HTML switch off. Left undefined, createApp falls back to the
+    // host's ambient config, so this test would assert the sandboxed embed view
+    // on a machine that enables raw HTML and the sanitized view everywhere else.
+    // The embed path has its own test below with the switch pinned on.
+    rawHtmlEnabled: false,
   });
 
   try {

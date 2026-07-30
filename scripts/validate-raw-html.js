@@ -225,14 +225,17 @@ async function run() {
       assert.equal(viewEnabled.status, 200);
       assert.match(
         viewEnabled.text,
-        /<iframe[\s\S]*data-embedded-html[\s\S]*src="\/embed\/docs\/flashcards\.html"/,
+        /<iframe[\s\S]*data-embedded-html[\s\S]*sandbox=/,
         '/view frames trusted authored HTML through /embed'
       );
-      // Attribute order is not significant in HTML: assert the framing iframe
-      // carries both the embed src and the sandbox, in whatever order.
+      // The frame intentionally has no static src. The wrapper registers the load
+      // handler first, then performs one themed navigation to avoid the warm-cache
+      // first-paint race (#139).
       const embedFrameTag = viewEnabled.text.match(/<iframe[^>]*data-embedded-html[^>]*>/);
       assert.ok(embedFrameTag, '/view should frame the embed route');
-      assert.match(embedFrameTag[0], /src="\/embed\/docs\/flashcards\.html"/);
+      assert.doesNotMatch(embedFrameTag[0], /\ssrc=/);
+      assert.match(viewEnabled.text, /new URL\("\/embed\/docs\/flashcards\.html"/);
+      assert.match(viewEnabled.text, /frame\.src = frameUrl\(\)/);
       assert.match(
         embedFrameTag[0],
         /sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation"/,
