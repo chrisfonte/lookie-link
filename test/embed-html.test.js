@@ -100,6 +100,23 @@ test('embed transformation preserves scripts and injects base, theme, local asse
   }
 });
 
+test('embed runtime self-reports content height and gates messages on the framing window', async () => {
+  const fixture = await makeFixture();
+  try {
+    const html = transformEmbedHtml('<p>short</p>', options(fixture));
+    // The frame is sandboxed without allow-same-origin, so the parent cannot
+    // measure the document; the injected runtime must self-report its height.
+    assert.match(html, /lookie-link:content-height/);
+    assert.match(html, /ResizeObserver/);
+    // Inbound messages are gated on event.source — an origin-string comparison
+    // is unreliable from an opaque origin and the old guard must be gone.
+    assert.match(html, /event\.source !== window\.parent/);
+    assert.doesNotMatch(html, /event\.origin !== window\.location\.origin/);
+  } finally {
+    await fsPromises.rm(fixture.fixtureRoot, { recursive: true, force: true });
+  }
+});
+
 test('embed transformation wraps fragments and full documents that omit head', async () => {
   const fixture = await makeFixture();
   try {
@@ -229,6 +246,12 @@ test('document viewer frames HTML through embed while retaining a distinct raw-s
   assert.match(html, /href="\/raw\/alpha\/docs\/page\.html"[^>]*>Open raw<\/a>/);
   assert.match(html, /lookie-link:set-theme/);
   assert.match(html, /MutationObserver/);
+  // The sandboxed frame's height arrives by message; the viewer must listen for
+  // it from exactly our frame and must not rely on a same-origin targetOrigin
+  // (an opaque-origin frame can never match one).
+  assert.match(html, /lookie-link:content-height/);
+  assert.match(html, /event\.source !== frame\.contentWindow/);
+  assert.doesNotMatch(html, /postMessage\((?:[^)]*?), window\.location\.origin\)/);
   assert.doesNotMatch(html, /<iframe[\s\S]*src="\/raw\/alpha\/docs\/page\.html"/);
   assert.doesNotMatch(html, /lookie-link-annotations-bootstrap/);
 });
