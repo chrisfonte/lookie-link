@@ -2019,7 +2019,23 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
       body: nativeBody(context.token),
     });
     assert.equal(submit.status, 404);
-    assert.equal((await server.request('/forms/gym/entries', {headers: {Cookie: context.cookie}})).status, 404);
+
+    // #248: the container dashboard — a member entry surfaces on the container
+    // page's recent list (chipped by form) and on the aggregated history page.
+    const logged = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: nativeBody(context.token),
+    });
+    assert.ok(logged.status === 200 || logged.status === 303, `submit status ${logged.status}`);
+    const dashboard = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
+    assert.match(dashboard, /recent-entries/);
+    assert.match(dashboard, /entry-form-chip">Gym Session Entry</);
+    const history = await server.request('/forms/gym/entries', {headers: {Cookie: context.cookie}});
+    assert.equal(history.status, 200);
+    const historyPage = await history.text();
+    assert.match(historyPage, /entries-day/);
+    assert.match(historyPage, /entry-form-chip/);
 
     // member form carries the back-to-container button
     const member = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
