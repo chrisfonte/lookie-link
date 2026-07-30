@@ -6,6 +6,8 @@ Lookie-Link is a private-network web viewer for configured local directories. It
 
 The authoritative route, authorization, configuration, CLI, discovery, and library inventory is [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md). Do not create another endpoint list or document forms, templates, or submissions as implemented.
 
+This repository is public. [`AGENTS.md`](AGENTS.md) defines the public boundary: what belongs here and what must never be added (product strategy, roadmaps, draft decisions, build prompts, private paths). Read it before adding documentation.
+
 ## Commands
 
 - `npm test` — Node test suite, including the discovery-to-documentation matrix check
