@@ -397,22 +397,28 @@ test('edit-scoped token can save while restricted humans and invalid tokens are 
   }
 });
 
-test('html and htm files render through the sandboxed embed viewer with raw and edit access', async () => {
+test('html and htm files render as sanitized documents with raw toggle and edit access', async () => {
   const fixture = await makeFixture();
   const server = await startTestServer({
     mappings: fixture.mappings,
     editingEnabled: true,
+    // Pin the raw-HTML switch off. Left undefined, createApp falls back to the
+    // host's ambient config, so this test would assert the sandboxed embed view
+    // on a machine that enables raw HTML and the sanitized view everywhere else.
+    // The embed path has its own test below with the switch pinned on.
+    rawHtmlEnabled: false,
   });
 
   try {
     const viewResponse = await server.request('/view/alpha/docs/landing.htm');
     assert.equal(viewResponse.status, 200);
     const viewHtml = await viewResponse.text();
-    assert.match(viewHtml, /<article class="content html-embed-view">/);
-    assert.match(viewHtml, /<iframe[\s\S]*data-embedded-html[\s\S]*sandbox=/);
+    assert.match(viewHtml, /<article class="content html" data-rendered-view>/);
+    assert.match(viewHtml, /<section>\s*<h1 id="hello">Hello<a class="anchor-link"/);
     assert.doesNotMatch(viewHtml, /<script>alert\(1\)<\/script>/);
-    assert.match(viewHtml, /href="\/raw\/alpha\/docs\/landing\.htm"/);
-    assert.match(viewHtml, /href="\/edit\/alpha\/docs\/landing\.htm"/);
+    assert.match(viewHtml, /data-raw-toggle/);
+    assert.match(viewHtml, /language-xml" data-raw-code/);
+    assert.match(viewHtml, /<dt>Type<\/dt><dd>html<\/dd>/);
 
     const editResponse = await server.request('/edit/alpha/docs/landing.htm');
     assert.equal(editResponse.status, 200);
