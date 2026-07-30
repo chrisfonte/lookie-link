@@ -2842,6 +2842,12 @@ tbody tr:last-child td {
 .form-layout .container-card .forms-index-archived { margin-top: 1.1rem; }
 .form-layout .container-card .forms-index-archived > summary { cursor: pointer; color: var(--text-soft); font-size: 0.9rem; }
 
+/* #300: related-trackers picker on Configure. */
+.form-layout .builder-related { display: grid; gap: 0.5rem; }
+.form-layout .related-all { display: flex; align-items: center; gap: 0.5rem; }
+.form-layout .related-picker > summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; }
+.form-layout .related-picker-group { display: grid; gap: 0.3rem; padding: 0.4rem 0; }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------
