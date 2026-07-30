@@ -2031,9 +2031,9 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
       body: nativeBody(context.token),
     });
     assert.ok(logged.status === 200 || logged.status === 303, `submit status ${logged.status}`);
+    // #293: the group page carries no recent-entries aside — History owns it
     const dashboard = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
-    assert.match(dashboard, /recent-entries/);
-    assert.match(dashboard, /entry-form-chip">Gym Session Entry</);
+    assert.doesNotMatch(dashboard, /recent-entries/);
     const history = await server.request('/forms/gym/entries', {headers: {Cookie: context.cookie}});
     assert.equal(history.status, 200);
     const historyPage = await history.text();
@@ -2197,6 +2197,20 @@ test('creation follows containment: slug-derived IDs and group-joined trackers (
     assert.match(createPage, /href="\/forms\/gym-fitness\/entries"/);
     assert.match(createPage, /group=gym-fitness" aria-current="page"/);
     assert.match(createPage, /groups-link" href="\/forms">Groups</);
+    // #293: archive a group member — it lists on the GROUP page, not the root
+    const rowing2 = JSON.parse(await (await server.request('/api/forms/templates/rowing-2')).text()).template;
+    const archivedResp = await server.request('/api/forms/templates/rowing-2/archive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'x-csrf-token': context.token },
+      body: JSON.stringify({revision: rowing2.revision}),
+    });
+    assert.equal(archivedResp.status, 200);
+    const groupWithArchived = await (await server.request('/forms/gym-fitness', {headers: {Cookie: context.cookie}})).text();
+    assert.match(groupWithArchived, /archived-member-row/);
+    assert.match(groupWithArchived, /rowing-2\/restore/);
+    const rootAfterArchive = await (await server.request('/forms', {headers: {Cookie: context.cookie}})).text();
+    assert.doesNotMatch(rootAfterArchive, /rowing-2/);
+
     // the root create page carries the Browse escape
     const rootCreate = await (await server.request('/forms/new?kind=container', {headers: {Cookie: context.cookie}})).text();
     assert.match(rootCreate, /groups-link" href="\/forms">Groups</);

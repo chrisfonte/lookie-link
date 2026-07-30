@@ -2826,13 +2826,20 @@ tbody tr:last-child td {
    reset --heading-font for document pages; the trackers world stays uniform).
    #290: the root's New group tab takes the primary-action emphasis, in-spec. */
 .form-layout { --heading-font: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif; }
-.forms-index-layout .form-hub-nav .configure-link { background: var(--accent); color: var(--bg); }
+.forms-index-layout .form-hub-nav .configure-link,
+.form-layout .form-hub-nav .new-link { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); border-radius: 8px; }
 
 /* #291: member name owns the row (thumb-size quick-entry); chevron zone toggles.
    Lifecycle actions on Configure. */
 .form-layout .container-member-row > .container-member .container-member-title { flex: 1; padding: 0.9rem 0; margin: -0.9rem 0; }
 .form-layout .container-member-row > .container-member span[aria-hidden] { padding: 0.9rem 0 0.9rem 1.4rem; margin: -0.9rem 0; }
 .form-layout .configure-lifecycle { display: flex; gap: 0.8rem; margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid var(--border); }
+
+/* #293: a group's archived trackers, restorable in place. */
+.form-layout .archived-member-list { display: grid; gap: 0.5rem; padding-top: 0.6rem; }
+.form-layout .archived-member-row { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; color: var(--text-soft); }
+.form-layout .container-card .forms-index-archived { margin-top: 1.1rem; }
+.form-layout .container-card .forms-index-archived > summary { cursor: pointer; color: var(--text-soft); font-size: 0.9rem; }
 
 /* ============================================================================
    Document components
