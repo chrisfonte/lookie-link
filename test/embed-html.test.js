@@ -93,6 +93,9 @@ test('embed transformation preserves scripts and injects base, theme, local asse
     assert.match(html, /<script>window\.authoredScript = true;<\/script>/);
     assert.match(html, /src="\/asset\/alpha\/docs\/image\.png"/);
     assert.match(html, /href="\/asset\/alpha\/docs\/theme\.css"/);
+    // Authored viewer-routed absolute paths pass through untouched — never
+    // double-prefixed into /asset/<repo>/asset/<repo>/... (404).
+    assert.doesNotMatch(html, /\/asset\/alpha\/asset\//);
     assert.match(html, /id="same" href="\/view\/alpha\/docs\/guide\.html#part" target="_top"/);
     assert.match(html, /id="fragment" href="\/view\/alpha\/docs\/page\.html#hello" target="_top"/);
   } finally {
@@ -119,6 +122,32 @@ test('embed runtime self-reports content height and gates messages on the framin
     assert.match(html, /lookie-link:scroll-to/);
     assert.match(html, /lookie-link:set-hash/);
     assert.match(html, /'Escape'/);
+    // Photo zoom is forwarded to the VIEWER's own lightbox (markdown parity):
+    // clicks on photo-lightbox stage links become open-image requests, Escape
+    // becomes close-image.
+    assert.match(html, /lookie-link:open-image/);
+    assert.match(html, /lookie-link:close-image/);
+    assert.match(html, /photo-lightbox/);
+  } finally {
+    await fsPromises.rm(fixture.fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test('embed transformation leaves authored viewer-routed absolute paths untouched', async () => {
+  const fixture = await makeFixture();
+  try {
+    const html = transformEmbedHtml(
+      '<img id="a" src="/asset/alpha/docs/image.png"><a id="v" href="/view/beta/unique.html">V</a><img id="r" src="image.png">',
+      options(fixture)
+    );
+    // Authored /asset and /view paths already address the viewer — re-resolving
+    // them double-prefixes the route (regression seen live 2026-07-29 on the
+    // venue catalog: /asset/<repo>/asset/<repo>/... → broken images).
+    assert.match(html, /id="a" src="\/asset\/alpha\/docs\/image\.png"/);
+    assert.match(html, /id="v" href="\/view\/beta\/unique\.html"/);
+    assert.doesNotMatch(html, /\/asset\/[^"]*\/asset\//);
+    // Relative references still resolve to the asset route.
+    assert.match(html, /id="r" src="\/asset\/alpha\/docs\/image\.png"/);
   } finally {
     await fsPromises.rm(fixture.fixtureRoot, { recursive: true, force: true });
   }
@@ -265,6 +294,10 @@ test('document viewer frames HTML through embed while retaining a distinct raw-s
   assert.match(html, /lookie-link:scroll-to/);
   assert.match(html, /lookie-link:set-hash/);
   assert.match(html, /\^#\[A-Za-z0-9_-\]\*\$/);
+  // Embed image zoom drives the page's own [data-lightbox] overlay — the same
+  // one markdown files use — for identical viewport-centered behavior.
+  assert.match(html, /lookie-link:open-image/);
+  assert.match(html, /lookie-link:close-image/);
   assert.doesNotMatch(html, /<iframe[\s\S]*src="\/raw\/alpha\/docs\/page\.html"/);
   assert.doesNotMatch(html, /lookie-link-annotations-bootstrap/);
 });
