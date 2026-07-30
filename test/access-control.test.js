@@ -460,7 +460,13 @@ test('embed transforms authorized HTML while raw remains exact and bearer creden
     const framedView = await server.request('/view/alpha/docs/landing.htm?token=viewer-token');
     assert.equal(framedView.status, 200);
     const framedHtml = await framedView.text();
-    assert.match(framedHtml, /<iframe[\s\S]*data-embedded-html[\s\S]*src="\/embed\/alpha\/docs\/landing\.htm\?token=viewer-token"/);
+    // The iframe carries no static src (#139 single themed navigation); the
+    // query credential must still reach the embed via the sync script's href.
+    assert.match(framedHtml, /<iframe[\s\S]*data-embedded-html/);
+    const framedEmbedFrame = framedHtml.match(/<iframe[^>]*data-embedded-html[^>]*>/);
+    assert.ok(framedEmbedFrame);
+    assert.doesNotMatch(framedEmbedFrame[0], /\ssrc=/);
+    assert.match(framedHtml, /"\/embed\/alpha\/docs\/landing\.htm\?token=viewer-token"/);
     assert.match(framedHtml, /href="\/raw\/alpha\/docs\/landing\.htm\?token=viewer-token"[^>]*>Open raw<\/a>/);
     assert.doesNotMatch(framedHtml, /<iframe[\s\S]*src="\/raw\/alpha\/docs\/landing\.htm/);
 

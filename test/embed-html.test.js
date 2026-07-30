@@ -270,12 +270,17 @@ test('document viewer frames HTML through embed while retaining a distinct raw-s
     annotationsEnabled: true,
   });
 
-  assert.match(html, /<iframe[\s\S]*data-embedded-html[\s\S]*src="\/embed\/alpha\/docs\/page\.html"/);
-  // Attribute order is not significant in HTML: assert the framing iframe carries
-  // both the embed src and the sandbox, independent of the order they appear in.
   const embedFrame = html.match(/<iframe[^>]*data-embedded-html[^>]*>/);
   assert.ok(embedFrame, 'the viewer should frame the embed route');
-  assert.match(embedFrame[0], /src="\/embed\/alpha\/docs\/page\.html"/);
+  // No static src (#139): an eager unthemed navigation raced the themed one the
+  // sync script issues, and a warm cache could surface the unthemed paint. The
+  // script performs the single themed navigation after its load handler.
+  assert.doesNotMatch(embedFrame[0], /\ssrc=/);
+  assert.match(html, /frame\.src = frameUrl\(\)/);
+  assert.ok(
+    html.indexOf("frame.addEventListener('load'") < html.indexOf('frame.src = frameUrl()'),
+    'the load handler must be registered before the themed navigation'
+  );
   assert.match(embedFrame[0], /sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation"/);
   assert.doesNotMatch(html, /sandbox="[^"]*allow-same-origin/);
   assert.match(html, /href="\/embed\/alpha\/docs\/page\.html"[^>]*>Open embedded<\/a>/);
