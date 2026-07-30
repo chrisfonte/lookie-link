@@ -410,6 +410,11 @@ test('forms index separates archived templates and removes management detail for
     await server.registry.createDraft({...base, templateId: 'daily-log', title: 'Daily log'});
     await server.registry.createDraft({...base, templateId: 'old-log', title: 'Old log'});
     await server.registry.setArchived('old-log', 1, true);
+    await server.registry.createDraft({
+      contractVersion: 1, resourceKind: 'form-template', templateId: 'retired-group',
+      ownerId: 'operator', revision: 1, grammarVersion: 1, title: 'Retired group', kind: 'container',
+    });
+    await server.registry.setArchived('retired-group', 1, true);
 
     const formPage = await browserPage(await server.request('/forms/training-log'));
     const submitted = await browserPost(server, '/forms/training-log', new URLSearchParams({
@@ -429,11 +434,18 @@ test('forms index separates archived templates and removes management detail for
     const configureLifecycle = await browserPage(await server.request('/forms/training-log/configure'));
     const lifecycleButtons = [...configureLifecycle.document.querySelectorAll('.configure-lifecycle button')].map((node) => node.textContent.trim());
     assert.deepEqual(lifecycleButtons, ['Clone', 'Archive']);
+    // #298: root archived holds archived GROUPS only; archived trackers live
+    // with their group (or, ungrouped like old-log, stay off the root entirely)
     const archived = managerIndex.document.querySelector('.forms-index-archived');
     assert.ok(archived);
     assert.equal(archived.open, false);
     assert.match(archived.querySelector('summary').textContent, /Show archived\s*1/);
-    assert.match(archived.textContent, /Old log/);
+    assert.match(archived.textContent, /Retired group/);
+    assert.doesNotMatch(archived.textContent, /Old log/);
+    // the Trackers view lists every active tracker under its group heading
+    const trackersView = await browserPage(await server.request('/forms?view=trackers'));
+    assert.ok(trackersView.document.querySelector('.form-hub-nav a[aria-current="page"][href="/forms?view=trackers"]'));
+    assert.ok([...trackersView.document.querySelectorAll('.forms-root-row .container-member-title')].some((node) => /Daily log/.test(node.textContent)));
 
     const submitOnly = await browserPage(await server.request('/forms', {headers: {'X-No-Manage': 'yes'}}));
     assert.equal(submitOnly.document.querySelector('a[href="/forms/new"]'), null);
