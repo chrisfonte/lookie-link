@@ -640,7 +640,7 @@ test('form and receipt use the themed shell, preserve escaping, and offer Log an
     // Header is a breadcrumb ending in the form title (the coloured current crumb),
     // matching the document header. Sub-view is shown by the hub-nav tabs.
     assert.equal(formDocument.querySelector('.topbar .crumb-title').textContent, 'Gym Session Entry');
-    assert.equal(formDocument.querySelector('.topbar .breadcrumbs a[href="/forms"]').textContent, 'Trackers');
+    assert.equal(formDocument.querySelector('.topbar .breadcrumbs a[href="/forms"]'), null);
     assert.equal(formDocument.querySelector('.form-primary-action').textContent, 'Submit');
     assert.equal(formDocument.querySelector('label[for="field-notes"]').textContent, '<em>Notes</em> *');
     assert.match(formHtml, /&lt;em&gt;Notes&lt;\/em&gt;/);
@@ -667,7 +667,7 @@ test('form and receipt use the themed shell, preserve escaping, and offer Log an
     const receiptHtml = await receiptResponse.text();
     const receiptDocument = assertSharedFormsShell(receiptResponse, receiptHtml, customThemeMarker);
     assert.equal(receiptDocument.querySelector('.topbar .crumb-title').textContent, 'Gym Session Entry');
-    assert.equal(receiptDocument.querySelector('.topbar .breadcrumbs a[href="/forms"]').textContent, 'Trackers');
+    assert.equal(receiptDocument.querySelector('.topbar .breadcrumbs a[href="/forms"]'), null);
     assert.equal(
       receiptDocument.querySelector('.form-primary-action').getAttribute('href'),
       '/forms/gym-session-entry'
@@ -2062,12 +2062,11 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     // the member form's toolbar lights its group too
     const memberToolbar = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
     assert.match(memberToolbar, /group-nav-btn" href="\/forms\/gym" aria-current="page"/);
-    // #262: trails encode containment — container page links home; member pages carry the container crumb
-    assert.match(containerPage, /<nav class="breadcrumbs"><a href="\/forms">Trackers<\/a>/);
+    // #273: the ancestor path is gone — the heading is title-only; the toolbar navigates
+    assert.match(containerPage, /<nav class="breadcrumbs"><h1 class="crumb-title">/);
+    assert.doesNotMatch(containerPage, /breadcrumbs"><a href="\/forms">Trackers/);
     const memberPage = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
-    assert.match(memberPage, /<a href="\/forms\/gym">Gym<\/a>/);
-    const memberEntries = await (await server.request('/forms/gym-session-entry/entries', {headers: {Cookie: context.cookie}})).text();
-    assert.match(memberEntries, /<a href="\/forms\/gym">Gym<\/a>/);
+    assert.doesNotMatch(memberPage, /<span class="sep">/);
 
     // container Configure: member checkboxes; unchecking releases membership
     const configure = await (await server.request('/forms/gym/configure', {headers: {Cookie: context.cookie}})).text();
