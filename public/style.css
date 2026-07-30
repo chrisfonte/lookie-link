@@ -2787,6 +2787,10 @@ tbody tr:last-child td {
 .form-layout .container-form-preview .field label { display: block; margin-bottom: 0.25rem; color: var(--text-soft); font-size: 0.85rem; }
 .form-layout .container-member-open { display: inline-block; }
 
+/* #248: container dashboard — member-form chip on aggregated entry rows. */
+.form-layout .entry-form-chip { font-size: 0.72rem; padding: 0.1rem 0.5rem; border-radius: 999px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); white-space: nowrap; }
+.form-layout .container-card .recent-entries { margin-top: 1.2rem; }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------
