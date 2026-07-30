@@ -2812,6 +2812,11 @@ tbody tr:last-child td {
 .form-layout .forms-index-manage > summary { cursor: pointer; color: var(--text-soft); font-size: 0.9rem; }
 .form-layout .forms-index-manage > .forms-index-list { margin-top: 0.8rem; }
 
+/* #262: the trail is the containment hierarchy — comfortable tap targets. */
+.form-layout .breadcrumbs { gap: 0.5rem; align-items: baseline; }
+.form-layout .breadcrumbs > a { color: var(--accent); text-decoration: none; padding: 0.15rem 0; }
+.form-layout .breadcrumbs > a:hover { text-decoration: underline; }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------

@@ -2050,6 +2050,12 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     const containerPage = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
     assert.match(containerPage, /<a class="container-member-title" href="\/forms\/gym-session-entry"/);
     assert.match(containerPage, /container-member-configure/);
+    // #262: trails encode containment — container page links home; member pages carry the container crumb
+    assert.match(containerPage, /<nav class="breadcrumbs"><a href="\/forms">Forms<\/a>/);
+    const memberPage = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
+    assert.match(memberPage, /<a href="\/forms\/gym">Gym<\/a>/);
+    const memberEntries = await (await server.request('/forms/gym-session-entry/entries', {headers: {Cookie: context.cookie}})).text();
+    assert.match(memberEntries, /<a href="\/forms\/gym">Gym<\/a>/);
 
     // container Configure: member checkboxes; unchecking releases membership
     const configure = await (await server.request('/forms/gym/configure', {headers: {Cookie: context.cookie}})).text();
