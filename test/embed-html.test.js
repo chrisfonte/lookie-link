@@ -146,6 +146,10 @@ test('embed transformation leaves authored viewer-routed absolute paths untouche
     assert.match(html, /id="a" src="\/asset\/alpha\/docs\/image\.png"/);
     assert.match(html, /id="v" href="\/view\/beta\/unique\.html"/);
     assert.doesNotMatch(html, /\/asset\/[^"]*\/asset\//);
+    // Same for the forms surface: launcher/dashboard pages link /forms/... and
+    // those must survive embedding untouched.
+    const formsHtml = transformEmbedHtml('<a id="f" href="/forms/gym-strength-entry">Log</a>', options(fixture));
+    assert.match(formsHtml, /id="f" href="\/forms\/gym-strength-entry"/);
     // Relative references still resolve to the asset route.
     assert.match(html, /id="r" src="\/asset\/alpha\/docs\/image\.png"/);
   } finally {
