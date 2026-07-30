@@ -363,7 +363,7 @@ test('forms index offers its single API-backed creation path only to managers an
     assert.equal(deniedIndex.document.querySelector('a[href="/forms/new"]'), null);
     assert.equal((await server.request('/forms/new', {headers: {'X-No-Manage': 'yes'}})).status, 404);
     const emptyIndex = await browserPage(await server.request('/forms'));
-    assert.match(emptyIndex.document.body.textContent, /Create your first template/);
+    assert.match(emptyIndex.document.body.textContent, /Create your first tracker/);
     assert.ok(emptyIndex.document.querySelector('a[href="/forms/new"]'));
     let firstRun = await browserPage(await server.request('/forms/new'));
     const cookie = firstRun.cookie;
