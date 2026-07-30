@@ -363,8 +363,8 @@ test('forms index offers its single API-backed creation path only to managers an
     assert.equal(deniedIndex.document.querySelector('a[href="/forms/new"]'), null);
     assert.equal((await server.request('/forms/new', {headers: {'X-No-Manage': 'yes'}})).status, 404);
     const emptyIndex = await browserPage(await server.request('/forms'));
-    assert.match(emptyIndex.document.body.textContent, /Create your first tracker/);
-    assert.ok(emptyIndex.document.querySelector('a[href="/forms/new"]'));
+    assert.match(emptyIndex.document.body.textContent, /Create your first group/);
+    assert.ok(emptyIndex.document.querySelector('a[href="/forms/new?kind=container"]'));
     let firstRun = await browserPage(await server.request('/forms/new'));
     const cookie = firstRun.cookie;
     assert.match(firstRun.document.querySelector('h1').textContent, /New template/);
@@ -425,7 +425,8 @@ test('forms index separates archived templates and removes management detail for
     const manageCards = managerIndex.document.querySelectorAll('.forms-index-manage .forms-index-item');
     const archivedCards = managerIndex.document.querySelectorAll('.forms-index-archived .forms-index-item');
     assert.equal(manageCards.length - archivedCards.length, 2);
-    assert.ok(managerIndex.document.querySelector('a[href="/forms/new"]'));
+    assert.equal(managerIndex.document.querySelector('a[href="/forms/new"]'), null);
+    assert.ok(managerIndex.document.querySelector('a[href="/forms/new?kind=container"]'));
     assert.ok(managerIndex.document.querySelector('a[href="/forms/new?kind=container"]'));
     const trainingCard = [...managerIndex.document.querySelectorAll('.forms-index-item')]
       .find((card) => /Training <log>/.test(card.querySelector('.forms-index-title h2').textContent));
