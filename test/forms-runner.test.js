@@ -2193,10 +2193,17 @@ test('creation follows containment: slug-derived IDs and group-joined trackers (
     // group page carries the New tracker action, preset to the group
     const groupPage = await (await server.request('/forms/gym-fitness', {headers: {Cookie: context.cookie}})).text();
     assert.match(groupPage, /href="\/forms\/new\?group=gym-fitness"/);
-    // the create page shows the joining note
+    // the create page shows the joining note AND the group's bar persists (#281)
     const createPage = await (await server.request('/forms/new?group=gym-fitness', {headers: {Cookie: context.cookie}})).text();
     assert.match(createPage, /Joining group/);
     assert.match(createPage, /Gym &amp; Fitness!/);
+    assert.match(createPage, /href="\/forms\/gym-fitness\/entries"/);
+    assert.match(createPage, /group=gym-fitness" aria-current="page"/);
+    assert.match(createPage, /data-group-menu/);
+    // the root create page carries the Browse escape
+    const rootCreate = await (await server.request('/forms/new?kind=container', {headers: {Cookie: context.cookie}})).text();
+    assert.match(rootCreate, /href="\/forms">Browse</);
+    assert.match(rootCreate, /New group/);
   } finally {
     await cleanup(fixture, server);
   }
