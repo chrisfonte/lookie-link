@@ -1956,7 +1956,10 @@ test('form and receipt pages render tag-based related-forms navigation (#234 int
     const links = [...document.querySelectorAll('.related-forms .related-form-link')];
     assert.deepEqual(links.map((a) => a.textContent), ['Mobility Log'], 'same-tag sibling only');
     assert.equal(links[0].getAttribute('href'), '/forms/mobility-log');
-    assert.ok(!page.includes('Pantry Log'), 'unrelated tags stay out');
+    // #269: the toolbar jump menu lists every tracker, so scope the exclusion
+    // to the related-forms strip — its guarantee, not the whole page's.
+    const strip = page.match(/<nav class="related-forms"[\s\S]*?<\/nav>/);
+    assert.ok(strip && !strip[0].includes('Pantry Log'), 'unrelated tags stay out of the related strip');
 
     // receipt carries the same nav
     const accepted = await server.request('/forms/gym-session-entry', {
@@ -2050,6 +2053,11 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     const containerPage = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
     assert.match(containerPage, /<a class="container-member-title" href="\/forms\/gym-session-entry"/);
     assert.match(containerPage, /container-member-configure/);
+    // #269: the toolbar carries the contextual jump menu (Files idiom) with exclusivity
+    assert.match(containerPage, /data-tracker-menu/);
+    assert.match(containerPage, /tracker-jump-member/);
+    const exclusives = (containerPage.match(/name="lookie-toolbar"/g) || []).length;
+    assert.ok(exclusives >= 3, `expected >=3 exclusive toolbar disclosures, got ${exclusives}`);
     // #262: trails encode containment — container page links home; member pages carry the container crumb
     assert.match(containerPage, /<nav class="breadcrumbs"><a href="\/forms">Trackers<\/a>/);
     const memberPage = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();

@@ -34,7 +34,7 @@ test('file facts live in the toolbar Properties control, not the header', () => 
   // The old meta line is gone...
   assert.doesNotMatch(html, /<p class="doc-meta">/);
   // ...and the same facts are available, collapsed, in Properties.
-  assert.match(html, /<details class="doc-properties toolbar-properties">/);
+  assert.match(html, /<details class="doc-properties toolbar-properties" name="lookie-toolbar">/);
   assert.match(html, /<summary class="toolbar-btn">Properties<\/summary>/);
   assert.match(html, /<dt>Size<\/dt><dd>4\.1 KB<\/dd>/);
   assert.match(html, /<dt>Modified<\/dt><dd>2026-07-21<\/dd>/);
