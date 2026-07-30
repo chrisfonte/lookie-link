@@ -2826,8 +2826,9 @@ tbody tr:last-child td {
    reset --heading-font for document pages; the trackers world stays uniform).
    #290: the root's New group tab takes the primary-action emphasis, in-spec. */
 .form-layout { --heading-font: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif; }
-.forms-index-layout .form-hub-nav .configure-link,
-.form-layout .form-hub-nav .new-link { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); border-radius: 8px; }
+.form-layout .create-links { display: flex; gap: 1.4rem; margin: 0.5rem 0.2rem 1rem; font-size: 0.9rem; }
+.form-layout .create-links a { color: var(--accent); text-decoration: none; }
+.form-layout .create-links a:hover { text-decoration: underline; }
 
 /* #291: member name owns the row (thumb-size quick-entry); chevron zone toggles.
    Lifecycle actions on Configure. */

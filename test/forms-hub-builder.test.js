@@ -423,8 +423,8 @@ test('forms index separates archived templates and removes management detail for
     // #291: tap-in rows only — the Manage section is retired; archived stays collapsed
     assert.equal(managerIndex.document.querySelectorAll('.container-members .forms-root-row').length, 2);
     assert.equal(managerIndex.document.querySelector('.forms-index-manage'), null);
-    assert.equal(managerIndex.document.querySelector('a[href="/forms/new"]'), null);
-    assert.ok(managerIndex.document.querySelector('a[href="/forms/new?kind=container"]'));
+    assert.ok(managerIndex.document.querySelector('.create-links a[href="/forms/new"]'));
+    assert.ok(managerIndex.document.querySelector('.create-links a[href="/forms/new?kind=container"]'));
     // lifecycle moved to Configure (#291): Clone + Archive live there now
     const configureLifecycle = await browserPage(await server.request('/forms/training-log/configure'));
     const lifecycleButtons = [...configureLifecycle.document.querySelectorAll('.configure-lifecycle button')].map((node) => node.textContent.trim());
