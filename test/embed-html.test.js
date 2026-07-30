@@ -112,6 +112,13 @@ test('embed runtime self-reports content height and gates messages on the framin
     // is unreliable from an opaque origin and the old guard must be gone.
     assert.match(html, /event\.source !== window\.parent/);
     assert.doesNotMatch(html, /event\.origin !== window\.location\.origin/);
+    // Content-height frames cannot scroll internally: the runtime marks the
+    // document as embedded (styling hook for in-flow overlay variants), reports
+    // fragment-target offsets, and forwards Escape as a close-link navigation.
+    assert.match(html, /lookie-embedded/);
+    assert.match(html, /lookie-link:scroll-to/);
+    assert.match(html, /lookie-link:set-hash/);
+    assert.match(html, /'Escape'/);
   } finally {
     await fsPromises.rm(fixture.fixtureRoot, { recursive: true, force: true });
   }
@@ -252,6 +259,12 @@ test('document viewer frames HTML through embed while retaining a distinct raw-s
   assert.match(html, /lookie-link:content-height/);
   assert.match(html, /event\.source !== frame\.contentWindow/);
   assert.doesNotMatch(html, /postMessage\((?:[^)]*?), window\.location\.origin\)/);
+  // Anchor jumps and Escape-close arrive as messages too: the viewer scrolls the
+  // top window to embed-reported offsets and applies only same-document,
+  // strictly-validated fragment navigations.
+  assert.match(html, /lookie-link:scroll-to/);
+  assert.match(html, /lookie-link:set-hash/);
+  assert.match(html, /\^#\[A-Za-z0-9_-\]\*\$/);
   assert.doesNotMatch(html, /<iframe[\s\S]*src="\/raw\/alpha\/docs\/page\.html"/);
   assert.doesNotMatch(html, /lookie-link-annotations-bootstrap/);
 });
