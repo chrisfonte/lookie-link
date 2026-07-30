@@ -152,7 +152,7 @@ test('hub navigation and builder lifecycle preserve snapshots, option IDs, CAS, 
       const page = await browserPage(response);
       assert.deepEqual(
         [...page.document.querySelectorAll('.form-hub-nav a')].map((link) => link.textContent),
-        ['Log an entry', 'History', 'Configure'],
+        ['← Trackers', 'Log an entry', 'History', 'Configure'],
       );
     }
 
