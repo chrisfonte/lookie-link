@@ -2219,3 +2219,56 @@ test('creation follows containment: slug-derived IDs and group-joined trackers (
     await cleanup(fixture, server);
   }
 });
+
+test('related-strip config: all-in-group default, cross-group picks, API roundtrip (#300)', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, {formsTimezone: 'America/New_York'});
+  try {
+    const context = await getBrowserContext(server);
+    const jsonHeaders = { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'x-csrf-token': context.token };
+    const post = (route, body) => server.request(route, {method: 'POST', headers: jsonHeaders, body: JSON.stringify(body)});
+    const patch = (route, body) => server.request(route, {method: 'PATCH', headers: jsonHeaders, body: JSON.stringify(body)});
+
+    // a group with two members, plus an ungrouped weight tracker
+    assert.equal((await post('/api/forms/templates', {templateId: 'gym', title: 'Gym', kind: 'container', grammarVersion: 1})).status, 201);
+    assert.equal((await post('/api/forms/templates', {templateId: 'cardio', title: 'Cardio', grammarVersion: 1, destinationId: 'default', containerId: 'gym',
+      fields: [{id: 'minutes', type: 'number', label: 'Minutes', required: true}]})).status, 201);
+    assert.equal((await patch('/api/forms/templates/gym-session-entry', {revision: 1, containerId: 'gym'})).status, 200);
+    assert.equal((await post('/api/forms/templates', {templateId: 'weight', title: 'Weight', grammarVersion: 1, destinationId: 'default',
+      fields: [{id: 'lbs', type: 'number', label: 'Pounds', required: true}]})).status, 201);
+
+    // default: the whole group rides the strip
+    let page = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
+    assert.match(page, /related-form-link" href="\/forms\/cardio"/);
+    assert.doesNotMatch(page, /related-form-link" href="\/forms\/weight"/);
+
+    // API: add a cross-group pick — survives PATCH and publish
+    const rev = JSON.parse(await (await server.request('/api/forms/templates/gym-session-entry')).text()).template.revision;
+    const patched = await patch('/api/forms/templates/gym-session-entry', {revision: rev, related: {group: true, include: ['weight']}});
+    assert.equal(patched.status, 200);
+    const pub = await post('/api/forms/templates/gym-session-entry/publish', {revision: patched.status === 200 ? JSON.parse(await patched.text()).template.revision : 0});
+    assert.equal(pub.status, 201);
+    assert.deepEqual(JSON.parse(await pub.text()).version.related, {group: true, include: ['weight']});
+    page = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
+    assert.match(page, /related-form-link" href="\/forms\/cardio"/);
+    assert.match(page, /related-form-link" href="\/forms\/weight"/);
+
+    // group:false narrows the strip to the picks (back-to-group link survives)
+    const rev2 = JSON.parse(await (await server.request('/api/forms/templates/gym-session-entry')).text()).template.revision;
+    assert.equal((await patch('/api/forms/templates/gym-session-entry', {revision: rev2, related: {group: false, include: ['weight']}})).status, 200);
+    page = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
+    assert.doesNotMatch(page, /related-form-link" href="\/forms\/cardio"/);
+    assert.match(page, /related-form-link" href="\/forms\/weight"/);
+    assert.match(page, /related-container-link/);
+
+    // configure carries the section; bad include ids are refused
+    const configure = await (await server.request('/forms/gym-session-entry/configure', {headers: {Cookie: context.cookie}})).text();
+    assert.match(configure, /builder-related/);
+    assert.match(configure, /name="relatedAll"/);
+    assert.match(configure, /name="related" value="weight" checked/);
+    const rev3 = JSON.parse(await (await server.request('/api/forms/templates/gym-session-entry')).text()).template.revision;
+    assert.equal((await patch('/api/forms/templates/gym-session-entry', {revision: rev3, related: {include: ['NOT AN ID']}})).status, 422);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
