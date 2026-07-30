@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — Content-height embeds and viewer-lightbox zoom (#246)
+
+- Fixed the raw-HTML `/view` embed sizing broken by the sandbox hardening: the sandboxed (opaque-origin) frame cannot be measured from the wrapper, so the injected embed runtime now self-reports its scroll height over `postMessage` (`lookie-link:content-height`; load + ResizeObserver + slow interval) and the wrapper applies it only from its own frame, clamped. Short pages no longer show a blank tail; long pages no longer clip behind an inner scrollbar. The sandbox is unchanged — still no `allow-same-origin`.
+- Live theme/scheme changes reach the embed again: theme messages post with `'*'` (cosmetic payload) and both sides gate on `event.source` instead of origin-string comparisons, which are unreliable across an opaque origin.
+- Fragment navigation works in content-height frames: the runtime reports the target's document offset (`lookie-link:scroll-to`) and the wrapper scrolls the top window; Escape releases a fragment-targeted overlay via its own close link (`lookie-link:set-hash`, strictly validated).
+- Photo zoom inside embeds now drives the wrapper page's own markdown lightbox (`lookie-link:open-image`/`close-image`): viewport-centered, closes on click, ×, or Escape — identical to markdown files. Image sources are validated by string prefix, including the `/\host` protocol-relative variant.
+- The runtime stamps `html.lookie-embedded` on framed documents as a styling hook (overlays must not rely on `position:fixed`/viewport units inside a content-height frame).
+- Authored viewer-routed absolute paths (`/asset/…`, `/view/…`, `/raw/…`, `/embed/…`, `/api/…`) pass through the embed transform untouched instead of being double-prefixed into broken routes.
+- Tests: message-protocol assertions with negative canaries, and a syntax check that parses every viewer-emitted inline script (the wrapper script lives in a template literal where escaped regex slashes silently collapse — that class of bug now fails tests).
+
 ## Unreleased — First-party forms (Phase 1)
 
 - Added an opt-in forms runner: file-backed templates, a strict field-grammar validator, canonical serialization with a reproducible schema digest, and an immutable fsync-hardened submission store (one JSON file per accepted submission, idempotent replay).
