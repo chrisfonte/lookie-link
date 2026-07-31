@@ -2874,6 +2874,11 @@ tbody tr:last-child td {
 .form-layout .builder-advanced > summary { cursor: pointer; color: var(--text-soft); }
 .form-layout .builder-advanced[open] > summary { margin-bottom: 0.5rem; }
 
+/* #321: pinned fields stamp their value instead of asking. */
+.form-layout .field-pinned { padding: 0.65rem 0.9rem; border: 1px solid var(--border); border-radius: 0.55rem; background: var(--bg-elev); color: var(--text-soft); }
+/* #322: rows with a local copy show a label, not a checkbox. */
+.form-layout .inherited-field-local { opacity: 0.75; }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------
