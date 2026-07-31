@@ -2289,6 +2289,14 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     assert.deepEqual(dndOrdered.template.inherit.order.slice(0, 3), ['warmup-done', 'spotter', 'lift']);
     assert.ok((dndOrdered.template.inherit.exclude || []).includes('notes'), 'drag order must preserve exclusions');
 
+    // #337: the version viewer — Published is a dropdown; ?version renders read-only
+    const viewer = await (await server.request('/forms/bench-day/configure?version=1', {headers: {Cookie: context.cookie}})).text();
+    assert.match(viewer, /version-select-form/);
+    assert.match(viewer, /Viewing published v1 — read-only/);
+    assert.match(viewer, /fieldset disabled class="version-view"/);
+    assert.match(viewer, /Restore this version to draft/);
+    assert.doesNotMatch(viewer, /builder-publish-action/);
+
     // detach materializes the resolved fields onto the child
     const childRev = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template.revision;
     const detached = await patch('/api/forms/templates/bench-day', {revision: childRev, parentId: null});

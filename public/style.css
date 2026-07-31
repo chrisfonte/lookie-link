@@ -2908,6 +2908,12 @@ tbody tr:last-child td {
 .form-layout .parent-tracker-row .nested-children { padding: 0.5rem 0 0.6rem 1.1rem; display: grid; gap: 0.5rem; }
 .form-layout .forms-index-container .container-members { display: grid; gap: 0.55rem; }
 
+/* #337: version viewer + select-in-dd. */
+.form-layout .version-select-form { display: inline-flex; gap: 0.4rem; align-items: center; }
+.form-layout .version-banner { display: grid; gap: 0.5rem; }
+.form-layout .version-banner-actions { display: flex; gap: 0.9rem; align-items: center; }
+.form-layout fieldset.version-view { border: 0; margin: 0; padding: 0; opacity: 0.75; }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------

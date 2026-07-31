@@ -311,10 +311,13 @@ test('collapsed field rows reorder with CAS and soft-delete identities can only 
     latest = await browserPage(response);
     assert.equal(latest.document.querySelectorAll('.builder-field-removed').length, 1);
     assert.match(latest.document.querySelector('.builder-field-removed').textContent, /Restore field/);
+    // #337: removing a LIVE field still rejects; an already-destroyed field
+    // may be deleted for good (two-step, mirrored on trackers) — tested below.
     await assert.rejects(
-      server.registry.reviseDraft('training-log', draft.revision, {fields: draft.fields.filter((field) => field.id !== 'lift')}),
+      server.registry.reviseDraft('training-log', draft.revision, {fields: draft.fields.filter((field) => field.id !== 'notes')}),
       (error) => error && error.code === 'EVALIDATION',
     );
+
 
     response = await browserPost(
       server,
@@ -350,6 +353,16 @@ test('collapsed field rows reorder with CAS and soft-delete identities can only 
     assert.equal(draft.fields[1].id, 'lift');
     assert.equal(draft.fields[1].isDestroyed, undefined);
     assert.ok((await browserPage(await server.request('/forms/training-log'))).document.querySelector('[name="lift"]'));
+
+    // #337: two-step field delete at the end of the flow — destroy, then remove
+    const endState = await server.registry.getManagementTemplate('training-log');
+    const marked = await server.registry.reviseDraft('training-log', endState.draft.revision, {
+      fields: endState.draft.fields.map((field) => field.id === 'lift' ? {...field, isDestroyed: true} : field),
+    });
+    const deleted = await server.registry.reviseDraft('training-log', marked.draft.revision, {
+      fields: marked.draft.fields.filter((field) => field.id !== 'lift'),
+    });
+    assert.ok(!deleted.draft.fields.some((field) => field.id === 'lift'), 'destroyed field must delete for good');
   } finally {
     await server.close();
   }
