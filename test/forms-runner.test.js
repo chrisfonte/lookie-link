@@ -2125,6 +2125,9 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     const page = await (await server.request('/forms/bench-day', {headers: {Cookie: context.cookie}})).text();
     assert.match(page, /Session date|session-date/);
     assert.match(page, /Spotter/);
+    // #321: the pinned single-option select stamps instead of asking
+    assert.match(page, /field-pinned/);
+    assert.match(page, /type="hidden" name="lift" value="bench"/);
     const submitted = await server.request('/forms/bench-day', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
@@ -2183,11 +2186,11 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     assert.match(exConfigure, /name="inheritInclude" value="notes"(?! checked)/);
     assert.match(exConfigure, /off · long-text · notes/);
     assert.match(exConfigure, /name="inheritInclude" value="warmup-done" checked/);
-    assert.match(exConfigure, /inherit-clone:warmup-done/);
-    assert.doesNotMatch(exConfigure, /inherit-override:/);
-    // overridden rows show unchecked with the note (lift is bench-day's override)
-    assert.match(exConfigure, /name="inheritInclude" value="lift"(?! checked)/);
-    assert.match(exConfigure, /overridden below · select · lift/);
+    assert.match(exConfigure, /inherit-copy:warmup-done/);
+    assert.doesNotMatch(exConfigure, /inherit-override:|inherit-clone:/);
+    // rows with a local copy show no checkbox — the copy governs (lift is bench-day's)
+    assert.doesNotMatch(exConfigure, /name="inheritInclude" value="lift"/);
+    assert.match(exConfigure, /local copy below · select · lift/);
 
     // #319: the one-checkbox flow via the GUI save endpoint —
     // uncheck an inherited field -> an editable copy appears (override)
@@ -2210,7 +2213,7 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
         body: values.toString(),
       });
     };
-    // uncheck warmup-done -> override copy materializes
+    // #322: uncheck = OFF (no copy materializes)
     let saveResp = await guiSave((values) => {
       const keep = values.getAll('inheritInclude').filter((id) => id !== 'warmup-done');
       values.delete('inheritInclude');
@@ -2218,17 +2221,23 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     });
     assert.equal(saveResp.status, 200);
     let draftNow = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template;
-    assert.ok(draftNow.fields.some((field) => field.id === 'warmup-done'), 'uncheck must create the override copy');
-    // re-check warmup-done -> un-override (copy dropped, inheritance resumes)
+    assert.ok(!draftNow.fields.some((field) => field.id === 'warmup-done'), 'uncheck must NOT create a copy');
+    assert.ok((draftNow.inherit.exclude || []).includes('warmup-done'), 'uncheck must exclude');
+    // re-check = back on
     saveResp = await guiSave((values) => values.append('inheritInclude', 'warmup-done'));
     assert.equal(saveResp.status, 200);
     draftNow = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template;
-    assert.ok(!draftNow.fields.some((field) => field.id === 'warmup-done'), 're-check must drop the override copy');
-    // Clone -> independent copy with its own id
-    saveResp = await guiSave((values) => values.set('_action', 'inherit-clone:warmup-done'));
+    assert.ok(!((draftNow.inherit && draftNow.inherit.exclude) || []).includes('warmup-done'), 're-check must clear the exclusion');
+    // Copy to this tracker = same-id local copy
+    saveResp = await guiSave((values) => values.set('_action', 'inherit-copy:warmup-done'));
     assert.equal(saveResp.status, 200);
     draftNow = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template;
-    assert.ok(draftNow.fields.some((field) => field.id === 'warmup-done-copy'), 'clone must add an independent field');
+    assert.ok(draftNow.fields.some((field) => field.id === 'warmup-done'), 'copy must create the same-id local field');
+    // removing the copy resumes inheritance (isDestroyed converts to deletion)
+    saveResp = await guiSave((values) => values.set('field.' + draftNow.fields.findIndex((field) => field.id === 'warmup-done') + '.isDestroyed', 'true'));
+    assert.equal(saveResp.status, 200);
+    draftNow = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template;
+    assert.ok(!draftNow.fields.some((field) => field.id === 'warmup-done'), 'removing the copy must resume inheritance');
     // #313: theme inheritance — parent presentation flows to a themeless child page
     const pRev = JSON.parse(await (await server.request('/api/forms/templates/gym-session-entry')).text()).template.revision;
     assert.equal((await patch('/api/forms/templates/gym-session-entry', {revision: pRev, presentation: {theme: 'nord', themeMode: 'dark'}})).status, 200);
@@ -2250,7 +2259,6 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     assert.equal(solo.parentId, undefined);
     assert.ok(solo.fields.some((field) => field.id === 'warmup-done'), 'detach did not materialize inherited fields');
     assert.ok(solo.fields.some((field) => field.id === 'spotter'));
-    assert.ok(solo.fields.some((field) => field.id === 'warmup-done-copy'), 'cloned field must survive detach');
   } finally {
     await cleanup(fixture, server);
   }
