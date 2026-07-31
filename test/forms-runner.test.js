@@ -2233,6 +2233,10 @@ test('creation follows containment: slug-derived IDs and group-joined trackers (
     // group page carries the New tracker action, preset to the group
     const groupPage = await (await server.request('/forms/gym-fitness', {headers: {Cookie: context.cookie}})).text();
     assert.match(groupPage, /href="\/forms\/new\?group=gym-fitness"/);
+    // #317: create-from-group presets the group's majority cabinet, behind Advanced
+    const advCreate = await (await server.request('/forms/new?group=gym-fitness', {headers: {Cookie: context.cookie}})).text();
+    assert.match(advCreate, /builder-advanced/);
+    assert.match(advCreate, /<option value="default" selected>/);
     // the create page shows the joining note AND the group's bar persists (#281)
     const createPage = await (await server.request('/forms/new?group=gym-fitness', {headers: {Cookie: context.cookie}})).text();
     assert.match(createPage, /Joining group/);
