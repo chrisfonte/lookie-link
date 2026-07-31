@@ -2012,9 +2012,10 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     const page = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
     assert.match(page, /container-member-title/);
     assert.match(page, /gym-session-entry/);
-    // member rows expand to a disabled live preview of the form's fields
-    assert.match(page, /<fieldset disabled class="container-form-preview"/);
-    assert.match(page, /preview-gym-session-entry-lift/);
+    // #343: member rows expand to a REAL entry form — live fields, csrf, submit
+    assert.match(page, /container-member-quick/);
+    assert.match(page, /quick-gym-session-entry-lift/);
+    assert.doesNotMatch(page, /fieldset disabled class="container-form-preview"/);
     assert.match(page, /container-member-open/);
     const submit = await server.request('/forms/gym', {
       method: 'POST',
@@ -2022,6 +2023,30 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
       body: nativeBody(context.token),
     });
     assert.equal(submit.status, 404);
+
+    // #343: quick entry from the listing actually WORKS — scrape the row form, submit
+    const listing = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
+    const {JSDOM: QuickDOM} = require('jsdom');
+    const quickDom = new QuickDOM(listing);
+    const quickForm = quickDom.window.document.querySelector('.container-member-quick');
+    const quickValues = new URLSearchParams();
+    for (const control of quickForm.querySelectorAll('input, select, textarea')) {
+      if (!control.name || (control.type === 'checkbox' && !control.checked)) continue;
+      quickValues.append(control.name, control.value);
+    }
+    quickValues.set('lift', 'bench');
+    quickValues.set('top-weight', '135');
+    quickValues.set('top-reps', '8');
+    quickValues.set('rpe', '7');
+    quickValues.set('notes', 'Quick entry from the listing');
+    if (!quickValues.get('session-date')) quickValues.set('session-date', '2026-07-21T10:00');
+    const quickSubmit = await server.request(quickForm.getAttribute('action'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: quickValues.toString(),
+    });
+    assert.equal(quickSubmit.status, 303, 'quick entry must submit to a receipt');
+    assert.match(quickSubmit.headers.get('location'), /receipts/);
 
     // #248: the container dashboard — a member entry surfaces on the container
     // page's recent list (chipped by form) and on the aggregated history page.
@@ -2063,7 +2088,7 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     assert.ok(exclusives >= 3, `expected >=3 exclusive toolbar disclosures, got ${exclusives}`);
     // #284/#285: a tracker's bar leads with the way up to its group
     const memberToolbar = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
-    assert.match(memberToolbar, /up-link" href="\/forms\/gym">← Gym</);
+    assert.match(memberToolbar, /up-link" href="\/forms">← Trackers</);
     // #273: the ancestor path is gone — the heading is title-only; the toolbar navigates
     assert.match(containerPage, /<nav class="breadcrumbs"><h1 class="crumb-title">/);
     assert.doesNotMatch(containerPage, /breadcrumbs"><a href="\/forms">Trackers/);
