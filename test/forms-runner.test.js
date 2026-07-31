@@ -2266,6 +2266,17 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     assert.ok(orderIds.indexOf('warmup-done') >= 0, 'move must write inherit.order');
     assert.ok((ordered.template.inherit.exclude || []).includes('notes'), 'move must preserve exclusions');
 
+    // #326: theme rows in the inherit idiom — parent nord/dark shows as effective
+    // text with Set locally; the action materializes it as a local value
+    const themedConfigure = await (await server.request('/forms/bench-day/configure', {headers: {Cookie: context.cookie}})).text();
+    assert.match(themedConfigure, /theme-effective">Nord<|theme-effective">nord</);
+    assert.match(themedConfigure, /value="theme-local"/);
+    assert.match(themedConfigure, /inherited from Gym Session Entry/);
+    const localizeResp = await guiSave((values) => { values.set('_action', 'theme-local'); values.delete('theme'); });
+    assert.equal(localizeResp.status, 200);
+    const localized = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template;
+    assert.equal(localized.presentation && localized.presentation.theme, 'nord', 'Set locally must materialize the effective theme');
+
     // detach materializes the resolved fields onto the child
     const childRev = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template.revision;
     const detached = await patch('/api/forms/templates/bench-day', {revision: childRev, parentId: null});
