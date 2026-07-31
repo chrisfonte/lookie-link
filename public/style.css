@@ -2879,6 +2879,16 @@ tbody tr:last-child td {
 /* #322: rows with a local copy show a label, not a checkbox. */
 .form-layout .inherited-field-local { opacity: 0.75; }
 
+/* #324: unified fields table — serving order, source column, move controls. */
+.form-layout .fields-table { display: grid; gap: 0.45rem; }
+.form-layout .fields-table-head { display: flex; gap: 0.8rem; justify-content: space-between; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-soft); padding: 0 0.2rem; }
+.form-layout .fields-table-row { flex-wrap: wrap; row-gap: 0.3rem; }
+.form-layout .field-source { font-size: 0.75rem; color: var(--text-soft); border: 1px solid var(--border); border-radius: 999px; padding: 0.08rem 0.5rem; white-space: nowrap; }
+.form-layout .field-move { display: inline-flex; gap: 0.25rem; }
+.form-layout .field-move button { padding: 0.15rem 0.5rem; font-size: 0.8rem; }
+.form-layout .fields-table-theme { display: flex; align-items: center; gap: 0.8rem; border-top: 1px dashed var(--border); padding-top: 0.55rem; }
+.form-layout .fields-table-theme select { flex: 1; min-width: 8rem; }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------

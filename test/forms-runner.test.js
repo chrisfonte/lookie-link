@@ -2156,11 +2156,15 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
 
     // #307: a child's Configure shows the inherited schema read-only
     const childConfigure = await (await server.request('/forms/bench-day/configure', {headers: {Cookie: context.cookie}})).text();
-    assert.match(childConfigure, /inherited-fields/);
-    assert.match(childConfigure, /Inherited from <strong>Gym Session Entry<\/strong>/);
+    // #324: the unified fields table — serving order, source column, theme rows
+    assert.match(childConfigure, /fields-table/);
+    assert.match(childConfigure, /fields-table-head/);
     assert.match(childConfigure, /Warmed up/);
-    // #319: overridden parent fields stay listed — unchecked, noted
-    assert.match(childConfigure, /inherited-field-label">Lift</);
+    assert.match(childConfigure, /field-source">Gym Session Entry</);
+    assert.match(childConfigure, /field-source">this tracker</);
+    assert.match(childConfigure, /resolved-up:warmup-done/);
+    assert.match(childConfigure, /fields-table-theme/);
+    assert.match(childConfigure, /field-source">inherited from Gym Session Entry<|field-source">viewer choice</);
     // #310: the own override field says so
     assert.match(childConfigure, /builder-override-marker">Overrides inherited</);
     assert.match(childConfigure, /Entry storage/);
@@ -2184,13 +2188,12 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     // configure shows it unchecked; GUI one-tap override copies a parent field down
     const exConfigure = await (await server.request('/forms/bench-day/configure', {headers: {Cookie: context.cookie}})).text();
     assert.match(exConfigure, /name="inheritInclude" value="notes"(?! checked)/);
-    assert.match(exConfigure, /off · long-text · notes/);
+    assert.match(exConfigure, /off · long-text/);
     assert.match(exConfigure, /name="inheritInclude" value="warmup-done" checked/);
     assert.match(exConfigure, /inherit-copy:warmup-done/);
     assert.doesNotMatch(exConfigure, /inherit-override:|inherit-clone:/);
-    // rows with a local copy show no checkbox — the copy governs (lift is bench-day's)
+    // rows with a local copy render as the editable field (source: this tracker)
     assert.doesNotMatch(exConfigure, /name="inheritInclude" value="lift"/);
-    assert.match(exConfigure, /local copy below · select · lift/);
 
     // #319: the one-checkbox flow via the GUI save endpoint —
     // uncheck an inherited field -> an editable copy appears (override)
@@ -2249,6 +2252,19 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     const hubClone = await post('/api/forms/templates/hub/clone', {});
     assert.equal(hubClone.status, 201);
     assert.equal(JSON.parse(await hubClone.text()).template.kind, 'container');
+
+    // #324: reorder — API order patch, then a GUI move, both reflected in serving order
+    const ordRev = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template.revision;
+    assert.equal((await patch('/api/forms/templates/bench-day', {revision: ordRev, inherit: {exclude: ['notes'], order: ['spotter', 'lift']}})).status, 200);
+    let ordered = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text());
+    assert.equal(ordered.resolvedFields.filter((f) => !f.isDestroyed)[0].id, 'spotter');
+    assert.equal(ordered.resolvedFields.filter((f) => !f.isDestroyed)[1].id, 'lift');
+    const moveSave = await guiSave((values) => values.set('_action', 'resolved-up:warmup-done'));
+    assert.equal(moveSave.status, 200);
+    ordered = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text());
+    const orderIds = ordered.template.inherit.order;
+    assert.ok(orderIds.indexOf('warmup-done') >= 0, 'move must write inherit.order');
+    assert.ok((ordered.template.inherit.exclude || []).includes('notes'), 'move must preserve exclusions');
 
     // detach materializes the resolved fields onto the child
     const childRev = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template.revision;
