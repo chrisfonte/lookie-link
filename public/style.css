@@ -2899,6 +2899,15 @@ tbody tr:last-child td {
 .form-layout .tracker-nested { margin-left: 1.4rem; position: relative; }
 .form-layout .tracker-nested::before { content: '↳'; position: absolute; left: -1.1rem; top: 50%; transform: translateY(-50%); color: var(--text-soft); }
 
+/* #333/#334: delete affordance + version restore. */
+.form-layout .delete-button { color: #ff6b6b; border-color: color-mix(in srgb, #ff6b6b 45%, transparent); }
+.form-layout .archived-member-actions { display: inline-flex; gap: 0.5rem; }
+.form-layout .version-restore-form { display: flex; align-items: center; gap: 0.7rem; margin: 0.6rem 0 0.2rem; font-size: 0.9rem; }
+
+/* #335: nested children inside parent rows. */
+.form-layout .parent-tracker-row .nested-children { padding: 0.5rem 0 0.6rem 1.1rem; display: grid; gap: 0.5rem; }
+.form-layout .forms-index-container .container-members { display: grid; gap: 0.55rem; }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------

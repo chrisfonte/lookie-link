@@ -2045,10 +2045,11 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     assert.match(member, /related-container-link/);
     assert.match(member, /← Gym/);
 
-    // #260: the root is a container page — the container is a tap-in row with its count
+    // #335: the root renders group sections through the shared nested listing
     const root = await (await server.request('/forms', {headers: {Cookie: context.cookie}})).text();
-    assert.match(root, /forms-root-row/);
+    assert.match(root, /forms-index-container-head/);
     assert.match(root, /1 tracker</);
+    assert.match(root, /container-member-row/);
     // member titles are direct entry links inside the container page
     const containerPage = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
     assert.match(containerPage, /<a class="container-member-title" href="\/forms\/gym-session-entry"/);
@@ -2162,7 +2163,7 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     assert.match(childConfigure, /Warmed up/);
     assert.match(childConfigure, /field-source">Gym Session Entry</);
     assert.match(childConfigure, /field-source">this tracker</);
-    assert.match(childConfigure, /resolved-up:warmup-done/);
+    assert.match(childConfigure, /drag-handle/);
     assert.match(childConfigure, /fields-table-theme/);
     assert.match(childConfigure, /field-source">inherited from Gym Session Entry<|field-source">viewer choice</);
     // #310: the own override field says so
@@ -2259,12 +2260,12 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     let ordered = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text());
     assert.equal(ordered.resolvedFields.filter((f) => !f.isDestroyed)[0].id, 'spotter');
     assert.equal(ordered.resolvedFields.filter((f) => !f.isDestroyed)[1].id, 'lift');
-    const moveSave = await guiSave((values) => values.set('_action', 'resolved-up:warmup-done'));
+    // #332: arrows retired — order changes arrive as a dragged resolvedOrder
+    const moveSave = await guiSave((values) => values.set('resolvedOrder', 'warmup-done spotter lift'));
     assert.equal(moveSave.status, 200);
     ordered = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text());
-    const orderIds = ordered.template.inherit.order;
-    assert.ok(orderIds.indexOf('warmup-done') >= 0, 'move must write inherit.order');
-    assert.ok((ordered.template.inherit.exclude || []).includes('notes'), 'move must preserve exclusions');
+    assert.equal(ordered.template.inherit.order[0], 'warmup-done');
+    assert.ok((ordered.template.inherit.exclude || []).includes('notes'), 'drag must preserve exclusions');
 
     // #326: theme rows in the inherit idiom — parent nord/dark shows as effective
     // text with Set locally; the action materializes it as a local value
@@ -2281,6 +2282,7 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     const dndConfigure = await (await server.request('/forms/bench-day/configure', {headers: {Cookie: context.cookie}})).text();
     assert.match(dndConfigure, /resolved-order-input/);
     assert.match(dndConfigure, /drag-handle/);
+    assert.doesNotMatch(dndConfigure, /resolved-up:/);
     const dndSave = await guiSave((values) => values.set('resolvedOrder', 'warmup-done spotter lift'));
     assert.equal(dndSave.status, 200);
     const dndOrdered = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text());
@@ -2345,11 +2347,12 @@ test('creation follows containment: slug-derived IDs and group-joined trackers (
       body: JSON.stringify({revision: rowing2.revision}),
     });
     assert.equal(archivedResp.status, 200);
+    // #335: ONE archive — the root holds it (restore + delete); group pages don't
     const groupWithArchived = await (await server.request('/forms/gym-fitness', {headers: {Cookie: context.cookie}})).text();
-    assert.match(groupWithArchived, /archived-member-row/);
-    assert.match(groupWithArchived, /rowing-2\/restore/);
+    assert.doesNotMatch(groupWithArchived, /archived-member-row/);
     const rootAfterArchive = await (await server.request('/forms', {headers: {Cookie: context.cookie}})).text();
-    assert.doesNotMatch(rootAfterArchive, /rowing-2/);
+    assert.match(rootAfterArchive, /rowing-2\/restore/);
+    assert.match(rootAfterArchive, /rowing-2\/delete/);
 
     // the root create page carries the Browse escape
     const rootCreate = await (await server.request('/forms/new?kind=container', {headers: {Cookie: context.cookie}})).text();

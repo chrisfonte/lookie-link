@@ -505,7 +505,7 @@ test('clone and archive APIs preserve source history, receipts, CAS, and authori
     assert.equal((await server.request('/api/forms/templates/training-log', {
       method: 'DELETE',
       headers: AGENT_HEADERS,
-    })).status, 404);
+    })).status, 415);
   } finally {
     await server.close();
   }

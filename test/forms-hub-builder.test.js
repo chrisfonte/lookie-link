@@ -425,29 +425,29 @@ test('forms index separates archived templates and removes management detail for
     assert.equal(submitted.status, 303);
 
     const managerIndex = await browserPage(await server.request('/forms'));
-    // #291: tap-in rows only — the Manage section is retired; archived stays collapsed
-    assert.equal(managerIndex.document.querySelectorAll('.container-members .forms-root-row').length, 2);
+    // #335: the root is the nested hierarchy — sections + leaf rows, no switcher
+    assert.ok(managerIndex.document.querySelectorAll('.container-members .container-member-row').length >= 2);
     assert.equal(managerIndex.document.querySelector('.forms-index-manage'), null);
-    assert.ok(managerIndex.document.querySelector('.create-links a[href="/forms/new"]'));
-    assert.ok(managerIndex.document.querySelector('.create-links a[href="/forms/new?kind=container"]'));
+    assert.equal(managerIndex.document.querySelector('a[href="/forms?view=trackers"]'), null);
+    assert.ok(managerIndex.document.querySelector('.form-hub-nav a.new-link[href="/forms/new"]'));
+    assert.ok(managerIndex.document.querySelector('.form-hub-nav a.newgroup-link[href="/forms/new?kind=container"]'));
     // lifecycle moved to Configure (#291): Clone + Archive live there now
     const configureLifecycle = await browserPage(await server.request('/forms/training-log/configure'));
     const lifecycleButtons = [...configureLifecycle.document.querySelectorAll('.configure-lifecycle button')].map((node) => node.textContent.trim());
     assert.deepEqual(lifecycleButtons, ['Clone', 'Archive']);
-    // #298: root archived holds archived GROUPS only; archived trackers live
-    // with their group (or, ungrouped like old-log, stay off the root entirely)
+    // #335: ONE archive — everything archived lives here (groups AND trackers)
     const archived = managerIndex.document.querySelector('.forms-index-archived');
     assert.ok(archived);
     assert.equal(archived.open, false);
-    assert.match(archived.querySelector('summary').textContent, /Show archived\s*1/);
+    assert.match(archived.querySelector('summary').textContent, /Show archived\s*2/);
     assert.match(archived.textContent, /Retired group/);
-    assert.doesNotMatch(archived.textContent, /Old log/);
-    // the Trackers view lists every active tracker under its group heading;
-    // #329: children nest under their parent
+    assert.match(archived.textContent, /Old log/);
+    // archived cards carry Delete (#333) alongside Restore
+    assert.ok(archived.querySelector('form[action$="/delete"] .delete-button, form[action$="/delete"] button'));
+    // #329/#335: children nest under their parent on the SAME page
     await server.registry.reviseDraft('daily-log', 1, {parentId: 'training-log'});
-    const trackersView = await browserPage(await server.request('/forms?view=trackers'));
-    assert.ok(trackersView.document.querySelector('.form-hub-nav a[aria-current="page"][href="/forms?view=trackers"]'));
-    const nested = trackersView.document.querySelector('.tracker-nested .container-member-title');
+    const nestedIndex = await browserPage(await server.request('/forms'));
+    const nested = nestedIndex.document.querySelector('.parent-tracker-row .tracker-nested .container-member-title');
     assert.ok(nested && /Daily log/.test(nested.textContent), 'child must nest under its parent');
 
     const submitOnly = await browserPage(await server.request('/forms', {headers: {'X-No-Manage': 'yes'}}));
@@ -456,7 +456,7 @@ test('forms index separates archived templates and removes management detail for
     assert.equal(submitOnly.document.querySelector('.forms-index-meta'), null);
     assert.equal(submitOnly.document.querySelector('.forms-index-archived'), null);
     assert.deepEqual(
-      [...submitOnly.document.querySelectorAll('.forms-root-row .container-member-title')].map((node) => node.textContent.trim()),
+      [...submitOnly.document.querySelectorAll('.container-member-row > summary .container-member-title')].map((node) => node.textContent.trim()).sort(),
       ['Daily log', 'Training <log>'],
     );
     assert.doesNotMatch(submitOnly.document.body.textContent, /Old log|Entries|Destination|Configure|Archive/);
