@@ -2055,7 +2055,7 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     assert.match(containerPage, /<a class="container-member-title" href="\/forms\/gym-session-entry"/);
     assert.match(containerPage, /container-member-configure/);
     // #285: hierarchy lives in the bars — a group's bar leads with Groups; no dropdown
-    assert.match(containerPage, /groups-link" href="\/forms">Groups</);
+    assert.match(containerPage, /groups-link" href="\/forms">← Groups</);
     assert.doesNotMatch(containerPage, /data-group-menu/);
     assert.match(containerPage, /toolbar-properties/);
     assert.match(containerPage, /<dt>Group<\/dt>|Group<\/dt>/);
@@ -2346,7 +2346,7 @@ test('creation follows containment: slug-derived IDs and group-joined trackers (
     assert.match(createPage, /Gym &amp; Fitness!/);
     assert.match(createPage, /href="\/forms\/gym-fitness\/entries"/);
     assert.match(createPage, /Joining group/);
-    assert.match(createPage, /groups-link" href="\/forms">Groups</);
+    assert.match(createPage, /groups-link" href="\/forms">← Groups</);
     // #293: archive a group member — it lists on the GROUP page, not the root
     const rowing2 = JSON.parse(await (await server.request('/api/forms/templates/rowing-2')).text()).template;
     const archivedResp = await server.request('/api/forms/templates/rowing-2/archive', {
@@ -2364,7 +2364,7 @@ test('creation follows containment: slug-derived IDs and group-joined trackers (
 
     // the root create page carries the Browse escape
     const rootCreate = await (await server.request('/forms/new?kind=container', {headers: {Cookie: context.cookie}})).text();
-    assert.match(rootCreate, /groups-link" href="\/forms">Groups</);
+    assert.match(rootCreate, /groups-link" href="\/forms">← Groups</);
     assert.match(rootCreate, /New group/);
   } finally {
     await cleanup(fixture, server);
