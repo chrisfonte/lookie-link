@@ -113,6 +113,15 @@ then **inherits the parent's schema live**:
 - **Dedup rule**: with a parent set, removing an own field whose id the
   parent defines is deduplication, not deletion (the field survives in the
   resolved schema), so a full copy can be slimmed down to just its overrides.
+- **Per-child selection** (`inherit: {exclude: [fieldId…]}`): an inherited
+  field can be left off one child without touching the parent or its
+  siblings. The child's Configure shows every inherited field with a
+  checkbox (uncheck = exclude) and an **Override** button that copies the
+  parent's definition into the child's own fields for editing. Detaching
+  honors exclusions in the materialized fields, then clears the config.
+- **Theme inheritance**: on view surfaces, a tracker with no theme of its own
+  resolves **own → parent → group → viewer**, for both the color scheme and
+  dark/light mode.
 
 Inheritance and grouping are orthogonal: the canonical pattern is a master
 template that is the parent of many children which all share one group (e.g. a
@@ -184,8 +193,8 @@ access model.
 | Correction chain | `GET /api/forms/:id/submissions/:submissionId/history` |
 
 Template keys accepted on create/patch include the structural set —
-`kind`, `containerId`, `memberOrder`, `parentId`, `related` — everything the
-GUI can do, the API can do.
+`kind`, `containerId`, `memberOrder`, `parentId`, `related`, `inherit` —
+everything the GUI can do, the API can do.
 
 ## GUI surfaces
 
