@@ -2169,6 +2169,25 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     assert.equal(clonedGet.template.parentId, 'gym-session-entry');
     assert.ok(clonedGet.resolvedFields.some((field) => field.id === 'warmup-done'), 'clone lost the inherited fields');
 
+    // #313: exclude an inherited field on THIS child only (API), serving honors it
+    const exRev = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template.revision;
+    assert.equal((await patch('/api/forms/templates/bench-day', {revision: exRev, inherit: {exclude: ['notes']}})).status, 200);
+    const excluded = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text());
+    assert.ok(!excluded.resolvedFields.some((field) => field.id === 'notes'), 'excluded field still serving');
+    assert.ok(excluded.resolvedFields.some((field) => field.id === 'warmup-done'), 'other inherited fields must survive');
+    const exPage = await (await server.request('/forms/bench-day', {headers: {Cookie: context.cookie}})).text();
+    assert.doesNotMatch(exPage, /name="notes"/);
+    // configure shows it unchecked; GUI one-tap override copies a parent field down
+    const exConfigure = await (await server.request('/forms/bench-day/configure', {headers: {Cookie: context.cookie}})).text();
+    assert.match(exConfigure, /name="inheritInclude" value="notes"(?! checked)/);
+    assert.match(exConfigure, /name="inheritInclude" value="warmup-done" checked/);
+    assert.match(exConfigure, /inherit-override:warmup-done/);
+    // #313: theme inheritance — parent presentation flows to a themeless child page
+    const pRev = JSON.parse(await (await server.request('/api/forms/templates/gym-session-entry')).text()).template.revision;
+    assert.equal((await patch('/api/forms/templates/gym-session-entry', {revision: pRev, presentation: {theme: 'nord', themeMode: 'dark'}})).status, 200);
+    const themedChild = await (await server.request('/forms/bench-day', {headers: {Cookie: context.cookie}})).text();
+    assert.match(themedChild, /nord/);
+
     // #307: cloning a container yields a container
     assert.equal((await post('/api/forms/templates', {templateId: 'hub', title: 'Hub', kind: 'container', grammarVersion: 1})).status, 201);
     const hubClone = await post('/api/forms/templates/hub/clone', {});
