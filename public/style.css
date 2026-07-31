@@ -2860,8 +2860,11 @@ tbody tr:last-child td {
 .form-layout .inherited-field { display: flex; justify-content: space-between; gap: 0.8rem; font-size: 0.9rem; }
 .form-layout .inherited-field-meta { color: var(--text-soft); font-size: 0.8rem; }
 
-/* #310: override badge on a child's own fields. */
+/* #310: override badge on a child's own fields — the row wraps rather than
+   crushing the field's name out at phone width. */
 .form-layout .builder-override-marker { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); border-radius: 999px; padding: 0.1rem 0.5rem; font-size: 0.72rem; margin-left: 0.45rem; white-space: nowrap; }
+.builder-layout .builder-field-title { flex-wrap: wrap; row-gap: 0.2rem; }
+.builder-layout .builder-field-title > strong { flex: 0 0 auto; min-width: 3ch; }
 
 /* ============================================================================
    Document components
