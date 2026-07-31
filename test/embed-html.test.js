@@ -337,16 +337,16 @@ test('embed theme tokens track the mode, not just color-scheme', async () => {
     // Both palettes ship in either render so the runtime set-theme message can
     // re-theme without a reload; they are keyed on the attribute.
     for (const html of [light, dark]) {
-      assert.match(html, /:root\[data-lookie-link-theme="light"\][^}]*--lookie-bg:\s*#f4f6f8/,
-        'light palette must be emitted and keyed on the theme attribute');
-      assert.match(html, /:root\[data-lookie-link-theme="dark"\][^}]*--lookie-bg:\s*#111827/,
-        'dark palette must be emitted and keyed on the theme attribute');
+      assert.match(html, /:root\[data-lookie-link-theme="light"\][^}]*--lookie-bg:\s*var\(--bg,\s*#f4f6f8\)/,
+        'light fallback must be emitted and keyed on the theme attribute');
+      assert.match(html, /:root,\s*:root\[data-lookie-link-theme="dark"\][^}]*--lookie-bg:\s*var\(--bg,\s*#111827\)/,
+        'dark fallback must be emitted and keyed on the theme attribute');
     }
 
     // Negative canary: the pre-fix bug was a single hardcoded dark palette, so a
     // light render must NOT resolve --lookie-text to the dark value on bare :root.
-    assert.doesNotMatch(light, /:root\s*\{[^}]*--lookie-text:\s*#e5e7eb/,
-      'light render must not pin dark text tokens onto bare :root');
+    assert.doesNotMatch(light, /:root\[data-lookie-link-theme="light"\][^}]*--lookie-text:\s*var\(--text,\s*#e5e7eb\)/,
+      'light render must not fall back to dark text');
     assert.match(light, /data-lookie-link-theme="light"/);
     assert.match(light, /:root \{ color-scheme: light; \}/);
   } finally {
@@ -374,6 +374,62 @@ test('annotate buttons are hidden in the embed until annotation mode is on', asy
     // Negative canary: buttons are still injected, so a regression that drops the
     // gate would leave them visible rather than absent.
     assert.ok(/lookie-annotate-btn/.test(html), 'annotate buttons should still be injected');
+  } finally {
+    await fsPromises.rm(fixture.fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test('embed tokens resolve from the active color scheme, not a constant palette', async () => {
+  const fixture = await makeFixture();
+  try {
+    const source = '<!doctype html><html data-lookie-follow-theme><head><title>T</title></head><body><h1>Hi</h1></body></html>';
+
+    const teal = transformEmbedHtml(source, options(fixture, { themeMode: 'dark', themeScheme: 'teal' }));
+    const nord = transformEmbedHtml(source, options(fixture, { themeMode: 'dark', themeScheme: 'nord' }));
+
+    // The scheme blocks key on the viewer's own attribute names, so the embed
+    // root must carry them or nothing matches.
+    assert.equal(new JSDOM(teal).window.document.documentElement.getAttribute('data-color-scheme'), 'teal',
+      'embed root must carry data-color-scheme');
+    assert.equal(new JSDOM(nord).window.document.documentElement.getAttribute('data-color-scheme'), 'nord');
+
+    // Built-in palettes are lifted out of the viewer stylesheet and shipped with
+    // the embed, so a scheme other than the default actually has values to bind.
+    for (const html of [teal, nord]) {
+      assert.match(html, /:root\[data-color-scheme="teal"\]/, 'built-in scheme palettes must ship with the embed');
+      assert.match(html, /:root\[data-color-scheme="nord"\]/);
+      // Tokens alias the scheme variables rather than restating fixed hexes.
+      assert.match(html, /--lookie-bg:\s*var\(--bg,/, 'tokens must alias the scheme variable');
+      assert.match(html, /--lookie-text:\s*var\(--text,/);
+    }
+
+    // Light mode must reach the scheme's light block, not just flip a keyword.
+    const tealLight = transformEmbedHtml(source, options(fixture, { themeMode: 'light', themeScheme: 'teal' }));
+    const lightRoot = new JSDOM(tealLight).window.document.documentElement;
+    const darkRoot = new JSDOM(teal).window.document.documentElement;
+    assert.equal(lightRoot.getAttribute('data-theme'), 'light',
+      'light mode must set data-theme on the root so light scheme blocks match');
+    assert.equal(darkRoot.getAttribute('data-theme'), null,
+      'dark mode must not carry the light attribute on the root');
+    assert.match(tealLight, /:root\[data-color-scheme="teal"\]\[data-theme="light"\]/);
+
+    // Negative canary: the pre-fix bug restated fixed hex values on the alias
+    // block. If tokens stop aliasing, this fails.
+    assert.doesNotMatch(teal, /--lookie-bg:\s*#111827;/,
+      'tokens must not be pinned to a constant palette outside the fallback slot');
+
+    // A custom theme resolves through the same path as a built-in.
+    const custom = transformEmbedHtml(source, options(fixture, {
+      themeMode: 'dark',
+      themeScheme: 'el-charro',
+      customThemeCss: ':root[data-color-scheme="el-charro"] { --bg: #0d1a1b; --text: #eaf3f1; }',
+    }));
+    assert.match(custom, /data-color-scheme="el-charro"/);
+    assert.match(custom, /--bg: #0d1a1b/, 'custom theme CSS must still ship');
+    assert.ok(
+      custom.indexOf('--bg: #0d1a1b') < custom.indexOf('--lookie-bg: var(--bg,'),
+      'scheme palettes must precede the alias block so the aliases can resolve',
+    );
   } finally {
     await fsPromises.rm(fixture.fixtureRoot, { recursive: true, force: true });
   }

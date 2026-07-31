@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — Embed follows the active color scheme (#352)
+
+- Embedded documents that opt into `data-lookie-follow-theme` now use the colors of the **selected scheme** (Slate, Teal, Nord, El Charro, …), not a fixed light/dark pair. `themeScheme` was already accepted and written to the root, but nothing consumed it — the tokens were constants.
+- Built-in scheme palettes live only as CSS in `public/style.css`, which the embedded document never loads, and `customThemeCss` was keyed on attributes the embed root did not set. The embed now ships the `:root[data-color-scheme="…"]` blocks lifted from the viewer stylesheet (custom-property declarations only — they style no elements, so they cannot leak into authored page CSS), sets `data-color-scheme` / `data-theme` on its root so both built-in and custom blocks match, and aliases `--lookie-bg: var(--bg, …)` and friends off the resolved scheme. `public/style.css` stays the single source of truth.
+- The runtime `lookie-link:set-theme` handler sets the scheme attributes too, so switching scheme or mode re-resolves in CSS with no reload.
+- Tests: two negative canaries — dropping the aliasing, or not shipping the built-in palettes, each fails the suite.
+
 ## Unreleased — Embed theme tokens and the annotation gate (#350, #351)
 
 - Fixed theme-follow, which never followed. The embed injected `color-scheme: <mode>` but pinned the `--lookie-*` token *values* to one hardcoded dark palette. Documents consume those as `var(--lookie-bg, <light-fallback>)`, and a CSS fallback only applies when the property is undefined — so an always-defined dark token made every authored light fallback unreachable, and every theme-following document rendered dark whatever the toggle said. Both palettes now ship, keyed on `data-lookie-link-theme`, so the runtime `lookie-link:set-theme` message re-themes without a reload. Dark values are byte-identical to before (no visual shift for the default); light mirrors the viewer's slate-light chrome so embedded content matches the frame around it.
