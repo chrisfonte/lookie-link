@@ -325,3 +325,56 @@ test('document viewer frames HTML through embed while retaining a distinct raw-s
   assert.doesNotMatch(html, /<iframe[\s\S]*src="\/raw\/alpha\/docs\/page\.html"/);
   assert.doesNotMatch(html, /lookie-link-annotations-bootstrap/);
 });
+
+test('embed theme tokens track the mode, not just color-scheme', async () => {
+  const fixture = await makeFixture();
+  try {
+    const source = '<!doctype html><html data-lookie-follow-theme><head><title>T</title></head><body><h1>Hi</h1></body></html>';
+
+    const light = transformEmbedHtml(source, options(fixture, { themeMode: 'light', themeScheme: 'slate' }));
+    const dark = transformEmbedHtml(source, options(fixture, { themeMode: 'dark', themeScheme: 'slate' }));
+
+    // Both palettes ship in either render so the runtime set-theme message can
+    // re-theme without a reload; they are keyed on the attribute.
+    for (const html of [light, dark]) {
+      assert.match(html, /:root\[data-lookie-link-theme="light"\][^}]*--lookie-bg:\s*#f4f6f8/,
+        'light palette must be emitted and keyed on the theme attribute');
+      assert.match(html, /:root\[data-lookie-link-theme="dark"\][^}]*--lookie-bg:\s*#111827/,
+        'dark palette must be emitted and keyed on the theme attribute');
+    }
+
+    // Negative canary: the pre-fix bug was a single hardcoded dark palette, so a
+    // light render must NOT resolve --lookie-text to the dark value on bare :root.
+    assert.doesNotMatch(light, /:root\s*\{[^}]*--lookie-text:\s*#e5e7eb/,
+      'light render must not pin dark text tokens onto bare :root');
+    assert.match(light, /data-lookie-link-theme="light"/);
+    assert.match(light, /:root \{ color-scheme: light; \}/);
+  } finally {
+    await fsPromises.rm(fixture.fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test('annotate buttons are hidden in the embed until annotation mode is on', async () => {
+  const fixture = await makeFixture();
+  try {
+    const source = '<!doctype html><html><head><title>T</title></head><body><h1>Hi</h1><h2>Section</h2></body></html>';
+    const html = transformEmbedHtml(source, options(fixture, {
+      themeMode: 'dark',
+      annotationsEnabled: true,
+    }));
+
+    // The embedded document never loads the viewer's public/style.css, so the
+    // gate has to travel with the embed itself.
+    assert.match(html, /id="lookie-link-embed-annotation-gate"/, 'embed must carry the annotation gate');
+    assert.match(html, /\.lookie-annotate-btn \{ display: none; \}/,
+      'annotate buttons must default to hidden');
+    assert.match(html, /\.lookie-annotations-active \.lookie-annotate-btn \{[^}]*display: inline-flex/,
+      'annotate buttons must appear only under the active class');
+
+    // Negative canary: buttons are still injected, so a regression that drops the
+    // gate would leave them visible rather than absent.
+    assert.ok(/lookie-annotate-btn/.test(html), 'annotate buttons should still be injected');
+  } finally {
+    await fsPromises.rm(fixture.fixtureRoot, { recursive: true, force: true });
+  }
+});

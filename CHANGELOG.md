@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — Embed theme tokens and the annotation gate (#350, #351)
+
+- Fixed theme-follow, which never followed. The embed injected `color-scheme: <mode>` but pinned the `--lookie-*` token *values* to one hardcoded dark palette. Documents consume those as `var(--lookie-bg, <light-fallback>)`, and a CSS fallback only applies when the property is undefined — so an always-defined dark token made every authored light fallback unreachable, and every theme-following document rendered dark whatever the toggle said. Both palettes now ship, keyed on `data-lookie-link-theme`, so the runtime `lookie-link:set-theme` message re-themes without a reload. Dark values are byte-identical to before (no visual shift for the default); light mirrors the viewer's slate-light chrome so embedded content matches the frame around it.
+- Fixed annotate buttons showing while annotation mode was off. The embedded document is a separate document that never loads `public/style.css`, so the `.lookie-annotate-btn { display: none }` gate never reached it and every injected button rendered unconditionally. The gate now travels with the embed and styles its revealed state from `--lookie-*` tokens, so it tracks the embed theme. The toggle path was already correct — only the default state was wrong.
+- Tests: both fixes carry a negative canary (reverting either drops `test/embed-html.test.js` to 12/13). The annotation test also asserts the buttons are still injected, so deleting them outright cannot masquerade as a pass.
+
 ## 2026-07-30 — Unreleased — Public/private product-information boundary
 
 - Removed product-planning packages, historical build prompts, product research,
