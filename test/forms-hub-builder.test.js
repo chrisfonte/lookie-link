@@ -209,8 +209,13 @@ test('hub navigation and builder lifecycle preserve snapshots, option IDs, CAS, 
     assert.match(receipt.document.body.textContent, /Squat <heavy>/);
     assert.doesNotMatch(receipt.document.body.textContent, /Back squat/);
 
-    const publishForm = configure.document.querySelector('.builder-publish form');
-    response = await browserPost(server, '/forms/training-log/configure/publish', formValues(publishForm), cookie);
+    // #341: the page's Publish is one-step (save+publish); the standalone
+    // /configure/publish route remains and is exercised here directly.
+    const publishValues = new URLSearchParams({
+      _csrf: formValues(configure.document.querySelector('.builder-form')).get('_csrf'),
+      revision: String((await server.registry.getManagementTemplate('training-log')).draft.revision),
+    });
+    response = await browserPost(server, '/forms/training-log/configure/publish', publishValues, cookie);
     assert.equal(response.status, 200);
     const published = await server.registry.getManagementTemplate('training-log');
     assert.equal(published.publishedVersion.templateVersion, 1);
@@ -590,7 +595,7 @@ test('a form carries its own Properties, reporting facts rather than claims', as
     assert.equal(rows.get('Form'), 'training-log');
     assert.equal(rows.get('Revision'), '1');
     assert.equal(rows.get('Published'), 'not published', 'reports reality, not intent');
-    assert.equal(rows.get('Destination'), 'gym-log');
+    assert.equal(rows.get('Entry storage'), 'gym-log');
     assert.equal(rows.get('Fields'), '2');
     assert.equal(rows.has('Theme'), false, 'no theme set, so no theme row');
   } finally {

@@ -2914,6 +2914,12 @@ tbody tr:last-child td {
 .form-layout .version-banner-actions { display: flex; gap: 0.9rem; align-items: center; }
 .form-layout fieldset.version-view { border: 0; margin: 0; padding: 0; opacity: 0.75; }
 
+/* #341: Showing select, save/publish pair, path row. */
+.form-layout .version-showing { display: flex; align-items: center; gap: 0.6rem; font-size: 0.9rem; color: var(--text-soft); margin-bottom: 0.7rem; }
+.form-layout .version-showing select { font-size: 0.9rem; padding: 0.3rem 0.5rem; }
+.form-layout .version-go { font-size: 0.8rem; padding: 0.25rem 0.6rem; }
+.form-layout .builder-save-actions { display: flex; gap: 0.8rem; align-items: center; }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------

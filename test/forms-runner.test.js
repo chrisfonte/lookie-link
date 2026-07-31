@@ -2292,10 +2292,13 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     // #337: the version viewer — Published is a dropdown; ?version renders read-only
     const viewer = await (await server.request('/forms/bench-day/configure?version=1', {headers: {Cookie: context.cookie}})).text();
     assert.match(viewer, /version-select-form/);
-    assert.match(viewer, /Viewing published v1 — read-only/);
+    assert.match(viewer, /Viewing Version 1 — read-only/);
+    assert.match(viewer, /Current draft/);
+    assert.doesNotMatch(viewer, /from r[0-9]/);
     assert.match(viewer, /fieldset disabled class="version-view"/);
-    assert.match(viewer, /Restore this version to draft/);
-    assert.doesNotMatch(viewer, /builder-publish-action/);
+    assert.match(viewer, /Restore to draft/);
+    // publish/save sit inside the disabled fieldset while viewing; lifecycle hides
+    assert.doesNotMatch(viewer, /configure-lifecycle/);
 
     // detach materializes the resolved fields onto the child
     const childRev = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template.revision;
