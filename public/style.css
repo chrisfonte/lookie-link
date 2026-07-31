@@ -2855,6 +2855,11 @@ tbody tr:last-child td {
 .form-layout .related-own-note { color: var(--text-soft); font-size: 0.8rem; }
 .form-layout .related-picker-group .container-member-choice { display: flex; align-items: center; justify-content: flex-start; gap: 0.45rem; padding: 0.15rem 0 0.15rem 1.5rem; }
 
+/* #307: read-only inherited fields on a child's Configure. */
+.form-layout .inherited-fields { display: grid; gap: 0.35rem; margin: 0.4rem 0 0.9rem; padding: 0.7rem 0.9rem; border: 1px dashed var(--border); border-radius: 0.6rem; }
+.form-layout .inherited-field { display: flex; justify-content: space-between; gap: 0.8rem; font-size: 0.9rem; }
+.form-layout .inherited-field-meta { color: var(--text-soft); font-size: 0.8rem; }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------
