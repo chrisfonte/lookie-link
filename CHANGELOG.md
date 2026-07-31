@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — Embed namespace isolation (#354)
+
+- **Regression fix for #352.** Making the embed scheme-aware injected the viewer's scheme blocks verbatim, and those blocks declare *unprefixed* custom properties (`--bg`, `--text`, `--accent`, `--link`, `--border`, …) on `:root` of the authored document. A scheme selector like `:root[data-color-scheme="solarized"][data-theme="light"]` has specificity (0,3,0) and beats a page setting its own tokens on `[data-lookie-follow-theme]` (0,1,0) — so authored variables were silently overridden. Observed on a kit-styled document: the page asked for `--accent: var(--lookie-link)` (`#268bd2`) and resolved to the scheme's `--accent` (`#2aa198`). The Ops HTML Kit uses `--accent` throughout, so every kit-styled document was affected.
+- `customThemeCss` had the same shape and was already being injected, but harmlessly — the embed root did not set `data-color-scheme` / `data-theme`, so it never matched. #352 set those attributes, activating a latent leak as well as adding a new one.
+- Scheme blocks are now **rewritten rather than passed through**: only the eight properties that map to bridge tokens survive, renamed to their `--lookie-*` equivalents; everything else (`--page-bg`, `--toolbar-*`, `--heading-font`, `color-scheme`) is dropped. Both built-in and custom themes go through the same rewrite, so nothing but `--lookie-*` can enter an authored document. `color-scheme` is emitted from the known mode instead of inherited from whichever block happens to match.
+- The `var(--bg, …)` alias layer from #352 is retired — scheme blocks now set the prefixed tokens directly, with the constant palettes kept as base fallbacks.
+- This also makes true a claim that was inaccurate in the #352 commit message and changelog: the injected CSS now really does declare custom properties only.
+- Tests: a leak test asserting no unprefixed declaration reaches the authored document, plus a negative canary — passing the blocks through verbatim fails the suite.
+
 ## Unreleased — Embed follows the active color scheme (#352)
 
 - Embedded documents that opt into `data-lookie-follow-theme` now use the colors of the **selected scheme** (Slate, Teal, Nord, El Charro, …), not a fixed light/dark pair. `themeScheme` was already accepted and written to the root, but nothing consumed it — the tokens were constants.
