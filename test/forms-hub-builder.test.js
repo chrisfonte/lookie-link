@@ -442,10 +442,13 @@ test('forms index separates archived templates and removes management detail for
     assert.match(archived.querySelector('summary').textContent, /Show archived\s*1/);
     assert.match(archived.textContent, /Retired group/);
     assert.doesNotMatch(archived.textContent, /Old log/);
-    // the Trackers view lists every active tracker under its group heading
+    // the Trackers view lists every active tracker under its group heading;
+    // #329: children nest under their parent
+    await server.registry.reviseDraft('daily-log', 1, {parentId: 'training-log'});
     const trackersView = await browserPage(await server.request('/forms?view=trackers'));
     assert.ok(trackersView.document.querySelector('.form-hub-nav a[aria-current="page"][href="/forms?view=trackers"]'));
-    assert.ok([...trackersView.document.querySelectorAll('.forms-root-row .container-member-title')].some((node) => /Daily log/.test(node.textContent)));
+    const nested = trackersView.document.querySelector('.tracker-nested .container-member-title');
+    assert.ok(nested && /Daily log/.test(nested.textContent), 'child must nest under its parent');
 
     const submitOnly = await browserPage(await server.request('/forms', {headers: {'X-No-Manage': 'yes'}}));
     assert.equal(submitOnly.document.querySelector('a[href="/forms/new"]'), null);
