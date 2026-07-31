@@ -2889,6 +2889,9 @@ tbody tr:last-child td {
 .form-layout .fields-table-theme { display: flex; align-items: center; gap: 0.8rem; border-top: 1px dashed var(--border); padding-top: 0.55rem; }
 .form-layout .fields-table-theme select { flex: 1; min-width: 8rem; }
 
+/* #326: theme rows in the inherit idiom. */
+.form-layout .theme-effective { color: var(--text-soft); }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------
