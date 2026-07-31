@@ -10,6 +10,22 @@ Enable it with the `forms:` block in the config (see
 [CONFIGURATION.md](CONFIGURATION.md) and the annotated
 `lookie-link.yaml.example`). Everything below assumes it is enabled.
 
+## Three kinds (internal taxonomy)
+
+Internally the platform has three kinds of template — the labels below are
+for builders and this doc, not end-user marketing:
+
+- **TRACKER** (`kind: 'form'`) — logs. Entry form, history, receipts.
+- **PARENT** (`kind: 'parent'`, or any form something inherits from) —
+  defines. Its fields serve on its children live; it never accepts new
+  entries itself (a born parent refuses everything and carries no entry
+  storage; an emergent parent — a form that gained children — keeps its
+  legacy history readable and correctable but takes no new entries). Its
+  page lists its children.
+- **GROUP** (`kind: 'container'`) — holds. Navigation, membership, theme
+  defaults, aggregated history. Same lifecycle and versioning as everything
+  else.
+
 ## Two-plane language
 
 End-user surfaces say **tracker** and **group**. The builder, the API, and the

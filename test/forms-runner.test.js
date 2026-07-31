@@ -2329,6 +2329,38 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     // publish/save sit inside the disabled fieldset while viewing; lifecycle hides
     assert.doesNotMatch(viewer, /configure-lifecycle/);
 
+    // #347: three kinds — the emergent parent's page is its children, not a form
+    const parentPage = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
+    assert.match(parentPage, /Defines 2 trackers/);
+    assert.match(parentPage, /container-member-title" href="\/forms\/bench-day"/);
+    assert.doesNotMatch(parentPage, /name="_supersedes"|form-primary-action" type="submit">Submit/);
+    // new entries into an emergent parent are refused; corrections still land
+    const refuse = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: nativeBody(context.token),
+    });
+    assert.equal(refuse.status, 404, 'parent with children must refuse new entries');
+    // born parent: kind parent from creation — never logs, no destination
+    const born = await post('/api/forms/templates', {templateId: 'measurements', title: 'Measurements', grammarVersion: 1, kind: 'parent',
+      fields: [{id: 'value', type: 'number', label: 'Value', required: true}]});
+    assert.equal(born.status, 201);
+    const bornBad = await post('/api/forms/templates', {templateId: 'bad-parent', title: 'Bad', grammarVersion: 1, kind: 'parent', destinationId: 'default',
+      fields: [{id: 'value', type: 'number', label: 'Value', required: true}]});
+    assert.equal(bornBad.status, 422, 'parents must not carry entry storage');
+    const bornPage = await (await server.request('/forms/measurements', {headers: {Cookie: context.cookie}})).text();
+    assert.match(bornPage, /Defines 0 trackers/);
+    // #347: groups get the version paradigm — Showing select + read-only viewer
+    assert.equal((await post('/api/forms/templates/vgroup', {})).status >= 400, true);
+    await post('/api/forms/templates', {templateId: 'vgroup', title: 'VGroup', grammarVersion: 1, kind: 'container'});
+    await post('/api/forms/templates/vgroup/publish', {revision: 1});
+    const groupConfigure = await (await server.request('/forms/vgroup/configure', {headers: {Cookie: context.cookie}})).text();
+    assert.match(groupConfigure, /version-showing/);
+    assert.match(groupConfigure, /Current draft/);
+    const groupViewer = await (await server.request('/forms/vgroup/configure?version=1', {headers: {Cookie: context.cookie}})).text();
+    assert.match(groupViewer, /Viewing Version 1 — read-only/);
+    assert.match(groupViewer, /fieldset disabled class="version-view"/);
+
     // detach materializes the resolved fields onto the child
     const childRev = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template.revision;
     const detached = await patch('/api/forms/templates/bench-day', {revision: childRev, parentId: null});
