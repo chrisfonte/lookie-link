@@ -2157,6 +2157,9 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     assert.match(childConfigure, /Inherited from <strong>Gym Session Entry<\/strong>/);
     assert.match(childConfigure, /Warmed up/);
     assert.doesNotMatch(childConfigure, /inherited-field-label">Lift</);
+    // #310: the own override field says so
+    assert.match(childConfigure, /builder-override-marker">Overrides inherited</);
+    assert.match(childConfigure, /Entry storage/);
 
     // #307: cloning a child keeps its parent (and thus the full resolved schema)
     const cloneResp = await post('/api/forms/templates/bench-day/clone', {});
