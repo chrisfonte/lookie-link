@@ -2277,6 +2277,16 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     const localized = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template;
     assert.equal(localized.presentation && localized.presentation.theme, 'nord', 'Set locally must materialize the effective theme');
 
+    // #327: the DnD input exists; posting a full resolvedOrder applies it
+    const dndConfigure = await (await server.request('/forms/bench-day/configure', {headers: {Cookie: context.cookie}})).text();
+    assert.match(dndConfigure, /resolved-order-input/);
+    assert.match(dndConfigure, /drag-handle/);
+    const dndSave = await guiSave((values) => values.set('resolvedOrder', 'warmup-done spotter lift'));
+    assert.equal(dndSave.status, 200);
+    const dndOrdered = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text());
+    assert.deepEqual(dndOrdered.template.inherit.order.slice(0, 3), ['warmup-done', 'spotter', 'lift']);
+    assert.ok((dndOrdered.template.inherit.exclude || []).includes('notes'), 'drag order must preserve exclusions');
+
     // detach materializes the resolved fields onto the child
     const childRev = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template.revision;
     const detached = await patch('/api/forms/templates/bench-day', {revision: childRev, parentId: null});

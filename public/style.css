@@ -2892,6 +2892,13 @@ tbody tr:last-child td {
 /* #326: theme rows in the inherit idiom. */
 .form-layout .theme-effective { color: var(--text-soft); }
 
+/* #327/#329: drag handles + nested children in the trackers listing. */
+.form-layout .drag-handle { cursor: grab; touch-action: none; color: var(--text-soft); padding: 0.1rem 0.35rem; user-select: none; letter-spacing: -0.12em; }
+.form-layout .dragging { opacity: 0.55; }
+.form-layout .fields-table-local { display: contents; }
+.form-layout .tracker-nested { margin-left: 1.4rem; position: relative; }
+.form-layout .tracker-nested::before { content: '↳'; position: absolute; left: -1.1rem; top: 50%; transform: translateY(-50%); color: var(--text-soft); }
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------
