@@ -2151,6 +2151,27 @@ test('parent/sub-form inheritance: resolution, overrides, live edits, detach, gu
     const archived = await post('/api/forms/templates/gym-session-entry/archive', {revision: benchRevForArchive});
     assert.ok(archived.status === 422 || archived.status === 409, `parent archive not refused: ${archived.status}`);
 
+    // #307: a child's Configure shows the inherited schema read-only
+    const childConfigure = await (await server.request('/forms/bench-day/configure', {headers: {Cookie: context.cookie}})).text();
+    assert.match(childConfigure, /inherited-fields/);
+    assert.match(childConfigure, /Inherited from <strong>Gym Session Entry<\/strong>/);
+    assert.match(childConfigure, /Warmed up/);
+    assert.doesNotMatch(childConfigure, /inherited-field-label">Lift</);
+
+    // #307: cloning a child keeps its parent (and thus the full resolved schema)
+    const cloneResp = await post('/api/forms/templates/bench-day/clone', {});
+    assert.equal(cloneResp.status, 201, await cloneResp.text());
+    const cloneId = JSON.parse(await cloneResp.text()).template.templateId;
+    const clonedGet = JSON.parse(await (await server.request(`/api/forms/templates/${cloneId}`)).text());
+    assert.equal(clonedGet.template.parentId, 'gym-session-entry');
+    assert.ok(clonedGet.resolvedFields.some((field) => field.id === 'warmup-done'), 'clone lost the inherited fields');
+
+    // #307: cloning a container yields a container
+    assert.equal((await post('/api/forms/templates', {templateId: 'hub', title: 'Hub', kind: 'container', grammarVersion: 1})).status, 201);
+    const hubClone = await post('/api/forms/templates/hub/clone', {});
+    assert.equal(hubClone.status, 201);
+    assert.equal(JSON.parse(await hubClone.text()).template.kind, 'container');
+
     // detach materializes the resolved fields onto the child
     const childRev = JSON.parse(await (await server.request('/api/forms/templates/bench-day')).text()).template.revision;
     const detached = await patch('/api/forms/templates/bench-day', {revision: childRev, parentId: null});
