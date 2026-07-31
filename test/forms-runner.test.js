@@ -2024,6 +2024,10 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     });
     assert.equal(submit.status, 404);
 
+    // #345: /forms/entries resolves as root history, not a template lookup
+    const rootHistory = await server.request('/forms/entries', {headers: {Cookie: context.cookie}});
+    assert.equal(rootHistory.status, 200, 'root history must not be eaten by :templateId');
+
     // #343: quick entry from the listing actually WORKS — scrape the row form, submit
     const listing = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
     const {JSDOM: QuickDOM} = require('jsdom');
@@ -2067,8 +2071,8 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
 
     // member form carries the back-to-container button
     const member = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
-    assert.match(member, /related-container-link/);
-    assert.match(member, /← Gym/);
+    // #345: the strip is purely lateral — no group back-link (the bar goes home)
+    assert.doesNotMatch(member, /related-container-link/);
 
     // #335: the root renders group sections through the shared nested listing
     const root = await (await server.request('/forms', {headers: {Cookie: context.cookie}})).text();
@@ -2438,7 +2442,7 @@ test('related-strip config: all-in-group default, cross-group picks, API roundtr
     page = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
     assert.doesNotMatch(page, /related-form-link" href="\/forms\/cardio"/);
     assert.match(page, /related-form-link" href="\/forms\/weight"/);
-    assert.match(page, /related-container-link/);
+    assert.doesNotMatch(page, /related-container-link/);
 
     // configure carries the compact disclosure; bad include ids are refused
     const configure = await (await server.request('/forms/gym-session-entry/configure', {headers: {Cookie: context.cookie}})).text();
