@@ -385,7 +385,7 @@ test('forms index offers its single API-backed creation path only to managers an
     assert.ok(emptyIndex.document.querySelector('a[href="/forms/new?kind=container"]'));
     let firstRun = await browserPage(await server.request('/forms/new'));
     const cookie = firstRun.cookie;
-    assert.match(firstRun.document.querySelector('h1').textContent, /New template/);
+    assert.match(firstRun.document.querySelector('h1').textContent, /New tracker/);
     assert.deepEqual(
       [...firstRun.document.querySelector('select[name="destinationId"]').options].map((option) => option.value),
       ['default', 'gym-log'],

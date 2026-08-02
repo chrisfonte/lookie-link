@@ -2681,3 +2681,62 @@ test('canCreate gates the create links on root and history together (#365)', () 
       : ['Trackers', 'History'], `canCreate=${canCreate}`);
   }
 });
+
+test('the create surface says tracker, never template or form (#367)', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture);
+  try {
+    const context = await getBrowserContext(server);
+    assert.equal((await server.request('/api/forms/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'x-csrf-token': context.token },
+      body: JSON.stringify({templateId: 'gym', title: 'Gym', kind: 'container', grammarVersion: 1}),
+    })).status, 201);
+
+    const visible = (html) => {
+      const main = new JSDOM(html).window.document.querySelector('main');
+      return main.textContent.replace(/\s+/g, ' ');
+    };
+    const page = async (route) => visible(await (await server.request(route, {headers: {Cookie: context.cookie}})).text());
+
+    const plain = await page('/forms/new');
+    assert.match(plain, /New tracker/);
+    assert.match(plain, /Create tracker/);
+    assert.match(plain, /Tracker \(logs entries\)/);
+
+    const group = await page('/forms/new?kind=container');
+    assert.match(group, /New group/);
+    assert.match(group, /Create group/);
+
+    const scoped = await page('/forms/new?group=gym');
+    assert.match(scoped, /New tracker/);
+    assert.match(scoped, /Create tracker/);
+
+    // The internal words must not reach the surface a person reads.
+    for (const [route, text] of [['/forms/new', plain], ['/forms/new?kind=container', group], ['/forms/new?group=gym', scoped]]) {
+      assert.doesNotMatch(text, /\btemplate\b/i, `${route} must not say template`);
+    }
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('no user-facing copy carries an internal issue number (#368)', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture);
+  try {
+    const context = await getBrowserContext(server);
+    // Asserted over the rendered text, not the two known strings, so a third
+    // provenance note cannot be added quietly.
+    for (const route of ['/forms', '/forms/entries', '/forms/new', '/forms/new?kind=container',
+      '/forms/gym-session-entry', '/forms/gym-session-entry/configure', '/forms/gym-session-entry/entries']) {
+      const html = await (await server.request(route, {headers: {Cookie: context.cookie}})).text();
+      const main = new JSDOM(html).window.document.querySelector('main');
+      assert.ok(main, `${route} rendered a main`);
+      const leaked = main.textContent.match(/\(#\d+\)/g);
+      assert.equal(leaked, null, `${route} leaks ${leaked && leaked.join(', ')}`);
+    }
+  } finally {
+    await cleanup(fixture, server);
+  }
+});

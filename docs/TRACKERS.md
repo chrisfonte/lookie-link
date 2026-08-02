@@ -28,12 +28,19 @@ for builders and this doc, not end-user marketing:
 
 ## Two-plane language
 
-End-user surfaces say **tracker** and **group**. The builder, the API, and the
-storage say **form template**, **kind: 'container'**, and keep every URL under
-`/forms/…`. This split is deliberate: creators get honest system words,
-civilians get words that need no explanation, and the plumbing never churns
-when the language does. This document uses each plane's words in its own
-sections.
+End-user surfaces say **tracker** and **group**. The API and the storage say
+**form template**, **kind: 'container'**, and keep every URL under `/forms/…`.
+This split is deliberate: the plumbing never churns when the language does.
+
+**The visible builder is an end-user surface.** Its chrome — headings, buttons,
+select options, help text — says *tracker*, because what you are creating is a
+tracker. The system words stay in the API, the stored documents and this
+document. A page that shows a person the word *template* is leaking its
+plumbing.
+
+Help text is also written for the person reading it, never for a reviewer:
+no internal issue numbers in visible copy. If provenance is worth keeping, it
+belongs in a code comment beside the string.
 
 ## Core guarantees
 
