@@ -2547,3 +2547,64 @@ test('related-strip config: all-in-group default, cross-group picks, API roundtr
     await cleanup(fixture, server);
   }
 });
+
+test('tracker listings that are indexes sort by title (#357, #358)', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, {formsTimezone: 'America/New_York'});
+  try {
+    const context = await getBrowserContext(server);
+    const jsonHeaders = { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'x-csrf-token': context.token };
+    const post = (route, body) => server.request(route, {method: 'POST', headers: jsonHeaders, body: JSON.stringify(body)});
+    const patch = (route, body) => server.request(route, {method: 'PATCH', headers: jsonHeaders, body: JSON.stringify(body)});
+    const titles = (html, selector) => [...new JSDOM(html).window.document.querySelectorAll(selector)].map((node) => node.textContent);
+
+    assert.equal((await post('/api/forms/templates', {templateId: 'gym', title: 'Gym', kind: 'container', grammarVersion: 1})).status, 201);
+    // The parent, plus children registered deliberately out of alphabetical order.
+    assert.equal((await patch('/api/forms/templates/gym-session-entry', {revision: 1, containerId: 'gym'})).status, 200);
+    for (const [templateId, title] of [['zeta', 'Zeta Machine'], ['alpha', 'Alpha Machine'], ['mid', 'Mid Machine']]) {
+      assert.equal((await post('/api/forms/templates', {
+        templateId, title, grammarVersion: 1, destinationId: 'default', containerId: 'gym',
+        parentId: 'gym-session-entry', fields: [],
+      })).status, 201, `create ${templateId}`);
+    }
+    // A standalone member the group pins first — the curated order, last alphabetically.
+    const zuluCreate = await post('/api/forms/templates', {templateId: 'zulu', title: 'Zulu Standalone', grammarVersion: 1,
+      destinationId: 'default', containerId: 'gym', fields: [{id: 'n', type: 'number', label: 'N', required: false}]});
+    assert.equal(zuluCreate.status, 201, await zuluCreate.text());
+    const gymRev = JSON.parse(await (await server.request('/api/forms/templates/gym')).text()).template.revision;
+    assert.equal((await patch('/api/forms/templates/gym', {revision: gymRev, memberOrder: ['zulu']})).status, 200);
+
+    // #358: the parent's page lists its children alphabetically, not in registry order.
+    const parentPage = await (await server.request('/forms/gym-session-entry', {headers: {Cookie: context.cookie}})).text();
+    assert.deepEqual(
+      titles(parentPage, '.container-members .container-member-title'),
+      ['Alpha Machine', 'Mid Machine', 'Zeta Machine'],
+      'parent page children sort by title'
+    );
+
+    // #357: the strip is one alphabetical run — memberOrder does not pin it.
+    const childPage = await (await server.request('/forms/alpha', {headers: {Cookie: context.cookie}})).text();
+    const strip = titles(childPage, '.related-forms .related-form-link');
+    assert.deepEqual(strip, [...strip].sort((a, b) => a.localeCompare(b)), 'strip is alphabetical');
+    assert.equal(strip[strip.length - 1], 'Zulu Standalone',
+      'the memberOrder-pinned member sorts to its alphabetical place, not the front');
+
+    // The group hub keeps its curated memberOrder — there the order IS the sequence.
+    const groupPage = await (await server.request('/forms/gym', {headers: {Cookie: context.cookie}})).text();
+    assert.equal(titles(groupPage, '.container-members .container-member-title')[0], 'Zulu Standalone',
+      'group hub still leads with the pinned member');
+
+    // Cross-group includes join the same single alphabetical run.
+    assert.equal((await post('/api/forms/templates', {templateId: 'beta-solo', title: 'Beta Solo', grammarVersion: 1,
+      destinationId: 'default', fields: [{id: 'n', type: 'number', label: 'N', required: false}]})).status, 201);
+    const alphaRev = JSON.parse(await (await server.request('/api/forms/templates/alpha')).text()).template.revision;
+    assert.equal((await patch('/api/forms/templates/alpha', {revision: alphaRev, related: {group: true, include: ['beta-solo']}})).status, 200);
+    const withInclude = titles(await (await server.request('/forms/alpha', {headers: {Cookie: context.cookie}})).text(),
+      '.related-forms .related-form-link');
+    assert.deepEqual(withInclude, [...withInclude].sort((a, b) => a.localeCompare(b)),
+      'an included cross-group pick sorts in, not appended after the group');
+    assert.ok(withInclude.includes('Beta Solo'));
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
