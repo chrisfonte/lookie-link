@@ -159,6 +159,10 @@ template via `related`:
   includes that whole group live (new members follow automatically).
 - Include entries are soft references: the strip renders only what exists, is
   active, and the viewer may see. A deleted tracker can never break a page.
+- The strip is one alphabetical run by title. Group members and cross-group
+  picks sort together rather than in separate blocks, and the group's
+  `memberOrder` does not pin anything here — the strip is an index, so the eye
+  should be able to start from the letter.
 
 Configure exposes this as the "Related trackers" disclosure above Save draft:
 each group is a checkbox row (your own group's box is the all-in-group flag),
@@ -182,8 +186,20 @@ One rule: **every bar starts with its parent.**
   at the bottom.
 - A group's bar: `Groups | Trackers | History | Configure`.
 - A tracker's bar: `← <Group> | Log an entry | History | Configure`.
+- A receipt carries its tracker's bar, with nothing marked current — a receipt
+  is none of the four views the bar lists. Without it, submitting an entry
+  dead-ends: the in-card actions all lead back into the same tracker.
 - The bars are sticky (pinned under the viewer toolbar) and persist into the
   create pages, so there are no dead ends.
+
+**Ordering: an index and a sequence want different orders.** A group's
+`memberOrder` curates its hub page, where the order is the sequence you work
+through — circuit order beats the alphabet there. Every listing that is a
+*lookup* rather than a sequence sorts by title instead: the related strip and
+a parent's list of children. Ask which one a surface is before choosing its
+order, and prefer the alphabet when unsure — a listing that is sorted except
+for one pinned row reads as sorted, so a reader trusts it and then cannot find
+the row they came for.
 - The toolbar stays contextual, per the Files idiom: core switches (Files /
   Trackers, theme) always; Properties appears on trackers *and* groups; all
   toolbar disclosures are mutually exclusive.
@@ -219,7 +235,7 @@ everything the GUI can do, the API can do.
   hub + archived members)
 - `/forms/:id/entries` — history (day-grouped; aggregated for groups)
 - `/forms/:id/receipts/:submissionId` — immutable receipt (+ supersede chain,
-  inline correction)
+  inline correction), carrying the tracker's bar
 - `/forms/:id/configure` — the builder: basics, parent/group selects, related
   picker, field editor, publish, clone/archive lifecycle
 - `/forms/new` — create (accepts `?group=<id>` to pre-join and
