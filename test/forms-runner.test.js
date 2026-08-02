@@ -684,6 +684,43 @@ test('form and receipt use the themed shell, preserve escaping, and offer Log an
   }
 });
 
+test('the receipt carries the tracker bar, so a logged entry is not a dead end (#356)', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture);
+  try {
+    const context = await getBrowserContext(server);
+    const accepted = await server.request('/forms/gym-session-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: nativeBody(context.token),
+    });
+    assert.equal(accepted.status, 303);
+    const receipt = await (await server.request(accepted.headers.get('location'), {
+      headers: { Cookie: context.cookie },
+    })).text();
+    const document = new JSDOM(receipt).window.document;
+
+    const bar = document.querySelector('.form-layout > .form-hub-nav');
+    assert.ok(bar, 'the receipt renders the tracker bar');
+    assert.deepEqual(
+      [...bar.querySelectorAll('a')].map((link) => [link.className, link.getAttribute('href'), link.textContent]),
+      [
+        ['up-link', '/forms', '← Trackers'],
+        ['log-link', '/forms/gym-session-entry', 'Log an entry'],
+        ['entries-link', '/forms/gym-session-entry/entries', 'History'],
+        ['configure-link', '/forms/gym-session-entry/configure', 'Configure'],
+      ]
+    );
+    // A receipt is none of the four views the bar lists, so nothing claims to be current.
+    assert.equal(bar.querySelector('[aria-current]'), null);
+    // The bar sits outside the topbar, as it does on every other surface.
+    assert.equal(document.querySelector('.topbar .form-hub-nav'), null);
+    assert.equal(document.querySelector('.topbar .breadcrumbs a[href="/forms"]'), null);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
 test('native POST redirects with 303 and the receipt page renders submitted values', async () => {
   const fixture = await makeFixture();
   const server = await startServer(fixture);
