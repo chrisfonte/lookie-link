@@ -13,7 +13,7 @@ const { JSDOM } = require('jsdom');
 const { chromium } = require('playwright');
 
 const { createApp } = require('../server');
-const { renderReceiptPage } = require('../lib/forms/routes');
+const { renderReceiptPage, renderFormsIndexPage, renderRootHistoryPage } = require('../lib/forms/routes');
 const { TemplateRegistry } = require('../lib/forms/template-registry');
 const { SubmissionStore } = require('../lib/forms/submission-store');
 
@@ -2121,7 +2121,7 @@ test('container forms: lifecycle, page, membership nav, root grouping, guards (#
     assert.match(containerPage, /<a class="container-member-title" href="\/forms\/gym-session-entry"/);
     assert.match(containerPage, /container-member-configure/);
     // #285: hierarchy lives in the bars — a group's bar leads with Groups; no dropdown
-    assert.match(containerPage, /groups-link" href="\/forms">← Groups</);
+    assert.match(containerPage, /groups-link" href="\/forms">← Trackers</);
     assert.doesNotMatch(containerPage, /data-group-menu/);
     assert.match(containerPage, /toolbar-properties/);
     assert.match(containerPage, /<dt>Group<\/dt>|Group<\/dt>/);
@@ -2447,7 +2447,7 @@ test('creation follows containment: slug-derived IDs and group-joined trackers (
     assert.match(createPage, /Gym &amp; Fitness!/);
     assert.match(createPage, /href="\/forms\/gym-fitness\/entries"/);
     assert.match(createPage, /Joining group/);
-    assert.match(createPage, /groups-link" href="\/forms">← Groups</);
+    assert.match(createPage, /groups-link" href="\/forms">← Trackers</);
     // #293: archive a group member — it lists on the GROUP page, not the root
     const rowing2 = JSON.parse(await (await server.request('/api/forms/templates/rowing-2')).text()).template;
     const archivedResp = await server.request('/api/forms/templates/rowing-2/archive', {
@@ -2465,8 +2465,9 @@ test('creation follows containment: slug-derived IDs and group-joined trackers (
 
     // the root create page carries the Browse escape
     const rootCreate = await (await server.request('/forms/new?kind=container', {headers: {Cookie: context.cookie}})).text();
-    assert.match(rootCreate, /groups-link" href="\/forms">← Groups</);
-    assert.match(rootCreate, /New group/);
+    // #365: the unscoped create page carries the ROOT bar, with New group lit.
+    assert.match(rootCreate, /view-link" href="\/forms">Trackers</);
+    assert.match(rootCreate, /newgroup-link" href="\/forms\/new\?kind=container" aria-current="page">New group</);
   } finally {
     await cleanup(fixture, server);
   }
@@ -2606,5 +2607,77 @@ test('tracker listings that are indexes sort by title (#357, #358)', async () =>
     assert.ok(withInclude.includes('Beta Solo'));
   } finally {
     await cleanup(fixture, server);
+  }
+});
+
+test('the root family shares one bar, with the right item lit (#364, #365)', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, {formsTimezone: 'America/New_York'});
+  try {
+    const context = await getBrowserContext(server);
+    const barOf = (html) => {
+      const nav = new JSDOM(html).window.document.querySelector('.form-hub-nav');
+      return {
+        links: [...nav.querySelectorAll('a')].map((a) => a.textContent),
+        current: nav.querySelector('[aria-current="page"]')?.textContent ?? null,
+      };
+    };
+    const get = async (route) => barOf(await (await server.request(route, {headers: {Cookie: context.cookie}})).text());
+
+    const expected = ['Trackers', 'History', 'New tracker', 'New group'];
+    const root = await get('/forms');
+    const history = await get('/forms/entries');
+    const newTracker = await get('/forms/new');
+    const newGroup = await get('/forms/new?kind=container');
+
+    // #365: one link set across the whole root family — no page quietly drops items.
+    for (const [name, bar] of [['root', root], ['history', history], ['new tracker', newTracker], ['new group', newGroup]]) {
+      assert.deepEqual(bar.links, expected, `${name} bar`);
+    }
+    // ...and each lights its own page. The create pages used to both light New group.
+    assert.equal(root.current, 'Trackers');
+    assert.equal(history.current, 'History');
+    assert.equal(newTracker.current, 'New tracker');
+    assert.equal(newGroup.current, 'New group');
+
+    // #364: nothing calls the root "Groups" any more.
+    for (const route of ['/forms', '/forms/entries', '/forms/new', '/forms/new?kind=container', '/forms/gym-session-entry']) {
+      const html = await (await server.request(route, {headers: {Cookie: context.cookie}})).text();
+      assert.doesNotMatch(html, /← Groups/, `${route} must not call the root Groups`);
+    }
+
+    // A group's bar leads with the root under its settled name.
+    const created = await server.request('/api/forms/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'x-csrf-token': context.token },
+      body: JSON.stringify({templateId: 'gym', title: 'Gym', kind: 'container', grammarVersion: 1}),
+    });
+    assert.equal(created.status, 201, await created.text());
+    const groupBar = await get('/forms/gym');
+    assert.equal(groupBar.links[0], '← Trackers');
+    // /forms/new?group=<id> still inherits the GROUP's bar, not the root's.
+    const scopedCreate = await get('/forms/new?group=gym');
+    assert.equal(scopedCreate.links[0], '← Trackers');
+    assert.equal(scopedCreate.current, 'New tracker');
+    assert.ok(scopedCreate.links.includes('Configure'), 'scoped create keeps the group bar');
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('canCreate gates the create links on root and history together (#365)', () => {
+  // The access model makes a browser principal that can read but not manage
+  // awkward to stand up here, so drive the gate directly — it is the same flag
+  // on both pages now, which is the property that stops them drifting apart.
+  const barLinks = (html) => [...new JSDOM(html).window.document
+    .querySelector('.form-hub-nav').querySelectorAll('a')].map((a) => a.textContent);
+
+  for (const canCreate of [true, false]) {
+    const root = barLinks(renderFormsIndexPage([], canCreate, '', {}));
+    const history = barLinks(renderRootHistoryPage([], '', {canCreate}));
+    assert.deepEqual(root, history, `root and history must agree when canCreate=${canCreate}`);
+    assert.deepEqual(root, canCreate
+      ? ['Trackers', 'History', 'New tracker', 'New group']
+      : ['Trackers', 'History'], `canCreate=${canCreate}`);
   }
 });

@@ -180,12 +180,18 @@ group provides one (see fallback above).
 
 One rule: **every bar starts with its parent.**
 
-- The root (`/forms`) is the groups page: a Groups | Trackers view switcher
-  (Trackers lists every tracker under its group heading), quiet
-  "+ New tracker · + New group" links beneath, and archived *groups* collapsed
-  at the bottom.
-- A group's bar: `Groups | Trackers | History | Configure`.
-- A tracker's bar: `← <Group> | Log an entry | History | Configure`.
+- The root (`/forms`) **is called Trackers** — it renders the whole hierarchy,
+  every tracker nested under its group, with archived *groups* collapsed at the
+  bottom. Everything that links back to it says `Trackers`; nothing says
+  "Groups".
+- The root family — the root, its history, and the unscoped create pages —
+  all carry one bar: `Trackers | History | New tracker | New group`, with the
+  current page lit and the two create links present only for a viewer who can
+  create. Being at the root, it has no up-link.
+- A group's bar: `← Trackers | Trackers | History | Configure | New tracker | New group`.
+- A tracker's bar: `← Trackers | Log an entry | History | Configure`.
+- A create page scoped to a group (`/forms/new?group=<id>`) carries that
+  group's bar instead, so the way you arrived stays on screen.
 - A receipt carries its tracker's bar, with nothing marked current — a receipt
   is none of the four views the bar lists. Without it, submitting an entry
   dead-ends: the in-card actions all lead back into the same tracker.
