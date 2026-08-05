@@ -219,3 +219,78 @@ test('document rendering exposes line ranges and deliberate authored-HTML annota
   assert.match(authoredHtml, /data-annotate-trigger(?:="")? data-anchor-id="review-target"/);
   assert.match(authoredHtml, /data-annotations-mount(?:="")? data-anchor-id="review-target"/);
 });
+
+test('overlapping annotation creates on one file all persist with distinct ids', async () => {
+  const root = await makeFixture();
+
+  try {
+    const created = await Promise.all(
+      Array.from({ length: 5 }, (_value, index) => createAnnotation(root, 'docs', 'guide.md', {
+        anchor: '#guide',
+        anchorKind: 'heading',
+        author: 'capturer',
+        body: `Concurrent note ${index}`,
+      }))
+    );
+
+    const stored = await readAnnotationDocument(root, 'docs', 'guide.md');
+    assert.equal(stored.document.annotations.length, 5);
+
+    const ids = stored.document.annotations.map((annotation) => annotation.id);
+    assert.equal(new Set(ids).size, 5);
+
+    const bodies = stored.document.annotations.map((annotation) => annotation.body).sort();
+    assert.deepEqual(bodies, created.map((_result, index) => `Concurrent note ${index}`).sort());
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('annotation ids stay unique past 999 same-day annotations on one file', async () => {
+  const root = await makeFixture();
+
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const sidecarPath = path.join(root, '.lookie-link', 'annotations', 'docs', 'guide.md.json');
+    await fs.mkdir(path.dirname(sidecarPath), { recursive: true });
+    await fs.writeFile(sidecarPath, `${JSON.stringify({
+      schema: 1,
+      file: 'docs/guide.md',
+      annotations: [{
+        id: `${today}-999`,
+        anchor: '#guide',
+        anchorKind: 'heading',
+        body: 'Note 999',
+        author: 'capturer',
+        createdAt: new Date().toISOString(),
+        state: 'open',
+        claimedBy: null,
+        claimedAt: null,
+        resolvedAt: null,
+        replies: [],
+      }],
+    }, null, 2)}\n`, 'utf8');
+
+    const thousandth = await createAnnotation(root, 'docs', 'guide.md', {
+      anchor: '#guide',
+      anchorKind: 'heading',
+      author: 'capturer',
+      body: 'Note 1000',
+    });
+    const thousandFirst = await createAnnotation(root, 'docs', 'guide.md', {
+      anchor: '#guide',
+      anchorKind: 'heading',
+      author: 'capturer',
+      body: 'Note 1001',
+    });
+
+    assert.equal(thousandth.annotation.id, `${today}-1000`);
+    assert.equal(thousandFirst.annotation.id, `${today}-1001`);
+
+    const stored = await readAnnotationDocument(root, 'docs', 'guide.md');
+    const ids = stored.document.annotations.map((annotation) => annotation.id);
+    assert.equal(new Set(ids).size, ids.length);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
