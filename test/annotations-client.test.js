@@ -655,3 +655,13 @@ test('saved notes reveal rendered and previews strip markdown sigils', async () 
 
   dom.window.close();
 });
+
+test('open annotation cards hide the plain preview line', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
+  const rule = css.match(/\.lookie-annotation-item\[open\][^{]*\.lookie-annotation-preview[^{]*\{[^}]*\}/);
+  assert.ok(rule, 'open-card preview rule exists');
+  assert.match(rule[0], /display:\s*none/, 'preview hides while the rendered body is visible');
+  const collapsedRule = css.match(/^\.lookie-annotation-preview\s*\{[^}]*\}/m);
+  assert.ok(collapsedRule, 'base preview rule still present for collapsed cards');
+  assert.doesNotMatch(collapsedRule[0], /display:\s*none/, 'collapsed cards keep their one-line preview');
+});
