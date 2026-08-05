@@ -299,9 +299,10 @@
   }
 
   function clearAnchorMounts() {
+    // Re-renders must not destroy an open compose form (or a draft in it).
     document.querySelectorAll(mountSelector).forEach((mount) => {
-      mount.innerHTML = '';
-      mount.hidden = true;
+      mount.querySelectorAll('.lookie-annotation-card').forEach((card) => card.remove());
+      mount.hidden = !mount.querySelector('.lookie-annotate-form');
     });
   }
 
@@ -385,6 +386,7 @@
     form.appendChild(el('div', { class: 'lookie-line-range-row' }, startInput, endInput, authorInput));
     form.appendChild(bodyInput);
     form.appendChild(el('div', { class: 'lookie-annotate-form-actions' }, submit));
+    bindQuickSubmit(form, bodyInput, submit);
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -466,6 +468,19 @@
     }
   }
 
+  function bindQuickSubmit(form, bodyInput, submit) {
+    bodyInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        if (typeof form.requestSubmit === 'function') {
+          form.requestSubmit(submit);
+        } else {
+          submit.click();
+        }
+      }
+    });
+  }
+
   function openAnchorForm(anchorId, anchorKind) {
     const mount = getMount(anchorId);
     if (!mount) {
@@ -475,7 +490,11 @@
     mount.hidden = false;
     const prior = mount.querySelector('.lookie-annotate-form');
     if (prior) {
-      prior.remove();
+      const priorBody = prior.querySelector('textarea[name="body"]');
+      if (priorBody) {
+        priorBody.focus();
+      }
+      return;
     }
 
     const form = el('form', { class: 'lookie-annotate-form' });
@@ -488,7 +507,7 @@
     });
     const bodyInput = el('textarea', {
       name: 'body',
-      rows: '3',
+      rows: '6',
       placeholder: 'What needs attention?',
       required: 'required',
     });
@@ -507,7 +526,10 @@
     form.appendChild(authorInput);
     form.appendChild(bodyInput);
     form.appendChild(el('div', { class: 'lookie-annotate-form-actions' }, submit, cancel));
+    bindQuickSubmit(form, bodyInput, submit);
 
+    // The form persists after a save (body clears, focus returns) so a run of
+    // rapid notes on one anchor costs one open, not one per note.
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const author = authorInput.value.trim();
@@ -524,12 +546,14 @@
           author,
           body,
         });
+        bodyInput.value = '';
       } catch (error) {
         window.alert(`Save annotation failed: ${error.message}`);
-        submit.disabled = false;
         return;
+      } finally {
+        submit.disabled = false;
       }
-      form.remove();
+      bodyInput.focus();
     });
 
     mount.appendChild(form);
@@ -601,7 +625,7 @@
       const card = createCard(title, anchorId);
       renderGroup(card, annotations);
       mount.hidden = false;
-      mount.appendChild(card);
+      mount.insertBefore(card, mount.querySelector('.lookie-annotate-form'));
     }
 
     if (supportsLineRanges) {

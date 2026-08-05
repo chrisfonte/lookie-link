@@ -2392,11 +2392,12 @@ tbody tr:last-child td {
   background: var(--bg); border: 1px dashed var(--border); border-radius: 5px;
 }
 .lookie-annotate-form input, .lookie-annotate-form textarea {
-  font: inherit; padding: 0.35rem 0.5rem;
+  /* 16px floor: below it, iOS Safari zooms the page on focus (matches the forms platform). */
+  font: inherit; font-size: 16px; padding: 0.35rem 0.5rem;
   background: var(--bg-code); color: var(--text);
   border: 1px solid var(--border); border-radius: 4px;
 }
-.lookie-annotate-form textarea { resize: vertical; min-height: 4.5rem; }
+.lookie-annotate-form textarea { resize: vertical; min-height: 9rem; }
 .lookie-annotate-form-actions { display: flex; gap: 0.4rem; }
 .lookie-annotation-submit, .lookie-annotation-cancel {
   padding: 0.3rem 0.75rem; font: inherit; border-radius: 4px; cursor: pointer;
@@ -2426,6 +2427,7 @@ tbody tr:last-child td {
 .lookie-line-range-form input,
 .lookie-line-range-form textarea {
   font: inherit;
+  font-size: 16px;
   padding: 0.35rem 0.5rem;
   background: var(--bg-code);
   color: var(--text);

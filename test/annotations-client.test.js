@@ -289,3 +289,122 @@ delta</code></pre>
   assert.ok(lineRangeRoot.textContent.includes('Check these lines'));
   dom.window.close();
 });
+
+test('heading compose form persists across saves for rapid capture', async () => {
+  const requests = [];
+  const savedAnnotations = [];
+  const dom = await bootDom({
+    body: `
+      <button type="button" data-annotations-toggle hidden></button>
+      <main>
+        <article class="content markdown" data-rendered-view>
+          <h1 id="board">
+            Board
+            <button type="button" data-annotate-trigger data-anchor-id="board" data-anchor-kind="heading">💬 Annotate</button>
+          </h1>
+          <section data-annotations-mount data-anchor-id="board" data-anchor-kind="heading"></section>
+        </article>
+        <aside data-annotations-stale hidden></aside>
+      </main>
+    `,
+    bootstrap: {
+      repo: 'docs',
+      relativePath: 'doc.md',
+      queryToken: null,
+      supportsLineRangeAnnotations: false,
+      sourceLineCount: 3,
+    },
+    fetchImpl: async (url, init = {}) => {
+      const method = init.method || 'GET';
+      requests.push({ url, method, body: init.body ? JSON.parse(init.body) : null });
+      if (method === 'POST') {
+        const body = JSON.parse(init.body);
+        savedAnnotations.push({
+          id: `2026-08-05-${String(savedAnnotations.length + 1).padStart(3, '0')}`,
+          anchor: body.anchor,
+          anchorKind: body.anchorKind,
+          body: body.body,
+          author: body.author,
+          createdAt: '2026-08-05T13:00:00.000Z',
+          state: 'open',
+          claimedBy: null,
+          claimedAt: null,
+          resolvedAt: null,
+          replies: [],
+        });
+        return {
+          ok: true,
+          async json() {
+            return { ok: true, mtimeMs: savedAnnotations.length, annotation: savedAnnotations[savedAnnotations.length - 1] };
+          },
+        };
+      }
+      return {
+        ok: true,
+        async json() {
+          return {
+            schema: 1,
+            file: 'docs/doc.md',
+            mtimeMs: savedAnnotations.length,
+            annotations: [...savedAnnotations],
+          };
+        },
+      };
+    },
+  });
+
+  const { document } = dom.window;
+  const mount = document.querySelector('[data-annotations-mount][data-anchor-id="board"]');
+  document.querySelector('[data-annotate-trigger]').click();
+
+  const form = mount.querySelector('.lookie-annotate-form');
+  assert.ok(form);
+  const authorInput = form.querySelector('input[name="author"]');
+  const bodyInput = form.querySelector('textarea[name="body"]');
+
+  authorInput.value = 'capturer';
+  bodyInput.value = 'First rapid note';
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await flush();
+  await flush();
+
+  assert.equal(requests.filter((request) => request.method === 'POST').length, 1);
+  assert.ok(mount.contains(form), 'compose form must survive the save');
+  assert.equal(bodyInput.value, '', 'body clears for the next note');
+  assert.equal(authorInput.value, 'capturer', 'author is retained');
+  assert.equal(mount.hidden, false);
+  assert.equal(document.activeElement, bodyInput, 'focus returns to the body for the next note');
+  assert.ok(mount.textContent.includes('First rapid note'), 'saved note renders without reopening the form');
+
+  bodyInput.value = 'Second rapid note';
+  bodyInput.dispatchEvent(new dom.window.KeyboardEvent('keydown', {
+    key: 'Enter',
+    ctrlKey: true,
+    bubbles: true,
+    cancelable: true,
+  }));
+  await flush();
+  await flush();
+
+  const posts = requests.filter((request) => request.method === 'POST');
+  assert.equal(posts.length, 2, 'Ctrl+Enter submits without touching the Save button');
+  assert.equal(posts[1].body.body, 'Second rapid note');
+  assert.equal(posts[1].body.anchor, '#board');
+  assert.ok(mount.contains(form));
+  assert.equal(bodyInput.value, '');
+
+  document.querySelector('[data-annotate-trigger]').click();
+  assert.equal(mount.querySelectorAll('.lookie-annotate-form').length, 1, 'reopening focuses the existing form instead of duplicating it');
+
+  dom.window.close();
+});
+
+test('annotation form inputs hold the 16px mobile font floor', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
+  const annotateBlock = css.match(/\.lookie-annotate-form input[^{]*\{[^}]*\}/);
+  const lineRangeBlock = css.match(/\.lookie-line-range-form input[^{]*\{[^}]*\}/);
+  assert.ok(annotateBlock, 'annotate form input rule exists');
+  assert.ok(lineRangeBlock, 'line-range form input rule exists');
+  assert.match(annotateBlock[0], /font-size:\s*16px/, 'annotate inputs declare the 16px floor (font: inherit alone re-zooms iOS)');
+  assert.match(lineRangeBlock[0], /font-size:\s*16px/, 'line-range inputs declare the 16px floor');
+});
