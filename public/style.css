@@ -2332,6 +2332,8 @@ tbody tr:last-child td {
 }
 .lookie-annotation-item[open] > .lookie-annotation-summary { margin-bottom: 0.3rem; }
 .lookie-annotation-item[open] > .lookie-annotation-summary::before { content: '▾'; }
+/* An open card already shows the rendered body — the plain preview line would repeat it. */
+.lookie-annotation-item[open] > .lookie-annotation-summary .lookie-annotation-preview { display: none; }
 .lookie-annotation-preview {
   min-width: 0;
   grid-column: 1 / -1;
