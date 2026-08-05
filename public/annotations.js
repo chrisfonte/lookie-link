@@ -397,6 +397,7 @@
     const submit = el('button', { type: 'submit', class: 'lookie-annotation-submit' }, 'Annotate lines');
 
     form.appendChild(el('div', { class: 'lookie-line-range-row' }, startInput, endInput, authorInput));
+    form.appendChild(buildComposeToolbar(bodyInput));
     form.appendChild(bodyInput);
     form.appendChild(el('div', { class: 'lookie-annotate-form-actions' }, submit));
     bindQuickSubmit(form, bodyInput, submit);
@@ -481,6 +482,73 @@
     }
   }
 
+  function applyInlineMarkdown(bodyInput, prefix, suffix, placeholder) {
+    const start = bodyInput.selectionStart || 0;
+    const end = bodyInput.selectionEnd || 0;
+    const value = bodyInput.value;
+    const selected = value.slice(start, end) || placeholder;
+    bodyInput.value = `${value.slice(0, start)}${prefix}${selected}${suffix}${value.slice(end)}`;
+    const selectFrom = start + prefix.length;
+    bodyInput.setSelectionRange(selectFrom, selectFrom + selected.length);
+    bodyInput.focus();
+  }
+
+  function applyListMarkdown(bodyInput) {
+    const value = bodyInput.value;
+    const start = bodyInput.selectionStart || 0;
+    const end = bodyInput.selectionEnd || 0;
+    const blockStart = value.lastIndexOf('\n', start - 1) + 1;
+    let blockEnd = value.indexOf('\n', end);
+    if (blockEnd === -1) {
+      blockEnd = value.length;
+    }
+    const block = value.slice(blockStart, blockEnd) || 'item';
+    const listed = block
+      .split('\n')
+      .map((line) => (line.startsWith('- ') ? line : `- ${line}`))
+      .join('\n');
+    bodyInput.value = `${value.slice(0, blockStart)}${listed}${value.slice(blockEnd)}`;
+    const caret = blockStart + listed.length;
+    bodyInput.setSelectionRange(caret, caret);
+    bodyInput.focus();
+  }
+
+  function applyLinkMarkdown(bodyInput) {
+    const start = bodyInput.selectionStart || 0;
+    const end = bodyInput.selectionEnd || 0;
+    const value = bodyInput.value;
+    const label = value.slice(start, end) || 'link text';
+    const inserted = `[${label}](url)`;
+    bodyInput.value = `${value.slice(0, start)}${inserted}${value.slice(end)}`;
+    const urlStart = start + label.length + 3;
+    bodyInput.setSelectionRange(urlStart, urlStart + 3);
+    bodyInput.focus();
+  }
+
+  function buildComposeToolbar(bodyInput) {
+    const tools = [
+      { label: 'B', title: 'Bold', run: () => applyInlineMarkdown(bodyInput, '**', '**', 'bold') },
+      { label: 'I', title: 'Italic', run: () => applyInlineMarkdown(bodyInput, '*', '*', 'italic') },
+      { label: '<>', title: 'Code', run: () => applyInlineMarkdown(bodyInput, '`', '`', 'code') },
+      { label: '• List', title: 'List', run: () => applyListMarkdown(bodyInput) },
+      { label: 'Link', title: 'Link', run: () => applyLinkMarkdown(bodyInput) },
+    ];
+
+    const bar = el('div', { class: 'lookie-compose-toolbar', role: 'toolbar', 'aria-label': 'Formatting' });
+    for (const tool of tools) {
+      bar.appendChild(el('button', {
+        type: 'button',
+        class: 'lookie-compose-tool',
+        title: tool.title,
+        'aria-label': tool.title,
+        // Keep the textarea's focus and selection through the click.
+        onmousedown: (event) => event.preventDefault(),
+        onclick: tool.run,
+      }, tool.label));
+    }
+    return bar;
+  }
+
   function bindQuickSubmit(form, bodyInput, submit) {
     bodyInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -537,6 +605,7 @@
     }, 'Cancel');
 
     form.appendChild(authorInput);
+    form.appendChild(buildComposeToolbar(bodyInput));
     form.appendChild(bodyInput);
     form.appendChild(el('div', { class: 'lookie-annotate-form-actions' }, submit, cancel));
     bindQuickSubmit(form, bodyInput, submit);

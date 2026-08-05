@@ -2408,6 +2408,14 @@ tbody tr:last-child td {
 }
 .lookie-annotate-form textarea { resize: vertical; min-height: 9rem; }
 .lookie-annotate-form-actions { display: flex; gap: 0.4rem; }
+.lookie-compose-toolbar { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.lookie-compose-tool {
+  min-width: 2.4rem; min-height: 2rem; padding: 0.25rem 0.6rem;
+  font: inherit; font-size: 0.85em; font-weight: 600;
+  background: var(--bg-code); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+}
+.lookie-compose-tool:hover { border-color: var(--accent); color: var(--accent); }
 .lookie-annotation-submit, .lookie-annotation-cancel {
   padding: 0.3rem 0.75rem; font: inherit; border-radius: 4px; cursor: pointer;
   border: 1px solid var(--border);

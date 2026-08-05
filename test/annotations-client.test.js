@@ -486,3 +486,75 @@ test('annotation bodies render server-provided markdown html and fall back to pl
 
   dom.window.close();
 });
+
+test('compose toolbar applies markdown to the body without submitting the form', async () => {
+  const requests = [];
+  const dom = await bootDom({
+    body: `
+      <button type="button" data-annotations-toggle hidden></button>
+      <main>
+        <article class="content markdown" data-rendered-view>
+          <h1 id="board">
+            Board
+            <button type="button" data-annotate-trigger data-anchor-id="board" data-anchor-kind="heading">💬 Annotate</button>
+          </h1>
+          <section data-annotations-mount data-anchor-id="board" data-anchor-kind="heading"></section>
+        </article>
+        <aside data-annotations-stale hidden></aside>
+      </main>
+    `,
+    bootstrap: {
+      repo: 'docs',
+      relativePath: 'doc.md',
+      queryToken: null,
+      supportsLineRangeAnnotations: false,
+      sourceLineCount: 3,
+    },
+    fetchImpl: async (url, init = {}) => {
+      requests.push({ method: init.method || 'GET' });
+      return {
+        ok: true,
+        async json() {
+          return { schema: 1, file: 'docs/doc.md', mtimeMs: null, annotations: [] };
+        },
+      };
+    },
+  });
+
+  const { document } = dom.window;
+  document.querySelector('[data-annotate-trigger]').click();
+  const form = document.querySelector('.lookie-annotate-form');
+  const bodyInput = form.querySelector('textarea[name="body"]');
+  const tools = Object.fromEntries(
+    Array.from(form.querySelectorAll('.lookie-compose-tool')).map((button) => [button.title, button])
+  );
+  assert.deepEqual(Object.keys(tools).sort(), ['Bold', 'Code', 'Italic', 'Link', 'List']);
+
+  bodyInput.value = 'pick me';
+  bodyInput.setSelectionRange(0, 4);
+  tools.Bold.click();
+  assert.equal(bodyInput.value, '**pick** me');
+  assert.equal(bodyInput.value.slice(bodyInput.selectionStart, bodyInput.selectionEnd), 'pick');
+
+  bodyInput.value = '';
+  bodyInput.setSelectionRange(0, 0);
+  tools.Italic.click();
+  assert.equal(bodyInput.value, '*italic*');
+  assert.equal(bodyInput.value.slice(bodyInput.selectionStart, bodyInput.selectionEnd), 'italic');
+
+  bodyInput.value = 'one\ntwo';
+  bodyInput.setSelectionRange(0, bodyInput.value.length);
+  tools.List.click();
+  assert.equal(bodyInput.value, '- one\n- two');
+
+  bodyInput.value = 'Fast Track';
+  bodyInput.setSelectionRange(0, 10);
+  tools.Link.click();
+  assert.equal(bodyInput.value, '[Fast Track](url)');
+  assert.equal(bodyInput.value.slice(bodyInput.selectionStart, bodyInput.selectionEnd), 'url');
+
+  assert.equal(requests.filter((request) => request.method === 'POST').length, 0, 'toolbar clicks never submit');
+  assert.ok(document.body.contains(form));
+
+  dom.window.close();
+});
