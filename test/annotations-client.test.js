@@ -558,3 +558,100 @@ test('compose toolbar applies markdown to the body without submitting the form',
 
   dom.window.close();
 });
+
+test('saved notes reveal rendered and previews strip markdown sigils', async () => {
+  const savedAnnotations = [{
+    id: '2026-08-05-001',
+    anchor: '#board',
+    anchorKind: 'heading',
+    body: 'existing **note**',
+    bodyHtml: '<p>existing <strong>note</strong></p>\n',
+    author: 'capturer',
+    createdAt: '2026-08-05T13:00:00.000Z',
+    state: 'open',
+    claimedBy: null,
+    claimedAt: null,
+    resolvedAt: null,
+    replies: [],
+  }];
+  const dom = await bootDom({
+    body: `
+      <button type="button" data-annotations-toggle hidden></button>
+      <main>
+        <article class="content markdown" data-rendered-view>
+          <h1 id="board">
+            Board
+            <button type="button" data-annotate-trigger data-anchor-id="board" data-anchor-kind="heading">💬 Annotate</button>
+          </h1>
+          <section data-annotations-mount data-anchor-id="board" data-anchor-kind="heading"></section>
+        </article>
+        <aside data-annotations-stale hidden></aside>
+      </main>
+    `,
+    bootstrap: {
+      repo: 'docs',
+      relativePath: 'doc.md',
+      queryToken: null,
+      supportsLineRangeAnnotations: false,
+      sourceLineCount: 3,
+    },
+    fetchImpl: async (url, init = {}) => {
+      const method = init.method || 'GET';
+      if (method === 'POST') {
+        const body = JSON.parse(init.body);
+        savedAnnotations.push({
+          id: '2026-08-05-002',
+          anchor: body.anchor,
+          anchorKind: body.anchorKind,
+          body: body.body,
+          bodyHtml: '<p><strong>fresh</strong> note</p>\n',
+          author: body.author,
+          createdAt: '2026-08-05T13:05:00.000Z',
+          state: 'open',
+          claimedBy: null,
+          claimedAt: null,
+          resolvedAt: null,
+          replies: [],
+        });
+        return {
+          ok: true,
+          async json() {
+            return { ok: true, mtimeMs: 2, annotation: { id: '2026-08-05-002' } };
+          },
+        };
+      }
+      return {
+        ok: true,
+        async json() {
+          return { schema: 1, file: 'docs/doc.md', mtimeMs: savedAnnotations.length, annotations: [...savedAnnotations] };
+        },
+      };
+    },
+  });
+
+  const { document } = dom.window;
+  const mount = document.querySelector('[data-annotations-mount][data-anchor-id="board"]');
+
+  const existingPreview = mount.querySelector('details[data-annotation-id="2026-08-05-001"] .lookie-annotation-preview');
+  assert.equal(existingPreview.textContent, 'existing note', 'preview strips markdown sigils via bodyHtml');
+
+  document.querySelector('[data-annotate-trigger]').click();
+  const form = mount.querySelector('.lookie-annotate-form');
+  form.querySelector('input[name="author"]').value = 'capturer';
+  form.querySelector('textarea[name="body"]').value = '**fresh** note';
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await flush();
+  await flush();
+  await flush();
+
+  const fresh = mount.querySelector('details[data-annotation-id="2026-08-05-002"]');
+  assert.ok(fresh, 'saved note re-rendered from refresh');
+  assert.equal(fresh.open, true, 'just-saved note reveals its rendered body');
+  assert.ok(fresh.querySelector('.lookie-annotation-detail strong'));
+  assert.equal(fresh.querySelector('.lookie-annotation-preview').textContent, 'fresh note');
+
+  const existing = mount.querySelector('details[data-annotation-id="2026-08-05-001"]');
+  assert.equal(existing.open, false, 'other cards keep their collapsed default');
+
+  dom.window.close();
+});

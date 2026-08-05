@@ -193,6 +193,29 @@
     return node;
   }
 
+  function annotationPreviewText(entry) {
+    // Preview the rendered text, not the markdown source — `**bold**` reads as `bold`.
+    if (typeof entry.bodyHtml === 'string') {
+      const scratch = document.createElement('div');
+      scratch.innerHTML = entry.bodyHtml;
+      const text = scratch.textContent || '';
+      if (text.trim()) {
+        return text;
+      }
+    }
+    return entry.body;
+  }
+
+  function revealAnnotation(id) {
+    if (!id) {
+      return;
+    }
+    const item = document.querySelector(`details.lookie-annotation-item[data-annotation-id="${CSS.escape(id)}"]`);
+    if (item) {
+      item.open = true;
+    }
+  }
+
   function renderAnnotationItem(annotation) {
     const replyCount = Array.isArray(annotation.replies) ? annotation.replies.length : 0;
     const item = el('details', {
@@ -212,7 +235,7 @@
       replyCount > 0
         ? el('span', { class: 'lookie-annotation-reply-count' }, `${replyCount} repl${replyCount === 1 ? 'y' : 'ies'}`)
         : el('span', { class: 'lookie-annotation-reply-count lookie-annotation-reply-count-empty', 'aria-hidden': 'true' }, ''),
-      el('span', { class: 'lookie-annotation-preview' }, summarizeText(annotation.body, 110))
+      el('span', { class: 'lookie-annotation-preview' }, summarizeText(annotationPreviewText(annotation), 110))
     ));
 
     const detail = el('div', { class: 'lookie-annotation-detail' });
@@ -419,13 +442,14 @@
       setDefaultAuthor(author);
       submit.disabled = true;
       try {
-        await createAnnotation({
+        const result = await createAnnotation({
           anchor: `#L${start}-L${end}`,
           anchorKind: 'lineRange',
           author,
           body,
         });
         bodyInput.value = '';
+        revealAnnotation(result && result.annotation && result.annotation.id);
       } catch (error) {
         window.alert(`Save annotation failed: ${error.message}`);
       } finally {
@@ -622,13 +646,14 @@
       setDefaultAuthor(author);
       submit.disabled = true;
       try {
-        await createAnnotation({
+        const result = await createAnnotation({
           anchor: `#${anchorId}`,
           anchorKind,
           author,
           body,
         });
         bodyInput.value = '';
+        revealAnnotation(result && result.annotation && result.annotation.id);
       } catch (error) {
         window.alert(`Save annotation failed: ${error.message}`);
         return;
