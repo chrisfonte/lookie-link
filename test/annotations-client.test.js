@@ -408,3 +408,81 @@ test('annotation form inputs hold the 16px mobile font floor', () => {
   assert.match(annotateBlock[0], /font-size:\s*16px/, 'annotate inputs declare the 16px floor (font: inherit alone re-zooms iOS)');
   assert.match(lineRangeBlock[0], /font-size:\s*16px/, 'line-range inputs declare the 16px floor');
 });
+
+test('annotation bodies render server-provided markdown html and fall back to plain text', async () => {
+  const dom = await bootDom({
+    body: `
+      <button type="button" data-annotations-toggle hidden></button>
+      <main>
+        <article class="content markdown" data-rendered-view>
+          <h1 id="board">Board</h1>
+          <section data-annotations-mount data-anchor-id="board" data-anchor-kind="heading"></section>
+        </article>
+        <aside data-annotations-stale hidden></aside>
+      </main>
+    `,
+    bootstrap: {
+      repo: 'docs',
+      relativePath: 'doc.md',
+      queryToken: null,
+      supportsLineRangeAnnotations: false,
+      sourceLineCount: 3,
+    },
+    fetchImpl: async () => ({
+      ok: true,
+      async json() {
+        return {
+          schema: 1,
+          file: 'docs/doc.md',
+          mtimeMs: 7,
+          annotations: [
+            {
+              id: '2026-08-05-001',
+              anchor: '#board',
+              anchorKind: 'heading',
+              body: '**bold note**',
+              bodyHtml: '<p><strong>bold note</strong></p>\n',
+              author: 'capturer',
+              createdAt: '2026-08-05T13:00:00.000Z',
+              state: 'open',
+              claimedBy: null,
+              claimedAt: null,
+              resolvedAt: null,
+              replies: [],
+            },
+            {
+              id: '2026-08-05-002',
+              anchor: '#board',
+              anchorKind: 'heading',
+              body: 'plain fallback **not rendered**',
+              author: 'capturer',
+              createdAt: '2026-08-05T13:01:00.000Z',
+              state: 'open',
+              claimedBy: null,
+              claimedAt: null,
+              resolvedAt: null,
+              replies: [],
+            },
+          ],
+        };
+      },
+    }),
+  });
+
+  const { document } = dom.window;
+  const mount = document.querySelector('[data-annotations-mount][data-anchor-id="board"]');
+  const bodies = mount.querySelectorAll('.lookie-annotation-detail .lookie-annotation-body');
+  assert.equal(bodies.length, 2);
+
+  const rich = bodies[0];
+  assert.ok(rich.classList.contains('lookie-annotation-body-rich'));
+  assert.ok(rich.querySelector('strong'));
+  assert.equal(rich.querySelector('strong').textContent, 'bold note');
+
+  const plain = bodies[1];
+  assert.ok(!plain.classList.contains('lookie-annotation-body-rich'));
+  assert.equal(plain.querySelector('strong'), null, 'no bodyHtml means no markup interpretation');
+  assert.ok(plain.textContent.includes('plain fallback **not rendered**'));
+
+  dom.window.close();
+});

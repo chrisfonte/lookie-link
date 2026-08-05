@@ -180,6 +180,19 @@
     return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
   }
 
+  function annotationBodyNode(entry) {
+    const node = el('div', { class: 'lookie-annotation-body' });
+    // bodyHtml is rendered server-side with raw HTML escaped; absence means an
+    // older server or a degraded path, so fall back to the plain body.
+    if (typeof entry.bodyHtml === 'string') {
+      node.classList.add('lookie-annotation-body-rich');
+      node.innerHTML = entry.bodyHtml;
+    } else {
+      node.textContent = entry.body;
+    }
+    return node;
+  }
+
   function renderAnnotationItem(annotation) {
     const replyCount = Array.isArray(annotation.replies) ? annotation.replies.length : 0;
     const item = el('details', {
@@ -203,7 +216,7 @@
     ));
 
     const detail = el('div', { class: 'lookie-annotation-detail' });
-    detail.appendChild(el('p', { class: 'lookie-annotation-body' }, annotation.body));
+    detail.appendChild(annotationBodyNode(annotation));
 
     if (Array.isArray(annotation.replies) && annotation.replies.length > 0) {
       const replies = el('ul', { class: 'lookie-annotation-replies' });
@@ -213,7 +226,7 @@
           { class: 'lookie-annotation-reply' },
           el('span', { class: 'lookie-annotation-author' }, reply.author || 'anonymous'),
           el('time', { datetime: reply.createdAt }, formatTimestamp(reply.createdAt)),
-          el('p', { class: 'lookie-annotation-body' }, reply.body)
+          annotationBodyNode(reply)
         ));
       }
       detail.appendChild(replies);

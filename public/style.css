@@ -2372,6 +2372,15 @@ tbody tr:last-child td {
   white-space: nowrap;
 }
 .lookie-annotation-body { white-space: pre-wrap; margin: 0.15rem 0 0.45rem; color: var(--text); }
+/* Rendered-markdown bodies: block elements own their spacing, so pre-wrap would double it. */
+.lookie-annotation-body-rich { white-space: normal; }
+.lookie-annotation-body-rich > :first-child { margin-top: 0; }
+.lookie-annotation-body-rich > :last-child { margin-bottom: 0; }
+.lookie-annotation-body-rich p { margin: 0 0 0.4rem; }
+.lookie-annotation-body-rich ul, .lookie-annotation-body-rich ol { margin: 0 0 0.4rem; padding-left: 1.25rem; }
+.lookie-annotation-body-rich code { background: var(--bg-code); padding: 0 0.25rem; border-radius: 3px; }
+.lookie-annotation-body-rich pre { background: var(--bg-code); padding: 0.45rem 0.55rem; border-radius: 4px; overflow-x: auto; }
+.lookie-annotation-body-rich blockquote { margin: 0 0 0.4rem; padding-left: 0.6rem; border-left: 2px solid var(--border); color: var(--text-soft); }
 .lookie-annotation-replies {
   margin: 0.3rem 0 0.4rem 0.4rem; padding-left: 0.6rem;
   list-style: none; border-left: 2px solid var(--border);
