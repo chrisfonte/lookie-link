@@ -65,6 +65,7 @@ const {
   renderJsonPage,
   renderEditPage,
   renderPreviewHtml,
+  renderAnnotationMarkdown,
   setThemeList,
   setNavLinks,
 } = require('./lib/renderer');
@@ -2209,8 +2210,19 @@ function createApp(options = {}) {
           ? [req.query.state]
           : [];
       const filtered = filterAnnotationsByState(result.document, states);
+      // bodyHtml is a response-only projection; the stored sidecar stays plain text.
       res.status(200).json({
         ...filtered,
+        annotations: filtered.annotations.map((annotation) => ({
+          ...annotation,
+          bodyHtml: renderAnnotationMarkdown(annotation.body),
+          replies: Array.isArray(annotation.replies)
+            ? annotation.replies.map((reply) => ({
+                ...reply,
+                bodyHtml: renderAnnotationMarkdown(reply.body),
+              }))
+            : annotation.replies,
+        })),
         mtimeMs: result.mtimeMs,
       });
     } catch (error) {

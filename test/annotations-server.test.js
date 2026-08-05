@@ -294,3 +294,55 @@ test('annotation ids stay unique past 999 same-day annotations on one file', asy
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test('annotation GET responses render markdown bodies without letting authored HTML through', async () => {
+  const root = await makeFixture();
+
+  try {
+    const created = await createAnnotation(root, 'docs', 'guide.md', {
+      anchor: '#guide',
+      anchorKind: 'heading',
+      author: 'capturer',
+      body: '**bold claim** with <script>alert(1)</script>\n- point one',
+    });
+    await updateAnnotation(root, 'docs', 'guide.md', {
+      id: created.annotation.id,
+      op: 'reply',
+      payload: { author: 'reviewer', body: 'reply with `code`' },
+      expectedMtimeMs: created.mtimeMs,
+    });
+
+    const app = createApp({
+      mappings: { docs: root },
+      annotationsEnabled: true,
+      accessConfig: {
+        humanDefault: 'restricted',
+        tokens: {
+          writer: {
+            secret: 'writer-token',
+            repos: { docs: { paths: ['*'] } },
+            permissions: { view: true, write: true },
+          },
+        },
+      },
+    });
+    const get = getRouteHandler(app, 'get');
+    const res = createMockRes();
+    await get(requestWithToken('writer-token', undefined), res);
+
+    assert.equal(res.statusCode, 200);
+    const [annotation] = res.body.annotations;
+    assert.match(annotation.bodyHtml, /<strong>bold claim<\/strong>/);
+    assert.match(annotation.bodyHtml, /<li>point one<\/li>/);
+    assert.doesNotMatch(annotation.bodyHtml, /<script>/, 'authored HTML must arrive escaped, not parsed');
+    assert.match(annotation.bodyHtml, /&lt;script&gt;/);
+    assert.match(annotation.replies[0].bodyHtml, /<code>code<\/code>/);
+    assert.equal(annotation.body, '**bold claim** with <script>alert(1)</script>\n- point one', 'plain body stays verbatim');
+
+    const sidecarPath = (await readAnnotationDocument(root, 'docs', 'guide.md')).sidecarPath;
+    const storedRaw = await fs.readFile(sidecarPath, 'utf8');
+    assert.doesNotMatch(storedRaw, /bodyHtml/, 'rendered HTML is a response projection, never stored');
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
