@@ -133,6 +133,19 @@ Behavior:
 - Agents can inspect a local HTML bundle without launching a browser by requesting `/view/<repo>/<path>.html?validate=1`. The JSON response checks stylesheet, script, image/source, and local HTML navigation references, reports missing/unsupported counts, and contains repo-relative URLs only. Reference checks enforce the caller's view scope; unreadable and absent targets use the same not-found result.
 - When raw HTML is enabled, the viewer uses the transformed `/embed` runtime for the rendered pane and exposes separate transformed and byte-preserving `/raw` actions. Both preserve authored scripts and therefore share the trusted-content requirement. `/embed` rewrites local navigation/assets, injects theme synchronization, redacts sensitive host values, and can inject the annotation client; `/raw` returns authored bytes unchanged.
 
+### Table of contents
+
+An HTML primary gets the same `☰` table-of-contents panel as markdown, pinned in the viewer's outer chrome. Because the embed iframe is sandboxed (opaque origin), the injected embed runtime enumerates the document's own headings and posts them to the viewer, which builds the panel and drives navigation. Enumeration covers heading ids (`h1`–`h4[id]`) **and** `section[id]` wrappers, so a document that anchors on `<section id="...">` rather than on the heading itself is still indexed; the injected annotate button is stripped from the labels.
+
+### Render modes
+
+An HTML primary declares how it wants to be hosted, and the default is unchanged:
+
+- **Default (no declaration):** the document is hosted in a content-height frame and the viewer page scrolls as one — the seamless reader, best for flowing documents. Viewport-relative CSS (`position: sticky`/`fixed`, `:target`, `100vh`) does not apply inside this frame; overlays use the viewer's own lightbox and the TOC above is the persistent navigation.
+- **Viewport (`<html data-lookie-render="viewport">`, or `<meta name="lookie-render" content="viewport">`):** the document is hosted in a viewport-height, internally-scrolling frame where native `position: sticky`/`fixed`, `:target` fragment scrolling, and viewport-centered lightboxes work — so a document's own sticky navigation bar pins with its authored styling. The trade-off is a scroll region inside the frame, which is why it is opt-in rather than the default.
+
+Detection reads the real root element (a fast reject then a parse), so a document that merely quotes the attribute in prose or a code sample is not switched into viewport mode. The value must be exactly `viewport`.
+
 ## Annotations
 
 When `server.enableAnnotations: true`, the document viewer adds an inline annotation layer to every rendered file.
