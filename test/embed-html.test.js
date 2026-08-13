@@ -145,6 +145,60 @@ test('embed runtime self-reports content height and gates messages on the framin
   }
 });
 
+test('declared viewport render mode swaps the embed runtime to native viewport behavior', async () => {
+  const fixture = await makeFixture();
+  try {
+    const viewportSource = '<html data-lookie-render="viewport"><body><section id="a"><h2>Alpha</h2></section></body></html>';
+    const html = transformEmbedHtml(viewportSource, options(fixture));
+    // Viewport mode must NOT stamp the kit's content-height workaround class (that
+    // disables native position:fixed lightboxes); it stamps a distinct class instead.
+    // (The dead content-height/open-image bridges remain textually but early-return,
+    // which is how the default path stays byte-for-byte identical.)
+    assert.doesNotMatch(html, /classList\.add\('lookie-embedded'\)/);
+    assert.match(html, /lookie-embedded-viewport/);
+    // The content-height and anchor-offset bridges are switched off via early return.
+    assert.match(html, /viewport mode owns its own height/);
+    assert.match(html, /native :target scrolling works/);
+    assert.match(html, /native in-frame lightbox handles image clicks/);
+    // TOC enumeration stays in both modes; active state now flows from the embed's
+    // own scroll as lookie-link:toc-active, and scroll-to-id resolves natively.
+    assert.match(html, /lookie-link:toc\b/);
+    assert.match(html, /lookie-link:toc-active/);
+    assert.match(html, /scrollIntoView/);
+
+    // Meta-tag declaration is equally valid.
+    const metaHtml = transformEmbedHtml('<head><meta name="lookie-render" content="viewport"></head><body><h2 id="x">X</h2></body>', options(fixture));
+    assert.match(metaHtml, /lookie-embedded-viewport/);
+
+    // A no-hint document keeps the default content-height runtime untouched.
+    const defaultHtml = transformEmbedHtml('<html><body><h2 id="x">X</h2></body></html>', options(fixture));
+    assert.match(defaultHtml, /classList\.add\('lookie-embedded'\)/);
+    assert.match(defaultHtml, /lookie-link:content-height/);
+    assert.doesNotMatch(defaultHtml, /lookie-link:toc-active/);
+  } finally {
+    await fsPromises.rm(fixture.fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test('renderDocumentPage marks viewport layout only when the doc declares the hint', async () => {
+  const viewportSource = '<html data-lookie-render="viewport"><body><section id="a"><h2>A</h2></section></body></html>';
+  const shared = {
+    repo: 'alpha', repoRoot: '/tmp/x', repoMappings: { alpha: '/tmp/x' },
+    relativePath: 'docs/d.html', parentHref: '/view', mtime: 'now', size: '1kb',
+    embedHtmlHref: '/embed/alpha/docs/d.html', customThemeCss: '', queryToken: null,
+  };
+  const viewportPage = renderDocumentPage({ ...shared, source: viewportSource });
+  assert.match(viewportPage, /data-render-mode="viewport"/);
+  assert.match(viewportPage, /lookie-link-viewport-mode/);
+  assert.match(viewportPage, /100dvh/);
+  assert.match(viewportPage, /lookie-link:toc-active/);
+
+  const defaultPage = renderDocumentPage({ ...shared, source: '<html><body><h2 id="a">A</h2></body></html>' });
+  assert.doesNotMatch(defaultPage, /data-render-mode="viewport"/);
+  assert.doesNotMatch(defaultPage, /lookie-link:toc-active/);
+  assert.match(defaultPage, /lookie-link:content-height/);
+});
+
 test('embed transformation leaves authored viewer-routed absolute paths untouched', async () => {
   const fixture = await makeFixture();
   try {
