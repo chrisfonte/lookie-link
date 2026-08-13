@@ -136,6 +136,9 @@ test('embed runtime self-reports content height and gates messages on the framin
     // the <section> wrapper, not the <h2>, so an h*[id]-only enumeration finds
     // nothing and the TOC comes up empty for the real corpus.
     assert.match(html, /h1\[id\],h2\[id\],h3\[id\],h4\[id\],section\[id\]/);
+    // TOC labels must strip the injected annotate button, or every entry trails a 💬
+    // on annotation-enabled instances.
+    assert.match(html, /\.anchor-link,\.lookie-annotate-btn,\[data-annotate-trigger\]/);
     assert.match(html, /lookie-link:scroll-to-id/);
   } finally {
     await fsPromises.rm(fixture.fixtureRoot, { recursive: true, force: true });
