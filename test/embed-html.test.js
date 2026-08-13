@@ -132,7 +132,10 @@ test('embed runtime self-reports content height and gates messages on the framin
     // runtime enumerates id'd headings and posts them for the outer-chrome TOC,
     // and resolves a parent-requested id back into a scroll-to offset.
     assert.match(html, /lookie-link:toc/);
-    assert.match(html, /h1\[id\],h2\[id\],h3\[id\],h4\[id\]/);
+    // section[id] must be in the selector: kit-styled pages carry the anchor id on
+    // the <section> wrapper, not the <h2>, so an h*[id]-only enumeration finds
+    // nothing and the TOC comes up empty for the real corpus.
+    assert.match(html, /h1\[id\],h2\[id\],h3\[id\],h4\[id\],section\[id\]/);
     assert.match(html, /lookie-link:scroll-to-id/);
   } finally {
     await fsPromises.rm(fixture.fixtureRoot, { recursive: true, force: true });
