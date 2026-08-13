@@ -128,6 +128,15 @@ test('embed runtime self-reports content height and gates messages on the framin
     assert.match(html, /lookie-link:open-image/);
     assert.match(html, /lookie-link:close-image/);
     assert.match(html, /photo-lightbox/);
+    // The parent cannot read headings across the opaque-origin sandbox, so the
+    // runtime enumerates id'd headings and posts them for the outer-chrome TOC,
+    // and resolves a parent-requested id back into a scroll-to offset.
+    assert.match(html, /lookie-link:toc/);
+    // section[id] must be in the selector: kit-styled pages carry the anchor id on
+    // the <section> wrapper, not the <h2>, so an h*[id]-only enumeration finds
+    // nothing and the TOC comes up empty for the real corpus.
+    assert.match(html, /h1\[id\],h2\[id\],h3\[id\],h4\[id\],section\[id\]/);
+    assert.match(html, /lookie-link:scroll-to-id/);
   } finally {
     await fsPromises.rm(fixture.fixtureRoot, { recursive: true, force: true });
   }
@@ -324,6 +333,14 @@ test('document viewer frames HTML through embed while retaining a distinct raw-s
   assert.match(html, /lookie-link:close-image/);
   assert.doesNotMatch(html, /<iframe[\s\S]*src="\/raw\/alpha\/docs\/page\.html"/);
   assert.doesNotMatch(html, /lookie-link-annotations-bootstrap/);
+  // The embed is a content-height iframe, so the only nav that can stay pinned is
+  // the outer-chrome TOC. The embedded toolbar must carry the toc panel, and the
+  // bridge must build it from the embed's 'lookie-link:toc' post and drive scroll
+  // by asking the embed to resolve an id ('lookie-link:scroll-to-id').
+  assert.match(html, /<nav class="toc-list" data-toc-list/);
+  assert.match(html, /data-toc-menu/);
+  assert.match(html, /event\.data\.type === 'lookie-link:toc'/);
+  assert.match(html, /lookie-link:scroll-to-id/);
 });
 
 test('embed theme tokens track the mode, not just color-scheme', async () => {
