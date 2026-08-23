@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased — Codex desktop theme
+
+- Added Codex as an eleventh built-in theme, with dark and light variants based
+  on observed Codex desktop UI tokens and current first-party product imagery.
+- Kept the document surface matte and neutral and used the app's blue
+  interaction language for controls. A side-by-side Linux reference confirmed
+  that the working shell should stay flat rather than borrow the more vivid
+  periwinkle treatment from marketing imagery.
+- Reserved `codex` from custom-theme overrides and included the palette in
+  authored HTML's theme-follow bridge.
+- Added contract tests for the registry, CSS tokens, toolbar label, embedded
+  palette, accessible foreground contrast, and malformed-scheme fallback.
+
 ## Unreleased — Embed namespace isolation (#354)
 
 - **Regression fix for #352.** Making the embed scheme-aware injected the viewer's scheme blocks verbatim, and those blocks declare *unprefixed* custom properties (`--bg`, `--text`, `--accent`, `--link`, `--border`, …) on `:root` of the authored document. A scheme selector like `:root[data-color-scheme="solarized"][data-theme="light"]` has specificity (0,3,0) and beats a page setting its own tokens on `[data-lookie-follow-theme]` (0,1,0) — so authored variables were silently overridden. Observed on a kit-styled document: the page asked for `--accent: var(--lookie-link)` (`#268bd2`) and resolved to the scheme's `--accent` (`#2aa198`). The Ops HTML Kit uses `--accent` throughout, so every kit-styled document was affected.

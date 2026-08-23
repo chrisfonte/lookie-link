@@ -393,6 +393,46 @@ html { scroll-behavior: smooth; }
   --toc-active-bg: rgba(109, 40, 217, 0.15);
 }
 
+/* ─── Codex theme dark — observed Codex app shell ─── */
+:root[data-color-scheme="codex"] {
+  color-scheme: dark;
+  --bg: #181818;
+  --bg-elev: #212121;
+  --bg-code: #131313;
+  --text: #dfdfdf;
+  --text-soft: #afafaf;
+  --accent: #339cff;
+  --border: #303030;
+  --link: #8db5ff;
+  --page-bg: #181818;
+  --toolbar-bg: rgba(33, 33, 33, 0.94);
+  --toolbar-btn-bg: #282828;
+  --toolbar-btn-hover: #303030;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(51, 156, 255, 0.16);
+  --heading-font: 'OpenAI Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+/* ─── Codex theme light ─── */
+:root[data-color-scheme="codex"][data-theme="light"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-elev: #f9f9f9;
+  --bg-code: #f3f3f3;
+  --text: #1a1c1f;
+  --text-soft: #5d5d5d;
+  --accent: #0067c0;
+  --border: #dfdfdf;
+  --link: #005fb8;
+  --page-bg: #f9f9f9;
+  --toolbar-bg: rgba(255, 255, 255, 0.94);
+  --toolbar-btn-bg: #f3f3f3;
+  --toolbar-btn-hover: #ededed;
+  --toolbar-btn-text: var(--text);
+  --toc-active-bg: rgba(0, 103, 192, 0.12);
+  --heading-font: 'OpenAI Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -2553,6 +2593,7 @@ tbody tr:last-child td {
 :root[data-color-scheme="ember"] [data-theme-name="ember"] { display: inline; }
 :root[data-color-scheme="noir"] [data-theme-name="noir"] { display: inline; }
 :root[data-color-scheme="indigo"] [data-theme-name="indigo"] { display: inline; }
+:root[data-color-scheme="codex"] [data-theme-name="codex"] { display: inline; }
 
 /* Nothing matched -- an unknown or not-yet-applied scheme still needs a label. */
 :root:not([data-color-scheme]) [data-theme-name="slate"] {
@@ -2569,7 +2610,7 @@ tbody tr:last-child td {
   z-index: 40;
   min-width: 11rem;
   max-width: min(22rem, calc(100vw - 1.6rem));
-  max-height: min(72vh, 32rem);
+  max-height: min(72vh, 36rem);
   overflow-y: auto;
   display: flex;
   flex-direction: column;

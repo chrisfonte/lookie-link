@@ -113,6 +113,12 @@ publish:
 
 ## Custom themes
 
+Lookie-Link ships with Slate, Teal, Nord, Rose Pine, Monokai, Solarized,
+GitHub, Ember, Noir, Indigo, and Codex. The Codex theme is a research-based
+interpretation of the Codex desktop app's neutral shell and blue interaction
+accent. It intentionally follows the flat working interface—not the more vivid
+marketing imagery—and does not bundle or copy proprietary Codex artwork.
+
 ```yaml
 themes:
   midnight:

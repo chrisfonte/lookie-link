@@ -190,7 +190,7 @@ Caller discovery reports only capabilities and endpoint templates available unde
 
 ## Themes
 
-10 built-in color themes, each with dark and light variants:
+11 built-in color themes, each with dark and light variants:
 
 - **Slate** — cool grey editorial (default)
 - **Teal** — deep teal accents
@@ -202,6 +202,7 @@ Caller discovery reports only capabilities and endpoint templates available unde
 - **Ember** — warm amber/orange
 - **Noir** — high-contrast monochrome
 - **Indigo** — deep navy/violet
+- **Codex** — matte neutral app chrome with blue interaction accents, designed to blend into the Codex desktop browser pane
 
 Select a theme from the toolbar dropdown. Toggle dark/light mode with the sun/moon button. Preferences persist via localStorage.
 
