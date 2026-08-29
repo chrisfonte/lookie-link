@@ -16,6 +16,9 @@ This repository is public. Treat every tracked file as publishable.
   the engine. Do not link public navigation to a private repository.
 - `docs/CAPABILITIES.md` is the authoritative implemented route, authorization,
   configuration, CLI, discovery, and library inventory.
+- Commit messages and branch names must not contain internal ticket IDs (e.g.
+  `FON-*`) or internal planning-doc names; reference issues generically or via
+  public issue numbers only.
 
 ## Verification
 

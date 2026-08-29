@@ -35,10 +35,10 @@ repositories:
 #     docs_reader:
 #       secretEnv: LOOKIE_TOKEN_DOCS_READER
 #       subject:
-#         companyId: fontastic
+#         companyId: acme-co
 #         agentIds: [agent-bob]
 #       issuer:
-#         system: paperclip
+#         system: tracker
 #         issueId: ACME-1234
 #       audit:
 #         grantId: static-phase1-docs-reader
@@ -73,7 +73,7 @@ repositories:
 #     repoRoots:
 #       docs: /srv/lookie-link/repos/docs
 #     adminTokens:
-#       paperclip:
+#       tracker:
 #         secretEnv: LOOKIE_LINK_GRANT_ADMIN_TOKEN
 
 # Optional mutable managed repositories. Every allow-root must already exist;

@@ -70,6 +70,7 @@ Read requests may use a bearer header or query token so browser links can remain
 - [Configuration](docs/CONFIGURATION.md) — setup and security guidance
 - [API](docs/API.md) — payload and workflow details
 - [Features](docs/FEATURES.md) — rendering and viewer behavior
+- [Trackers](docs/TRACKERS.md) — the structured-forms platform
 - [Agent access control](docs/AGENT-ACCESS-CONTROL.md) — current authorization model
 - [Publishing](docs/PUBLISHING.md) — immutable artifact contract
 - [Annotations](docs/ANNOTATIONS-SPEC.md) — implemented sidecar contract

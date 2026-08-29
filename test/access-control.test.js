@@ -582,7 +582,7 @@ test('bearer auth is preferred for agent flows and preserves token metadata for 
             agentIds: ['agent-cli-1'],
           },
           issuer: {
-            system: 'paperclip',
+            system: 'tracker',
             issueId: 'ACME-3671',
           },
           audit: {
@@ -610,7 +610,7 @@ test('bearer auth is preferred for agent flows and preserves token metadata for 
             agentIds: ['agent-cli-1'],
           },
           issuer: {
-            system: 'paperclip',
+            system: 'tracker',
             issueId: 'ACME-3671',
           },
           audit: {
@@ -636,7 +636,7 @@ test('bearer auth is preferred for agent flows and preserves token metadata for 
       agentIds: ['agent-cli-1'],
     });
     assert.deepEqual(accessContext.issuer, {
-      system: 'paperclip',
+      system: 'tracker',
       issueId: 'ACME-3671',
     });
     assert.deepEqual(accessContext.audit, {
@@ -685,7 +685,7 @@ test('managed grant API creates issue-linked grants and enforces grant tokens', 
         },
         repoRoots: fixture.mappings,
         adminTokens: {
-          paperclip: {
+          tracker: {
             secretEnv: 'LOOKIE_TEST_GRANT_ADMIN_TOKEN',
           },
         },
@@ -856,7 +856,7 @@ test('managed grant API rejects issue-linked creates and renewals without explic
         },
         repoRoots: fixture.mappings,
         adminTokens: {
-          paperclip: {
+          tracker: {
             secretEnv: 'LOOKIE_TEST_GRANT_ADMIN_TOKEN',
           },
         },
@@ -977,7 +977,7 @@ test('managed grant expiry emits a linked issue comment helper in audit events',
         },
         repoRoots: fixture.mappings,
         adminTokens: {
-          paperclip: {
+          tracker: {
             secretEnv: 'LOOKIE_TEST_GRANT_ADMIN_TOKEN',
           },
         },
