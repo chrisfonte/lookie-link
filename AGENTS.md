@@ -1,8 +1,17 @@
 # Lookie-Link Public Code Repository
 
-This repository is public. Treat every tracked file as publishable.
+> Single orientation document for all AI assistants and contributors in this repo.
+> `CLAUDE.md` is a one-line pointer at this file; do not grow a second orientation doc.
 
-## Scope
+## What this is
+
+Lookie-Link is a private-network web viewer for configured local directories. It renders documents and media, supports caller-scoped access, and optionally enables editing, annotations, managed repositories, and immutable publishing.
+
+The authoritative route, authorization, configuration, CLI, discovery, and library inventory is [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md). Do not create another endpoint list or document forms, templates, or submissions as implemented.
+
+## Boundary
+
+This repository is public. Treat every tracked file as publishable.
 
 - Keep runtime source, tests, scripts, examples, license and package metadata,
   generated skill packages, changelog history, and implemented contributor,
@@ -19,6 +28,34 @@ This repository is public. Treat every tracked file as publishable.
 - Commit messages and branch names must not contain internal ticket IDs (e.g.
   `FON-*`) or internal planning-doc names; reference issues generically or via
   public issue numbers only.
+
+## Commands
+
+- `npm test` — Node test suite, including the discovery-to-documentation matrix check
+- `npm run validate:raw-html` — raw/transformed HTML regression checks
+- `npm run validate:editable` — editor, annotation, and compatibility CLI regression checks
+- `npm run check:skill-packages` — verify generated skill packages match `docs/SKILL-SPEC.md`
+- `npm start` — start the server from resolved YAML/environment configuration
+
+## Architecture
+
+- `server.js` registers every HTTP route and applies runtime flags, resolved caller access, store availability, safe path resolution, and response behavior.
+- `lib/config.js` reads server, repositories, access, managed-repository, publishing, and theme configuration.
+- `lib/access-control.js`, `lib/api-key-store.js`, and `lib/grant-store.js` resolve static tokens, managed API keys, and managed grants into the same permission/scope model.
+- `lib/managed-repo-store.js`, `lib/managed-repo-search.js`, `lib/publish-store.js`, and `lib/annotations.js` implement the mutable stores and sidecars.
+- `lib/agent-discovery.js` derives caller-visible capabilities and endpoint templates from actual registered routes.
+- `lib/renderer.js` and `lib/embed-html.js` implement sanitized viewers and the opt-in transformed HTML runtime.
+- `bin/lookie.js` is the unified CLI. `bin/lookie-read.js` and `bin/lookie-annotations.js` remain compatibility executables.
+
+## Safety invariants
+
+- Resolve user paths with `safeResolve`; managed and published stores add realpath/symlink checks.
+- Treat `write` as the canonical mutation permission; `edit` is only a legacy credential alias.
+- Reject query credentials on every mutation. Prefer bearer headers for all agent calls.
+- Editing, annotations, and raw HTML are independent opt-in flags and default off.
+- `/raw` serves trusted authored HTML verbatim on the application origin. Enable it only where every served HTML file is trusted.
+- Never expose repository roots, store paths, credentials, token names, or private publish metadata in browser/API/discovery output.
+- Preserve immutable publish revisions and optimistic concurrency guards for source and managed-file writes.
 
 ## Verification
 

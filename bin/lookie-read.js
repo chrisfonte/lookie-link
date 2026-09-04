@@ -262,7 +262,7 @@ async function main() {
   if (opts.positional.length === 1) {
     const parsed = splitRepoPath(opts.positional[0]);
     if (!parsed || !parsed.repo || !parsed.relativePath) {
-      die(EXIT_USAGE, 'argument must be <repo>/<path> (e.g. operations/README.md)');
+      die(EXIT_USAGE, 'argument must be <repo>/<path> (e.g. docs/README.md)');
     }
     repo = parsed.repo;
     relativePath = parsed.relativePath;
