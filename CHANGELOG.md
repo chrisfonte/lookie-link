@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — Dependency declaration baseline
+
+- Added `SECURITY.md` with the project's reporting posture, supported-version
+  policy, and runtime security boundaries.
+
 ## Unreleased — Codex desktop theme
 
 - Added Codex as an eleventh built-in theme, with dark and light variants based
