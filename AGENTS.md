@@ -9,6 +9,8 @@ Lookie-Link is a private-network web viewer for configured local directories. It
 
 The authoritative route, authorization, configuration, CLI, discovery, and library inventory is [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md). Do not create another endpoint list or document forms, templates, or submissions as implemented.
 
+Before building, read the house standards router — the Tier-0 `AGENTS.md` in the maintainer's operations workspace — and its Rules Card. The Boundary below keeps that workspace's paths out of this repository; resolve them from the router itself, and never link public navigation or documentation to them.
+
 ## Boundary
 
 This repository is public. Treat every tracked file as publishable.
@@ -28,6 +30,12 @@ This repository is public. Treat every tracked file as publishable.
 - Commit messages and branch names must not contain internal ticket IDs (e.g.
   `FON-*`) or internal planning-doc names; reference issues generically or via
   public issue numbers only.
+
+## Standards this project inherits (read before building)
+
+House standards bind this project but live outside it, in the maintainer's operations workspace; the Boundary above keeps their paths out of this repository. Cite them rather than re-deriving rules — the Rules Card in the Tier-0 router resolves each keyword below.
+
+- **Ending a review / is ACCEPT final / another round? / findings vs blockers** → the Rules Card entry of that name, resolving to the Adversarial Review Protocol §46.7. An ACCEPT with zero open findings from one independent non-author reviewer is terminal; only blocking findings withhold release; two-round cap.
 
 ## Commands
 

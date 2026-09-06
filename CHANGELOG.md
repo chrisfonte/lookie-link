@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — House standards routing
+
+- AGENTS.md now points at the house standards router and the review-termination doctrine (§46.7 — terminal ACCEPT, findings versus blockers, two-round cap) rather than leaving each lane to improvise its own review procedure.
+
 ## Unreleased — Dependency declaration baseline
 
 - Added `SECURITY.md` with the project's reporting posture, supported-version
