@@ -2785,7 +2785,12 @@ function startServer() {
     slug,
     label: slug.split('-').map((w) => w[0].toUpperCase() + w.slice(1)).join(' '),
   }));
-  const allThemes = [...builtInThemes, ...customThemes.map((t) => ({ slug: t.slug, label: t.label }))];
+  // Aliases (#389) ride along on the canonical entry so the toolbar can reveal
+  // their label too; they are never listed as separate picker entries.
+  const allThemes = [
+    ...builtInThemes,
+    ...customThemes.map((t) => ({ slug: t.slug, label: t.label, aliases: t.aliases || [] })),
+  ];
   setThemeList(allThemes);
 
   const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss, accessConfig, managedReposConfig, formsConfig });
