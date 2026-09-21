@@ -136,6 +136,14 @@ themes:
 
 Theme variants may set any key listed in the [configuration inventory](CAPABILITIES.md#configuration-key-inventory). Underscores map to CSS custom-property hyphens. A custom name that normalizes to a built-in theme name is skipped.
 
+**Behavior change (aliases, #389).** Two custom themes that normalize to the
+same slug — or a theme and an alias claiming the same slug, including across
+different theme entries — used to both load: both emitted CSS, and whichever
+block came later in the file won in the cascade. Slugs are now tracked as
+they are claimed across the whole pass, so the later entry is skipped
+entirely, with a warning naming the theme (or theme and alias) and the
+colliding slug. Only the first claim survives.
+
 ### Aliases
 
 A custom theme may also declare `aliases:` — additional names that render the
