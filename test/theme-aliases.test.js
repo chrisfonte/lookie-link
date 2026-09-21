@@ -239,10 +239,241 @@ test('a page-level theme equal to an alias (a template presentation.theme) resol
   // global preference, so it renders literally via the alias's own CSS
   // block rather than being rewritten.
   assert.equal(window.document.documentElement.getAttribute('data-color-scheme'), 'old-harbor');
+  // The picker highlight still canonicalizes for the aria-current comparison,
+  // even though the attribute itself is left as the alias.
+  const canonicalItem = window.document.querySelector('[data-theme-item][value="harbor-night"]');
+  assert.equal(canonicalItem.getAttribute('aria-current'), 'true');
 
   const { generateCustomThemeCss } = require('../lib/config');
   const css = generateCustomThemeCss([
     { slug: 'harbor-night', label: 'Harbor Night', aliases: ['old-harbor'], dark: { bg: '#0a0a1a', text: '#d8d8ff' }, light: {} },
   ]);
   assert.match(css, /:root\[data-color-scheme="old-harbor"\] \{/);
+});
+
+// --- Builder saves and Properties reporting: alias == installed (#389) ---
+
+const http = require('node:http');
+const { Duplex } = require('node:stream');
+
+const ORIGIN = 'http://forms.example.test';
+
+// Earlier tests in this file (and other test files run in the same process)
+// require '../lib/renderer', mutate its module-level theme-list singleton via
+// setThemeList, then leave require.cache pointing at whichever instance they
+// last touched. '../server' (and the routes it wires up) binds its own
+// reference to '../lib/renderer' the first time it is required, in THIS
+// process -- so a plain require('../lib/renderer') here can silently resolve
+// to a different singleton than the one routes.js reads from. Force a fresh,
+// consistent module graph for every test below so setThemeList always reaches
+// the same instance the app under test actually queries.
+function freshServerModules() {
+  for (const id of ['../lib/renderer', '../server', '../lib/forms/routes']) {
+    delete require.cache[require.resolve(id)];
+  }
+  // eslint-disable-next-line global-require
+  const renderer = require('../lib/renderer');
+  // eslint-disable-next-line global-require
+  const { createApp } = require('../server');
+  return { setThemeList: renderer.setThemeList, createApp };
+}
+
+const { TemplateRegistry } = require('../lib/forms/template-registry');
+
+function inject(app, route, init = {}) {
+  return new Promise((resolve, reject) => {
+    const socket = new Duplex({ read() {}, write(_chunk, _encoding, callback) { callback(); } });
+    socket.remoteAddress = '127.0.0.1';
+    const request = new http.IncomingMessage(socket);
+    request.method = init.method || 'GET';
+    request.url = route;
+    request.headers = { host: 'forms.example.test' };
+    for (const [name, value] of Object.entries(init.headers || {})) request.headers[name.toLowerCase()] = value;
+    const body = init.body === undefined ? Buffer.alloc(0) : Buffer.from(String(init.body));
+    if (body.length && request.headers['content-length'] === undefined) request.headers['content-length'] = String(body.length);
+    const response = new http.ServerResponse(request);
+    response.assignSocket(socket);
+    const chunks = [];
+    response.write = (chunk, encoding) => {
+      if (chunk !== undefined && chunk !== null) chunks.push(Buffer.from(chunk, encoding));
+      return true;
+    };
+    response.end = (chunk, encoding) => {
+      if (chunk !== undefined && chunk !== null) chunks.push(Buffer.from(chunk, encoding));
+      response.finished = true;
+      response.emit('finish');
+      return response;
+    };
+    response.on('finish', () => {
+      const headers = response.getHeaders();
+      resolve({
+        status: response.statusCode,
+        headers: { get(name) {
+          const value = headers[String(name).toLowerCase()];
+          return Array.isArray(value) ? value.join(', ') : value ?? null;
+        } },
+        text: async () => Buffer.concat(chunks).toString('utf8'),
+      });
+    });
+    response.on('error', reject);
+    request.push(body);
+    request.push(null);
+    app.handle(request, response, reject);
+  });
+}
+
+function documentFor(html) {
+  return new JSDOM(html).window.document;
+}
+
+async function browserPage(response) {
+  const html = await response.text();
+  return {
+    html,
+    document: documentFor(html),
+    cookie: response.headers.get('set-cookie') && response.headers.get('set-cookie').split(';', 1)[0],
+  };
+}
+
+function browserPost(server, route, body, cookie, headers = {}) {
+  return server.request(route, {
+    method: 'POST',
+    headers: {
+      Origin: ORIGIN,
+      Cookie: cookie,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      ...headers,
+    },
+    body: body.toString(),
+  });
+}
+
+function formValues(form, action) {
+  const values = new URLSearchParams();
+  for (const control of form.querySelectorAll('input, select, textarea')) {
+    if (!control.name || control.disabled || (control.type === 'checkbox' && !control.checked)) continue;
+    values.append(control.name, control.value);
+  }
+  if (action) values.set('_action', action);
+  return values;
+}
+
+async function makeAliasServer(createApp) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lookie-theme-alias-server-'));
+  const templatesPath = path.join(root, 'templates');
+  const defaultRoot = path.join(root, 'default');
+  fs.mkdirSync(templatesPath, { recursive: true });
+  const registry = new TemplateRegistry({
+    templatesPath,
+    destinationIds: ['default'],
+    clock: () => new Date('2026-09-21T12:00:00.000Z'),
+    logger: { warn() {} },
+  });
+  await registry.createDraft({
+    contractVersion: 1,
+    resourceKind: 'form-template',
+    templateId: 'training-log',
+    ownerId: 'operator',
+    revision: 1,
+    grammarVersion: 1,
+    destinationId: 'default',
+    title: 'Training log',
+    fields: [{ id: 'notes', type: 'long-text', label: 'Notes', required: true }],
+  });
+  const app = createApp({
+    mappings: {},
+    formsConfig: { enabled: true, templatesPath, destinations: { default: defaultRoot } },
+    formsRegistry: registry,
+    formsPublicOrigin: ORIGIN,
+    formsAudit: () => {},
+    formsAuthorize: () => true,
+  });
+  return {
+    registry,
+    request: (route, init) => inject(app, route, init),
+    close: () => fs.rmSync(root, { recursive: true, force: true }),
+  };
+}
+
+test('a builder save whose theme is an alias validates (container and template forms)', async () => {
+  const { setThemeList, createApp } = freshServerModules();
+  setThemeList([
+    { slug: 'slate', label: 'Slate' },
+    { slug: 'harbor-night', label: 'Harbor Night', aliases: ['old-harbor'] },
+  ]);
+  const server = await makeAliasServer(createApp);
+  try {
+    const configure = await browserPage(await server.request('/forms/training-log/configure'));
+    const values = formValues(configure.document.querySelector('.builder-form'), 'save');
+    values.set('theme', 'old-harbor');
+    const saved = await browserPost(server, '/forms/training-log/configure', values, configure.cookie);
+    assert.equal(saved.status, 200, 'a save whose theme is an alias is accepted, not refused');
+    const after = await server.registry.getManagementTemplate('training-log');
+    assert.equal(after.draft.presentation.theme, 'old-harbor', 'the alias is stored as given -- never rewritten to the canonical slug');
+
+    // Same alias, through the container ("Group") builder body -- a distinct
+    // validator (validContainerBuilderBody) with its own theme gate.
+    await server.registry.createDraft({
+      contractVersion: 1, resourceKind: 'form-template', templateId: 'fitness',
+      ownerId: 'operator', revision: 1, grammarVersion: 1, title: 'Fitness', kind: 'container',
+    });
+    const containerConfigure = await browserPage(await server.request('/forms/fitness/configure'));
+    const containerToken = (containerConfigure.html.match(/name="_csrf" value="([^"]+)"/) || [])[1];
+    const containerValues = new URLSearchParams({
+      _csrf: containerToken, _action: 'basics', revision: '1',
+      title: 'Fitness', theme: 'old-harbor', themeMode: '',
+    });
+    const containerSaved = await browserPost(server, '/forms/fitness/configure', containerValues, containerConfigure.cookie);
+    assert.equal(containerSaved.status, 303, 'a container save whose theme is an alias is accepted, not refused');
+    const fitness = await server.registry.getManagementTemplate('fitness');
+    assert.equal(fitness.draft.presentation.theme, 'old-harbor');
+  } finally {
+    setThemeList(null);
+    await server.close();
+  }
+});
+
+test('an unknown slug is still rejected by the builder validators (negative)', async () => {
+  const { setThemeList, createApp } = freshServerModules();
+  setThemeList([
+    { slug: 'slate', label: 'Slate' },
+    { slug: 'harbor-night', label: 'Harbor Night', aliases: ['old-harbor'] },
+  ]);
+  const server = await makeAliasServer(createApp);
+  try {
+    const configure = await browserPage(await server.request('/forms/training-log/configure'));
+    const values = formValues(configure.document.querySelector('.builder-form'), 'save');
+    values.set('theme', 'not-a-real-theme');
+    const refused = await browserPost(server, '/forms/training-log/configure', values, configure.cookie);
+    assert.equal(refused.status, 400);
+    const unchanged = await server.registry.getManagementTemplate('training-log');
+    assert.notEqual(unchanged.draft.presentation && unchanged.draft.presentation.theme, 'not-a-real-theme');
+  } finally {
+    setThemeList(null);
+    await server.close();
+  }
+});
+
+test('formProperties reports the theme for a template whose stored value is an alias', async () => {
+  const { setThemeList, createApp } = freshServerModules();
+  setThemeList([
+    { slug: 'slate', label: 'Slate' },
+    { slug: 'harbor-night', label: 'Harbor Night', aliases: ['old-harbor'] },
+  ]);
+  const server = await makeAliasServer(createApp);
+  try {
+    const before = await server.registry.getManagementTemplate('training-log');
+    await server.registry.reviseDraft('training-log', before.draft.revision, {
+      presentation: { theme: 'old-harbor' },
+    });
+    const page = await browserPage(await server.request('/forms/training-log'));
+    const text = page.document.querySelector('.toolbar-properties').textContent;
+    // The stored value is the (pre-rename) alias; Properties reports it as
+    // installed via the theme's canonical label, since "old-harbor" itself
+    // names nothing an author would recognize from the current picker.
+    assert.match(text, /Harbor Night/, 'an aliased value is reported as installed, by its canonical label');
+  } finally {
+    setThemeList(null);
+    await server.close();
+  }
 });
