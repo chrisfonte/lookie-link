@@ -136,6 +136,50 @@ themes:
 
 Theme variants may set any key listed in the [configuration inventory](CAPABILITIES.md#configuration-key-inventory). Underscores map to CSS custom-property hyphens. A custom name that normalizes to a built-in theme name is skipped.
 
+### Aliases
+
+A custom theme may also declare `aliases:` — additional names that render the
+same theme:
+
+```yaml
+themes:
+  harbor-night:
+    aliases: [old-harbor]
+    dark:
+      bg: "#0a0a1a"
+      text: "#d8d8ff"
+    light:
+      bg: "#f5f5ff"
+      text: "#202044"
+```
+
+An alias must match `/^[a-z0-9-]+$/` and must not collide with a built-in
+theme, another custom theme's slug, or another theme's alias (or repeat
+within the same list) — a violating alias is skipped with a warning naming
+the theme and the alias, and the theme itself is kept. The picker only ever
+lists the theme once, under its canonical slug; a form template's
+`presentation.theme` set to an alias resolves to the theme exactly like the
+slug would. An unknown slug (neither a theme nor an alias) still fails open
+to the default theme, unchanged.
+
+**Renaming a theme.** To rename `harbor-night` to `harbor`, add the old
+name as an alias of the new one rather than deleting it outright:
+
+```yaml
+themes:
+  harbor:
+    aliases: [harbor-night]
+    dark: { ... }
+    light: { ... }
+```
+
+Anyone whose saved picker choice was `harbor-night` still renders the theme
+and, on their next visit, sees the picker re-select the new `harbor` entry —
+their stored preference is rewritten to the canonical slug automatically.
+Templates that still reference `presentation.theme: harbor-night` keep
+rendering correctly too, so the rename is a config-only, zero-downtime
+change. Drop the alias later once nothing references the old name anymore.
+
 ## Server environment variables
 
 | Variable | Purpose |
