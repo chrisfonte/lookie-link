@@ -67,6 +67,7 @@ const {
   renderPreviewHtml,
   renderAnnotationMarkdown,
   setThemeList,
+  getThemeList,
   setNavLinks,
 } = require('./lib/renderer');
 const {
@@ -1420,6 +1421,7 @@ function createApp(options = {}) {
     accessContext: resolveAccessContext(req),
     mappings,
     version: LOOKIE_LINK_VERSION,
+    themes: getThemeList(),
     baseUrl: inferBaseUrl(req),
     editingEnabled,
     annotationsEnabled,
