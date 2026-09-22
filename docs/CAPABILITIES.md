@@ -159,7 +159,7 @@ Neither response includes credentials, token names, repository roots, store path
 | `themes.<name>.dark` / `.light` | Custom CSS-variable maps. Accepted keys: `bg`, `bg_elev`, `bg_code`, `text`, `text_soft`, `accent`, `border`, `link`, `page_bg`, `toolbar_bg`, `toolbar_btn_bg`, `toolbar_btn_hover`, `toolbar_btn_text`, `toc_active_bg`, `heading_font` |
 | `themes.<name>.aliases[]` | Additional names that render the same theme; never listed separately in the picker. See [CONFIGURATION.md](CONFIGURATION.md#aliases) |
 
-Configuration file lookup is `LOOKIE_LINK_CONFIG`, then the user config directory, then the project root. The recognized server environment variables are `LOOKIE_LINK_CONFIG`, `ROOT_MAPPINGS`, `PORT`, `HOSTNAME`, `LOOKIE_LINK_ENABLE_EDITING`, `LOOKIE_LINK_ENABLE_ANNOTATIONS`, and `LOOKIE_LINK_ENABLE_RAW_HTML`. Secret environment-variable names are chosen by each `secretEnv` value.
+Configuration file lookup is `LOOKIE_LINK_CONFIG`, then the reader config directory, then the project root. The recognized server environment variables are `LOOKIE_LINK_CONFIG`, `ROOT_MAPPINGS`, `PORT`, `HOSTNAME`, `LOOKIE_LINK_ENABLE_EDITING`, `LOOKIE_LINK_ENABLE_ANNOTATIONS`, and `LOOKIE_LINK_ENABLE_RAW_HTML`. Secret environment-variable names are chosen by each `secretEnv` value.
 
 ## Unified CLI inventory
 
@@ -240,3 +240,46 @@ list reads use the same template destination, and no client response or audit
 event includes storage paths.
 
 Dynamic option providers, sessions, and reaction dispatch are **not** implemented.
+
+
+## Embedded wallpaper controls
+
+An embedded HTML document can opt into a Wallpaper menu in the viewer's floating
+toolbar, next to its theme picker and light/dark button. The menu controls that
+document only. Ordinary documents do not show it. The sandbox remains unchanged;
+the bridge accepts cosmetic state only, with no HTML, URLs or executable actions.
+
+The document posts to its parent:
+
+```js
+window.parent.postMessage({
+  type: 'lookie-link:wallpaper-state',
+  choices: [{id: 'forest', label: 'Forest'}, {id: 'lake', label: 'Lake'}],
+  choice: 'forest',
+  opacity: 80,
+  blur: 0
+}, '*');
+```
+
+The viewer accepts messages only from its embedded window. A catalog has 1–50
+unique IDs matching `^[a-z0-9][a-z0-9-]{0,63}$`; `none` is reserved.
+Labels are nonblank strings of at most 80 characters and render as text.
+The selected choice is a catalog ID or `none`. Opacity is an integer from
+50–100; blur is an integer from 0–16. Invalid states are ignored.
+
+The document listens for messages from `window.parent` only:
+
+| Message type | Document behavior |
+| --- | --- |
+| `lookie-link:request-wallpaper-state` | Report current state, including after frame load |
+| `lookie-link:wallpaper-toolbar-ready` | Hide any duplicate in-document controls; do not echo another state just for this acknowledgement |
+| `lookie-link:set-wallpaper` | Validate and apply `choice`, `opacity`, and `blur`; report the resulting state |
+| `lookie-link:reset-wallpaper` | Restore document wallpaper defaults and report state |
+| `lookie-link:set-theme` | Follow the existing viewer `mode` and `scheme` synchronization |
+
+Report initial state when the document starts as well as when settings change.
+The menu supplies previous/next with wrapping, no background, opacity, blur and
+reset. Documents own image rendering and defaults. They can keep standalone
+controls until the viewer acknowledges the toolbar. The bridge does not save
+wallpaper preferences or add a server wallpaper catalog. `'*'` is required for
+the opaque sandbox origin; payloads must contain only the cosmetic values above.
