@@ -261,10 +261,10 @@ window.parent.postMessage({
 }, '*');
 ```
 
-The viewer accepts messages only from its embedded window. A catalog has 1–50
+The viewer accepts messages only from its embedded window. A catalog has 0–50
 unique IDs matching `^[a-z0-9][a-z0-9-]{0,63}$`; `none` is reserved.
 Labels are nonblank strings of at most 80 characters and render as text.
-The selected choice is a catalog ID or `none`. Opacity is an integer from
+The selected choice is a catalog ID or `none`. An empty catalog requires `none`, clears old choices and disables previous/next. Opacity is an integer from
 50–100; blur is an integer from 0–16. Invalid states are ignored.
 
 The document listens for messages from `window.parent` only:

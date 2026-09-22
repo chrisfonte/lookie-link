@@ -64,3 +64,19 @@ test('wallpaper toolbar cycles, sends numeric controls, and clears on navigation
     assert.equal(t.sent.at(-1).type,'lookie-link:request-wallpaper-state');
   } finally { t.dom.window.close(); }
 });
+
+
+test('empty theme catalogs clear prior choices and disable cycling', () => {
+  const t=setup();
+  try {
+    t.post(t.valid);
+    t.post({...t.valid,choices:[],choice:'none'});
+    assert.equal(t.menu.querySelectorAll('option').length,1);
+    assert.equal(t.menu.querySelector('select').value,'none');
+    assert.equal(t.menu.querySelector('[data-wallpaper-next]').disabled,true);
+    assert.equal(t.menu.querySelector('[data-wallpaper-previous]').disabled,true);
+    t.post(t.valid);
+    assert.equal(t.menu.querySelectorAll('option').length,3);
+    assert.equal(t.menu.querySelector('[data-wallpaper-next]').disabled,false);
+  } finally { t.dom.window.close(); }
+});
