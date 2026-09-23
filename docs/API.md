@@ -128,7 +128,7 @@ Registration is an administrative operation constrained to configured existing a
 - Deletes are soft by default and return a `trashId`; `?hard=1` deletes immediately.
 - Restore and permanent-trash deletion re-check `write` on the original path.
 - Tree and change responses are bounded and caller-filtered (the generic `/api/repos/:repo/...` routes above give the same for mapped repos). `changes?since=` expects epoch **milliseconds** (compared against file `mtimeMs`); the CLI accepts ISO-8601 or seconds and converts.
-- Search requires `q`, supports repeated `scope`, and bounds results, entries, file size, and total bytes. Suggestions match visible paths only.
+- Search requires `q`, supports repeated `scope`, and bounds results, entries, file size, and total bytes. The entry budget (default 20000, max 40000) is shared fairly across the candidate repos (500–5000 entries each), so an unscoped search across a large fleet samples every repo rather than exhausting the budget on the first; `truncated` says when a repo's slice ran out. Scope the search when you know the repo. A search index is roadmap R8. Suggestions match visible paths only.
 
 ## Publishing
 
