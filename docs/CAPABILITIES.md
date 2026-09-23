@@ -52,6 +52,7 @@ The inventory was checked against the route registrations in [`server.js`](../se
 | Annotation create: `/api/annotations/:repo/*` | `POST` | Effective `write` on file | Annotations flag | Supports heading, YAML-key, and line-range anchors. [`server.js#L2138`](../server.js#L2138) |
 | Annotation update: `/api/annotations/:repo/*` | `PATCH` | Effective `write` on file | Annotations flag | Claim, resolve, reopen, reply, or redact; optional stale-write guard. [`server.js#L2226`](../server.js#L2226) |
 | Raw asset: `/asset/:repo/*` | `GET` | Effective `view` on file | Always | Allowlisted image/audio/video/PDF/text MIME types; published revisions accept `?version=`. [`server.js#L2327`](../server.js#L2327) |
+| Wallpaper image: `/wallpaper/:slug/:mode/:id` | `GET` | Public | Any theme declares `wallpapers` | Serves one image from the startup scan of a theme's configured folder; ids come from the catalog, never from a path. Long cache. |
 | Transformed HTML: `/embed/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; preserves scripts while rewriting local URLs and injecting theme/annotation integration. Mounted repos only. [`server.js#L2420`](../server.js#L2420) |
 | Verbatim HTML: `/raw/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; unsanitized same-origin content; supports published revisions. [`server.js#L2534`](../server.js#L2534) |
 | View redirect: `/view` | `GET` | Public redirect | Always | Redirects to `/`; a restricted caller is then challenged there. [`server.js#L2636`](../server.js#L2636) |
@@ -158,8 +159,9 @@ Neither response includes credentials, token names, repository roots, store path
 | `forms.publicOrigins[]` / `.publicOrigin` | Exact allowed browser mutation origins, including scheme and port; browser mutations fail closed when absent |
 | `themes.<name>.dark` / `.light` | Custom CSS-variable maps. Accepted keys: `bg`, `bg_elev`, `bg_code`, `text`, `text_soft`, `accent`, `border`, `link`, `page_bg`, `toolbar_bg`, `toolbar_btn_bg`, `toolbar_btn_hover`, `toolbar_btn_text`, `toc_active_bg`, `heading_font` |
 | `themes.<name>.aliases[]` | Additional names that render the same theme; never listed separately in the picker. See [CONFIGURATION.md](CONFIGURATION.md#aliases) |
+| `themes.<name>.wallpapers.dark` / `.light` | Folder of images (`.jpg`, `.jpeg`, `.png`, `.webp`, at most 50) painted behind every page while that theme and mode are active. See [CONFIGURATION.md](CONFIGURATION.md#wallpapers) |
 
-Configuration file lookup is `LOOKIE_LINK_CONFIG`, then the user config directory, then the project root. The recognized server environment variables are `LOOKIE_LINK_CONFIG`, `ROOT_MAPPINGS`, `PORT`, `HOSTNAME`, `LOOKIE_LINK_ENABLE_EDITING`, `LOOKIE_LINK_ENABLE_ANNOTATIONS`, and `LOOKIE_LINK_ENABLE_RAW_HTML`. Secret environment-variable names are chosen by each `secretEnv` value.
+Configuration file lookup is `LOOKIE_LINK_CONFIG`, then the reader config directory, then the project root. The recognized server environment variables are `LOOKIE_LINK_CONFIG`, `ROOT_MAPPINGS`, `PORT`, `HOSTNAME`, `LOOKIE_LINK_ENABLE_EDITING`, `LOOKIE_LINK_ENABLE_ANNOTATIONS`, and `LOOKIE_LINK_ENABLE_RAW_HTML`. Secret environment-variable names are chosen by each `secretEnv` value.
 
 ## Unified CLI inventory
 
@@ -240,3 +242,65 @@ list reads use the same template destination, and no client response or audit
 event includes storage paths.
 
 Dynamic option providers, sessions, and reaction dispatch are **not** implemented.
+
+
+## Viewer-wide wallpapers
+
+When any custom theme declares `wallpapers`, every page built on the shared
+shell (file browser, rendered files, Trackers) paints a fixed picture behind
+the page and adds a Wallpaper menu to the floating toolbar, between the theme
+picker and the light/dark button. Reading surfaces become frosted glass: panel
+opacity (50–100%, default 72) and blur behind the panel (0–16 px, default 12)
+are tunable; text stays fully opaque. A scrim fades the top of the picture into
+the theme ground so the toolbar never ends in a hard edge.
+
+The picture follows the active theme and mode. Choices persist in the browser
+(`localStorage` key `lookie-link-wallpaper`): the picked image per theme, a
+remembered "No background", opacity and blur. A theme without a set shows a
+plain page and the menu says so. The catalog is scanned once at startup;
+restart the server after adding images.
+
+The embedded-HTML page is the exception: its sandboxed frame is opaque, so
+there the document supplies pictures over the bridge below.
+
+## Embedded wallpaper controls
+
+An embedded HTML document can opt into a Wallpaper menu in the viewer's floating
+toolbar, next to its theme picker and light/dark button. The menu controls that
+document only. Ordinary documents do not show it. The sandbox remains unchanged;
+the bridge accepts cosmetic state only, with no HTML, URLs or executable actions.
+
+The document posts to its parent:
+
+```js
+window.parent.postMessage({
+  type: 'lookie-link:wallpaper-state',
+  choices: [{id: 'forest', label: 'Forest'}, {id: 'lake', label: 'Lake'}],
+  choice: 'forest',
+  opacity: 80,
+  blur: 0
+}, '*');
+```
+
+The viewer accepts messages only from its embedded window. A catalog has 0–50
+unique IDs matching `^[a-z0-9][a-z0-9-]{0,63}$`; `none` is reserved.
+Labels are nonblank strings of at most 80 characters and render as text.
+The selected choice is a catalog ID or `none`. An empty catalog requires `none`, clears old choices and disables previous/next. Opacity is an integer from
+50–100; blur is an integer from 0–16. Invalid states are ignored.
+
+The document listens for messages from `window.parent` only:
+
+| Message type | Document behavior |
+| --- | --- |
+| `lookie-link:request-wallpaper-state` | Report current state, including after frame load |
+| `lookie-link:wallpaper-toolbar-ready` | Hide any duplicate in-document controls; do not echo another state just for this acknowledgement |
+| `lookie-link:set-wallpaper` | Validate and apply `choice`, `opacity`, and `blur`; report the resulting state |
+| `lookie-link:reset-wallpaper` | Restore document wallpaper defaults and report state |
+| `lookie-link:set-theme` | Follow the existing viewer `mode` and `scheme` synchronization |
+
+Report initial state when the document starts as well as when settings change.
+The menu supplies previous/next with wrapping, no background, opacity, blur and
+reset. Documents own image rendering and defaults. They can keep standalone
+controls until the viewer acknowledges the toolbar. The bridge does not save
+wallpaper preferences or add a server wallpaper catalog. `'*'` is required for
+the opaque sandbox origin; payloads must contain only the cosmetic values above.

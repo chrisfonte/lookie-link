@@ -16,7 +16,7 @@ const {
   getManagedReposConfig,
   getPublishConfig,
   getFormsConfig,
-  loadCustomThemes,
+  loadCustomThemes, loadWallpaperCatalog,
   generateCustomThemeCss,
   BUILT_IN_THEMES,
 } = require('./lib/config');
@@ -90,6 +90,7 @@ const {
   configuredDestinationRoots,
 } = require('./lib/forms/destination-adapter');
 const { SubmissionService } = require('./lib/forms/submission-service');
+const { setWallpaperCatalog, resolveWallpaperFile, contentTypeFor: wallpaperContentType } = require('./lib/viewer-wallpaper');
 const { createFormsRouter } = require('./lib/forms/routes');
 
 const { version: LOOKIE_LINK_VERSION } = require('./package.json');
@@ -637,6 +638,7 @@ function createApp(options = {}) {
   const annotationsEnabled = options.annotationsEnabled === undefined ? getAnnotationsEnabled() : Boolean(options.annotationsEnabled);
   const rawHtmlEnabled = options.rawHtmlEnabled === undefined ? getRawHtmlEnabled() : Boolean(options.rawHtmlEnabled);
   const customThemeCss = options.customThemeCss || '';
+  if (options.wallpaperCatalog !== undefined) setWallpaperCatalog(options.wallpaperCatalog, options.wallpaperThemes || []);
   const rawAccessConfig = options.accessConfig === undefined ? getAccessConfig() : options.accessConfig;
   const rawManagedReposConfig = options.managedReposConfig === undefined ? getManagedReposConfig() : options.managedReposConfig;
   const rawPublishConfig = options.publishConfig === undefined ? getPublishConfig() : options.publishConfig;
@@ -2432,6 +2434,22 @@ function createApp(options = {}) {
     }
   });
 
+  // Viewer-wide wallpapers: ids come from the startup scan, so this never maps
+  // a request onto an arbitrary path. Long cache: the files are immutable
+  // theme assets and a restart is what changes the catalog.
+  app.get('/wallpaper/:slug/:mode/:id', (req, res) => {
+    const file = resolveWallpaperFile(req.params.slug, req.params.mode, req.params.id);
+    if (!file) {
+      res.status(404).type('text/plain').send('Wallpaper not found.');
+      return;
+    }
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.type(wallpaperContentType(file));
+    res.sendFile(file, (error) => {
+      if (error && !res.headersSent) res.status(404).type('text/plain').send('Wallpaper not found.');
+    });
+  });
+
   app.get('/asset/:repo/*', async (req, res) => {
     const accessContext = resolveAccessContext(req);
     const repo = req.params.repo;
@@ -2794,6 +2812,7 @@ function startServer() {
     ...customThemes.map((t) => ({ slug: t.slug, label: t.label, aliases: t.aliases || [] })),
   ];
   setThemeList(allThemes);
+  setWallpaperCatalog(loadWallpaperCatalog(customThemes), customThemes);
 
   const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss, accessConfig, managedReposConfig, formsConfig });
 
