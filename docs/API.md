@@ -125,7 +125,7 @@ Registration is an administrative operation constrained to configured existing a
 
 - File reads return UTF-8 `content`, path, size, and mtime.
 - Writes require string `content`; optional `expectedMtimeMs` returns `409` on conflict.
-- Deletes are soft by default and return a `trashId`; `?hard=1` deletes immediately.
+- Deletes are soft by default and return a `trashId`; `?hard=1` deletes immediately. `GET /api/managed-repos/:repo/trash` lists soft-deleted records (newest first) the caller may view.
 - Restore and permanent-trash deletion re-check `write` on the original path.
 - Tree and change responses are bounded and caller-filtered (the generic `/api/repos/:repo/...` routes above give the same for mapped repos). `changes?since=` accepts epoch milliseconds, epoch seconds or an ISO-8601 timestamp (compared against file `mtimeMs`).
 - Search requires `q`, supports repeated `scope` (alias `repo`), rejects unknown query parameters with `400` so a misspelled filter cannot silently widen a search, and bounds results, entries, file size, and total bytes. The entry budget (default 20000, max 40000) is shared fairly across the candidate repos (500–5000 entries each), so an unscoped search across a large fleet samples every repo rather than exhausting the budget on the first; `truncated` says when a repo's slice ran out. With a ripgrep binary configured or on the service PATH the backend is `ripgrep`: complete across every served repo in one process (about 0.2 s warm on an 18-repo fleet), `totalMatches` reported and `truncated` only when the result cap is hit. The response's `backend` field says which ran. Suggestions match visible paths only.

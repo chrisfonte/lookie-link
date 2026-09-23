@@ -81,6 +81,7 @@ function printUsage(stream = process.stdout) {
     '  annotations claim <repo>/<path> <id> [--by NAME]',
     '  annotations resolve <repo>/<path> <id>',
     '  annotations replies <repo>/<path> <id> [--add TEXT|- | --body-file FILE] [--author NAME]',
+    '  trash list <repo>',
     '  trash restore <repo> <trashId>',
     '  trash remove <repo> <trashId>',
     '  appearance show [--theme SLUG]',
@@ -509,12 +510,17 @@ async function annotationsCommand(auth, args) {
   return formatOutput({ ok: true, id, file: `${repo}/${relativePath}`, replies: Array.isArray(annotation.replies) ? annotation.replies : [] }, true);
 }
 
-// The server has no trash listing endpoint (trash is hidden from tree/changes);
-// trash IDs come from the soft-delete response of `lookie delete`.
+// Trash is hidden from tree/changes; `trash list` reads the managed repo's
+// soft-deleted records (newest first), restore/remove act on a trashId.
 async function trashCommand(auth, args) {
   const sub = args[0];
-  if (sub === 'list') die(EXIT_USAGE, 'trash list is not supported: the server exposes no trash listing endpoint; use the trashId returned by `lookie delete`');
-  if (sub !== 'restore' && sub !== 'remove') die(EXIT_USAGE, 'trash requires restore or remove');
+  if (sub === 'list') {
+    const repoId = requireArgument(args[1], 'repo');
+    const response = await request(auth, `/api/managed-repos/${encodeURIComponent(repoId)}/trash`);
+    formatOutput(await handleApiResponse(response, auth), true);
+    return;
+  }
+  if (sub !== 'restore' && sub !== 'remove') die(EXIT_USAGE, 'trash requires list, restore or remove');
   const repo = requireArgument(args[1], 'repo');
   const trashId = requireArgument(args[2], 'trashId');
   if (args.length > 3) die(EXIT_USAGE, `unknown trash option: ${args[3]}`);

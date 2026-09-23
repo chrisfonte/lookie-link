@@ -1185,6 +1185,23 @@ function createApp(options = {}) {
     }
   });
 
+  app.get('/api/managed-repos/:repo/trash', async (req, res) => {
+    const accessContext = resolveAccessContext(req);
+    const repo = managedRepoStore && managedRepoStore.getRepo(req.params.repo);
+    if (!repo || !canAccessPath(accessContext, 'view', repo.id, '', 'directory')) {
+      managedNotFound(res);
+      return;
+    }
+    try {
+      const records = (await managedRepoStore.listTrash(repo))
+        .filter((record) => canAccessPath(accessContext, 'view', repo.id, record.originalPath, 'file'));
+      res.status(200).json({ ok: true, repo: repo.id, trash: records, count: records.length });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
+    }
+  });
+
   app.post('/api/managed-repos/:repo/trash/:trashId/restore', async (req, res) => {
     const accessContext = resolveAccessContext(req);
     const repo = managedRepoStore && managedRepoStore.getRepo(req.params.repo);
