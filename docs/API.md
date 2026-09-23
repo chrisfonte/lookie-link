@@ -113,7 +113,7 @@ Create request:
 }
 ```
 
-`anchorKind` is `heading`, `yamlKey`, or `lineRange`; line ranges use `#L<start>-L<end>`. Reads accept repeatable `state=open|claimed|resolved`. Updates accept `claim`, `resolve`, `reopen`, `reply`, or `redact`, plus an optional `expectedMtimeMs`; stale updates return `409` with the current document. See [ANNOTATIONS-SPEC.md](ANNOTATIONS-SPEC.md).
+`anchorKind` is `heading`, `yamlKey`, or `lineRange`; line ranges use `#L<start>-L<end>`. Reads accept repeatable `state=open|claimed|resolved`. Updates are `{ id, op, payload?, expectedMtimeMs? }` with `op` one of `claim`, `resolve`, `reopen`, `reply`, `redact`; `payload` carries `claimedBy` (claim), `author` + `body` (reply), `redactedBy` (redact). Resolve and reopen are idempotent (a repeat returns `200` and re-stamps the time). Stale updates return `409` with the current document. See [ANNOTATIONS-SPEC.md](ANNOTATIONS-SPEC.md).
 
 ## Any served repository: tree, changes, file read, search
 
@@ -185,6 +185,6 @@ Default codes by status, used when no more specific code applies:
 | `429` | `rate_limited` |
 | `500` | `internal_error` |
 
-More specific codes: `query_credentials_rejected` (400, a mutation carried `?token=` / URL credentials), `unknown_repo` (404, annotation routes naming an unconfigured repository), `feature_disabled` (404, editing or annotations turned off), `stale_write` (409, file changed on disk since `expectedMtimeMs`), `revision_conflict` (409, stale publish or form-template revision), and the forms codes `invalid_json` and `validation_error`.
+More specific codes: `query_credentials_rejected` (400, a mutation carried `?token=` / URL credentials), `unknown_repo` (404, annotation routes naming an unconfigured repository), `feature_disabled` (404, editing or annotations turned off), `stale_write` (409, file changed on disk since `expectedMtimeMs`), `revision_conflict` (409, stale publish or form-template revision), the forms codes `invalid_json` and `validation_error`, and the forms browser-gate codes `origin_rejected` (403, no bearer and the Origin header is not a configured public origin) and `csrf_rejected` (403, no bearer and the synchronizer token / context cookie is missing or wrong).
 
 Unmatched routes and unhandled errors (`404`, `413`, `500`) answer in the envelope when the path starts with `/api/` or `/.well-known/`, or the `Accept` header prefers `application/json`; browser and asset requests still get `text/plain`. HTML and asset routes (`/view`, `/raw`, `/embed`, `/assets`) keep their `text/plain` error bodies.

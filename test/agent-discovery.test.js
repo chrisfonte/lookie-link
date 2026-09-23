@@ -183,6 +183,7 @@ test('discovery reflects scoped caller identity and omits unauthorized repos, ro
     assert.equal(reposResponse.status, 200);
     const repos = await reposResponse.json();
     assert.deepEqual(repos, {
+      ok: true,
       repos: [{ repo: 'docs', viewUrl: '/view/docs/', assetUrl: '/asset/docs/' }],
       count: 1,
     });

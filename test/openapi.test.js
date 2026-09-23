@@ -150,6 +150,7 @@ test('every operation is complete and references the shared Error envelope', () 
   assert.deepEqual(doc.servers, [{ url: 'http://x.test' }]);
   assert.equal(doc.components.securitySchemes.bearerAuth.scheme, 'bearer');
   assert.deepEqual([doc.components.securitySchemes.queryToken.in, doc.components.securitySchemes.queryToken.name], ['query', 'token']);
+  assert.deepEqual([doc.components.securitySchemes.browserContext.in, doc.components.securitySchemes.browserContext.name], ['header', 'X-CSRF-Token']);
   assert.ok(doc.components.schemas.Error.properties.error);
   const ids = new Set();
   let count = 0;
@@ -166,7 +167,12 @@ test('every operation is complete and references the shared Error envelope', () 
       const errors = Object.entries(op.responses).filter(([status]) => /^[45]/.test(status));
       assert.ok(errors.some(([status, response]) => status.startsWith('4')
         && response.$ref === '#/components/responses/Error'), label);
-      if (method !== 'get') assert.deepEqual(op.security, [{ bearerAuth: [] }], `${label} mutations are bearer-only`);
+      if (method !== 'get') {
+        // Forms mutations also admit the browser path (context cookie + CSRF +
+        // Origin) as a declared second scheme; every other mutation is bearer-only.
+        const expected = /^\/(api\/)?forms/.test(specPath) ? [{ bearerAuth: [] }, { browserContext: [] }] : [{ bearerAuth: [] }];
+        assert.deepEqual(op.security, expected, `${label} mutations declare their credential paths`);
+      }
       for (const match of specPath.matchAll(/\{([A-Za-z]+)\}/g)) {
         assert.ok((op.parameters || []).some((p) => p.in === 'path' && p.name === match[1]), `${label} path param ${match[1]}`);
       }

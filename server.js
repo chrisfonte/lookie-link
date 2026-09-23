@@ -1616,7 +1616,7 @@ function createApp(options = {}) {
         viewUrl: `/view/${encodeURIComponent(repo)}/`,
         assetUrl: `/asset/${encodeURIComponent(repo)}/`,
       }));
-    res.status(200).json({ repos, count: repos.length });
+    res.status(200).json({ ok: true, repos, count: repos.length });
   });
 
   app.get('/view/*', async (req, res) => {
@@ -2365,6 +2365,7 @@ function createApp(options = {}) {
       const filtered = filterAnnotationsByState(result.document, states);
       // bodyHtml is a response-only projection; the stored sidecar stays plain text.
       res.status(200).json({
+        ok: true,
         ...filtered,
         annotations: filtered.annotations.map((annotation) => ({
           ...annotation,
@@ -2460,6 +2461,7 @@ function createApp(options = {}) {
     } catch (error) {
       if (
         error.message === 'Anchor is required.' ||
+        error.message === 'anchor is required.' ||
         error.message === 'anchorKind is required.' ||
         error.message === 'body is required.' ||
         error.message === 'author is required.' ||
@@ -2580,6 +2582,24 @@ function createApp(options = {}) {
       apiError(res, 500, null, 'Failed to update annotation.');
     }
   });
+
+  // One reload for themes + wallpapers, shared by the startup watcher and by the
+  // appearance API's after-write hook. Without it, a server built through
+  // createApp() alone (tests, staged trials) answered its own PATCH with stale
+  // defaults because only the watcher in main() knew how to reload (contention
+  // trial, 2026-09-23).
+  const builtInThemeList = BUILT_IN_THEMES.map((slug) => ({
+    slug,
+    label: slug.split('-').map((w) => w[0].toUpperCase() + w.slice(1)).join(' '),
+  }));
+  app.locals.refreshAppearance = () => {
+    reloadConfig();
+    const themes = loadCustomThemes();
+    setThemeList([...builtInThemeList, ...themes.map((t) => ({ slug: t.slug, label: t.label, aliases: t.aliases || [] }))]);
+    app.locals.setCustomThemeCss(generateCustomThemeCss(themes));
+    setWallpaperCatalog(loadWallpaperCatalog(themes), themes, getWallpaperDefaults());
+    return themes;
+  };
 
   // Appearance API (review item 5): pollable read side + admin writes that
   // land in the server-owned overlay, which the config watcher reloads live.
@@ -3011,17 +3031,8 @@ function startServer() {
     fs: require('node:fs'),
     path,
     reload() {
-      reloadConfig();
-      customThemes = loadCustomThemes();
-      // Aliases (#389) ride along on the canonical entry so the toolbar can
-      // reveal their label too; they are never listed as separate picker entries.
-      setThemeList([
-        ...builtInThemes,
-        ...customThemes.map((t) => ({ slug: t.slug, label: t.label, aliases: t.aliases || [] })),
-      ]);
-      app.locals.setCustomThemeCss(generateCustomThemeCss(customThemes));
-      const catalog = loadWallpaperCatalog(customThemes);
-      setWallpaperCatalog(catalog, customThemes, getWallpaperDefaults());
+      customThemes = app.locals.refreshAppearance();
+      const catalog = wallpaperCatalogForApi();
       const folders = customThemes.flatMap((t) => t.wallpapers ? [t.wallpapers.dark, t.wallpapers.light] : []);
       const configPath = getConfigPath();
       return {
