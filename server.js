@@ -2439,16 +2439,18 @@ function createApp(options = {}) {
     }
   });
 
-  // Viewer-wide wallpapers: ids come from the startup scan, so this never maps
-  // a request onto an arbitrary path. Long cache: the files are immutable
-  // theme assets and a restart is what changes the catalog.
+  // Viewer-wide wallpapers: ids come from the live catalog scan, so this never
+  // maps a request onto an arbitrary path. Revalidate on every use (no-cache +
+  // the ETag/Last-Modified that sendFile emits): the catalog reloads live and
+  // an id survives a picture being replaced in place, so a long max-age would
+  // pin the old bytes in the browser for a day (review finding D1, 2026-09-23).
   app.get('/wallpaper/:slug/:mode/:id', (req, res) => {
     const file = resolveWallpaperFile(req.params.slug, req.params.mode, req.params.id);
     if (!file) {
       res.status(404).type('text/plain').send('Wallpaper not found.');
       return;
     }
-    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Cache-Control', 'no-cache');
     res.type(wallpaperContentType(file));
     res.sendFile(file, (error) => {
       if (error && !res.headersSent) res.status(404).type('text/plain').send('Wallpaper not found.');

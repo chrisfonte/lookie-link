@@ -211,3 +211,24 @@ test('the agent card advertises the appearance surface', async () => {
     assert.equal(JSON.stringify(card).includes(dark), false, 'no folder paths leak');
   } finally { server.close(); setThemeList(null); wallpaper.setWallpaperCatalog({}, [], {panelOpacity:72, blur:12}); }
 });
+
+test('wallpaper images revalidate instead of pinning for a day', async () => {
+  const dark = tempSet(['0-sunset-a.jpg']);
+  const {createApp} = require('../server');
+  const app = createApp({mappings:{}, accessConfig:{}, apiKeyStore:null, grantStore:null, managedRepoStore:null, publishStore:null, editingEnabled:false, annotationsEnabled:false, rawHtmlEnabled:false, wallpaperCatalog:loadWallpaperCatalog([{slug:'sunset', label:'Sunset', wallpapers:{dark}}])});
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((r) => server.once('listening', r));
+  try {
+    // Raw http client: undici's fetch does not surface a 304 for a manual
+    // If-None-Match the way a browser does, and the server's behaviour is
+    // what is under test.
+    const http = require('node:http');
+    const get = (headers) => new Promise((resolve, reject) => http.get({host:'127.0.0.1', port:server.address().port, path:'/wallpaper/sunset/dark/a', headers}, (res) => { res.resume(); res.on('end', () => resolve(res)); }).on('error', reject));
+    const res = await get({});
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.headers['cache-control'], 'no-cache');
+    assert.ok(res.headers.etag, 'ETag present for revalidation');
+    const again = await get({'If-None-Match': res.headers.etag});
+    assert.equal(again.statusCode, 304);
+  } finally { server.close(); wallpaper.setWallpaperCatalog({}); }
+});
