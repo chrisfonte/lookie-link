@@ -343,8 +343,10 @@ async function searchCommand(auth, args) {
   }
   const query = new URLSearchParams({ q: args[0] });
   for (let index = 1; index < args.length; index += 1) {
-    if (args[index] !== '--scope') die(EXIT_USAGE, `unknown search option: ${args[index]}`);
-    query.append('scope', optionValue(args, index, '--scope'));
+    if (args[index] === '--scope') query.append('scope', optionValue(args, index, '--scope'));
+    else if (args[index] === '--limit') query.set('limit', optionValue(args, index, '--limit'));
+    else if (args[index] === '--max-entries') query.set('maxEntries', optionValue(args, index, '--max-entries'));
+    else die(EXIT_USAGE, `unknown search option: ${args[index]}`);
     index += 1;
   }
   const response = await request(auth, `/api/search?${query}`);

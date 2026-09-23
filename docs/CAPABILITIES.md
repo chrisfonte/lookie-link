@@ -206,8 +206,8 @@ The `lookie` executable resolves the instance in this order: global `--instance`
 | `lookie changes <repo> --since VALUE` | Reads managed changes; `VALUE` is an ISO-8601 timestamp or Unix seconds (13+ digit values are taken as milliseconds). The CLI converts to the epoch milliseconds the server compares against file `mtimeMs` |
 | `lookie write <repo>/<path> ...` | Managed atomic write using exactly one of `--content`, `--content-file`, or `--content-from-stdin`; optional `--expected-mtime` |
 | `lookie delete <repo>/<path> [--hard]` | Managed soft or hard delete |
-| `lookie search <query> [--scope REPO]...` | Managed path/content search |
-| `lookie search suggest <query>` | Managed path suggestions |
+| `lookie search <query> [--scope REPO]... [--limit N] [--max-entries N]` | Path/content search across every served repo the caller can view (managed and mapped); the entry budget is shared fairly across repos, so scope when you know the repo |
+| `lookie search suggest <query>` | Path suggestions across served repos |
 | `lookie publish <file> ...` | Creates a single-file publication; accepts `--slug`, `--entry-path`, and `--expected-revision` |
 | `lookie publish --manifest FILE ...` | Creates or updates from a JSON manifest |
 | `lookie publish revoke <slug> --reason TEXT` | Revokes a publication |
