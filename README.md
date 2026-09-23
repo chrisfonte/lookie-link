@@ -70,6 +70,7 @@ Read requests may use a bearer header or query token so browser links can remain
 - [Capability and route matrix](docs/CAPABILITIES.md) — authoritative implemented surface
 - [Configuration](docs/CONFIGURATION.md) — setup and security guidance
 - [API](docs/API.md) — payload and workflow details
+- [Examples](docs/EXAMPLES.md) — copy-paste terminal recipes: search, show a file, render it with jq, bat or glow
 - [Features](docs/FEATURES.md) — rendering and viewer behavior
 - [Trackers](docs/TRACKERS.md) — the structured-forms platform
 - [Agent access control](docs/AGENT-ACCESS-CONTROL.md) — current authorization model

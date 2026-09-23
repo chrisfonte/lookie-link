@@ -4,7 +4,7 @@ The [capability and route matrix](CAPABILITIES.md) is the authoritative endpoint
 
 ## An agent's first seven requests
 
-Everything below is discoverable from the first request; nothing needs prior knowledge of the host.
+Everything below is discoverable from the first request; nothing needs prior knowledge of the host. Copy-paste shell versions of these and of search live in [EXAMPLES.md](EXAMPLES.md).
 
 | # | Request | Answers |
 |---|---|---|

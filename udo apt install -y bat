@@ -1,0 +1,346 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Lookie-Link — CANONICAL FLEET CONFIG (one file for every production instance)
+# ═══════════════════════════════════════════════════════════════════════════
+# Home:    ~/operations-system/config/lookie-link/lookie-link.yaml (Syncthing-synced)
+# Deploy:  ~/operations-system/scripts/lookie-link/deploy-config.sh  (run ON the target host)
+#          — splices access.grants.adminTokens from ~/.credentials/lookie-link-admin-tokens.yaml
+#          — YAML-validates, backs up, atomically installs to ~/.config/lookie-link/lookie-link.yaml
+#          — restarts the host's service (systemd on Linux, launchd on macOS) and post-checks
+# Rule:    NEVER edit a host's ~/.config copy directly; edit THIS file and redeploy.
+#          Per-host divergence is drift unless it is an explicitly-named dev variant
+#          (LOOKIE_LINK_CONFIG env override is the escape hatch for those).
+# Secrets: NEVER in this file or anywhere under a repo. adminTokens live only in
+#          ~/.credentials/lookie-link-admin-tokens.yaml (0600) on each host.
+# History: converged 2026-07-28 from the apps-1 + mac-mini-2 live configs
+#          (session: ~/operations-system/docs/working-sessions/2026-07-28-lookie-config-convergence/).
+#          Requires lookie-link >= 5de7469 (access.grants tilde expansion, issue #228).
+
+# Server settings — hostname is cosmetic (startup log + link labels); the fleet's
+# front door is the svc:lookie VIP, so every replica reports the shared name.
+server:
+  port: 9876
+  hostname: lookie.bobcat-tetra.ts.net
+  enableEditing: true
+  enableAnnotations: true
+  # FON-11792 — serve self-contained interactive HTML (NotebookLM flashcards/quiz)
+  # verbatim through /raw/<repo>/<path>.html. Trust assumption documented in
+  # lib/config.js (getRawHtmlEnabled). Safe on private Tailscale network where
+  # all files under the mapped roots are author- or tool-vetted.
+  enableRawHtml: true
+
+# Repository mappings — each key becomes a URL prefix: /view/<key>/<path>.
+# Union of the fleet: a repo missing on a given host just 404s per-request
+# (code-verified; no startup failure), so hosts without clawd/hudu-cli/pii-scanner
+# serve the rest unaffected.
+repositories:
+  operations: ~/operations
+  operations-system: ~/operations-system
+  operations-chris-fonte: ~/operations-chris-fonte
+  operations-research: ~/operations-research
+  operations-fontastic: ~/operations-fontastic
+  operations-career: ~/operations-career
+  operations-client-key-networks: ~/operations-client-key-networks
+  operations-client-rfc-media: ~/operations-client-rfc-media
+  operations-company-making-money: ~/operations-company-making-money
+  operations-incubator: ~/operations-incubator
+  operations-lookie-link: ~/operations-lookie-link
+  operations-rdweb: ~/operations-rdweb
+  operations-eartap: ~/operations-eartap
+  operations-rdorch: ~/operations-rdorch
+  operations-rdtap: ~/operations-rdtap
+  # Product CODE clones (~/projects/*) are NOT mounted here: they contain .git and
+  # may carry unsanitized host/client facts (2026-08-20 §46 review BLOCKER). Serve
+  # planning satellites above; remount code only behind a .git deny / sanitized export.
+  lookie-link: ~/projects/lookie-link
+  music-scheduler: ~/projects/music-scheduler
+  clawd: ~/clawd
+  hudu-cli: ~/projects/fontastic/hudu-cli
+  pii-scanner: ~/projects/markdown-pii-scanner
+
+access:
+  humanDefault: full
+  grants:
+    storePath: ~/.local/share/lookie-link/grants.yaml
+    projectionPath: ~/.local/share/lookie-link/grants-projection.yaml
+    repoOwners:
+      operations: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      operations-system: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      operations-chris-fonte: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      operations-research: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      operations-fontastic: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      operations-career: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      operations-client-key-networks: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      operations-client-rfc-media: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      operations-company-making-money: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      operations-incubator: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      operations-lookie-link: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      operations-rdweb: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      operations-eartap: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      operations-rdorch: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      operations-rdtap: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      lookie-link: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      music-scheduler: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      clawd: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      hudu-cli: 78c3414f-5aec-4037-9772-b0646dc5c3da
+      pii-scanner: 78c3414f-5aec-4037-9772-b0646dc5c3da
+    repoRoots:
+      operations: ~/operations
+      operations-system: ~/operations-system
+      operations-chris-fonte: ~/operations-chris-fonte
+      operations-research: ~/operations-research
+      operations-fontastic: ~/operations-fontastic
+      operations-career: ~/operations-career
+      operations-client-key-networks: ~/operations-client-key-networks
+      operations-client-rfc-media: ~/operations-client-rfc-media
+      operations-company-making-money: ~/operations-company-making-money
+      operations-incubator: ~/operations-incubator
+      operations-lookie-link: ~/operations-lookie-link
+      operations-rdweb: ~/operations-rdweb
+      operations-eartap: ~/operations-eartap
+      operations-rdorch: ~/operations-rdorch
+      operations-rdtap: ~/operations-rdtap
+      lookie-link: ~/projects/lookie-link
+      music-scheduler: ~/projects/music-scheduler
+      clawd: ~/clawd
+      hudu-cli: ~/projects/fontastic/hudu-cli
+      pii-scanner: ~/projects/markdown-pii-scanner
+    # @ADMIN_TOKENS_SPLICE@ deploy-config.sh replaces this line with the adminTokens block from ~/.credentials/lookie-link-admin-tokens.yaml
+
+# First-party forms (Phase 1). Submissions are personal data and live in the
+# sovereign personal repo, not application storage.
+# Publishing (roadmap R1, 2026-09-23): immutable revisions of agent-authored bundles
+# served under the virtual repo `published` (must not collide with a mapping).
+# Area is per host; the store creates it. NOTE: with access.humanDefault: full any
+# tailnet caller may publish — accepted for the private instance until the
+# authentication workstream lands (owner-deferred).
+publish:
+  enabled: true
+  areaPath: ~/.local/share/lookie-link/published
+  repoId: published
+
+forms:
+  enabled: true
+  templatesPath: ~/operations-chris-fonte/forms/templates
+  destinations:
+    default: ~/operations-chris-fonte/docs/health/fitness/gym-log/submissions
+    gym-log: ~/operations-chris-fonte/docs/health/fitness/gym-log/submissions
+    tanning: ~/operations-chris-fonte/docs/health/tanning/submissions
+    medications: ~/operations-chris-fonte/docs/health/medications/submissions
+  timezone: America/New_York
+  # Browser mutations fail closed unless the exact origin is listed. This is the
+  # UNION of every legitimate door to the fleet (origin validation is a
+  # membership check; each replica must accept requests arriving via any of them).
+  publicOrigins:
+    - https://lookie.bobcat-tetra.ts.net
+    - http://lookie.bobcat-tetra.ts.net
+    - http://lookie.bobcat-tetra.ts.net:9876
+    - http://lookie
+    - http://us-east-ovh-vin-apps-1:9876
+    - http://us-east-ovh-vin-apps-1.bobcat-tetra.ts.net:9876
+    - https://us-east-ovh-vin-apps-1.bobcat-tetra.ts.net
+    - http://mac-mini-2:9876
+    - http://mac-mini-2.bobcat-tetra.ts.net:9876
+    - http://localhost:9876
+    - http://127.0.0.1:9876
+
+# Custom themes. Authoring contract: the YAML key IS the picker label verbatim;
+# the slug is key.toLowerCase() with non-[a-z0-9-] replaced by '-'. Keys whose
+# slug collides with a built-in theme are SILENTLY skipped (console warning only)
+# — check the startup log's "Custom themes:" line after adding one.
+# Viewer-wide wallpaper glass defaults (each theme may override under its own
+# wallpapers: block). Theme wallpaper folders point at the host's Omarchy sets;
+# a host without them logs a warning per folder and shows plain pages — not drift.
+wallpapers:
+  panel_opacity: 72
+  blur: 12
+
+themes:
+  Tin Robot:
+    wallpapers:
+      dark: ~/.config/omarchy/themes/tin-robot/backgrounds
+      light: ~/.config/omarchy/themes/tin-robot-light/backgrounds
+    aliases: [art-bar]
+    dark:
+      bg: '#150b13'
+      bg_elev: '#1d121b'
+      bg_code: '#0f070d'
+      text: '#e3dfd2'
+      text_soft: '#b0a7b8'
+      accent: '#9d96f3'
+      border: '#2b2352'
+      link: '#b892cf'
+      page_bg: 'radial-gradient(ellipse at 78% 10%, rgba(67,62,174,0.30), transparent 36%), radial-gradient(ellipse at 16% 86%, rgba(180,85,62,0.22), transparent 40%), linear-gradient(155deg, #0f070d 0%, #1d121b 54%, #150b13 100%)'
+      toolbar_bg: rgba(21, 11, 19, 0.95)
+      toolbar_btn_bg: '#1d121b'
+      toolbar_btn_hover: '#2b2352'
+      toc_active_bg: rgba(157, 150, 243, 0.20)
+    light:
+      bg: '#f7f3e8'
+      bg_elev: '#fffdf6'
+      bg_code: '#e3dfd2'
+      text: '#211a26'
+      text_soft: '#5f5568'
+      accent: '#433eae'
+      border: '#d8cfe0'
+      link: '#6f4287'
+      page_bg: 'radial-gradient(ellipse at 80% 8%, rgba(67,62,174,0.10), transparent 38%), linear-gradient(155deg, #fffdf6 0%, #f7f3e8 60%, #efe9dc 100%)'
+      toolbar_bg: rgba(247, 243, 232, 0.95)
+      toolbar_btn_bg: '#e3dfd2'
+      toolbar_btn_hover: '#d4cfc0'
+      toc_active_bg: rgba(67, 62, 174, 0.14)
+
+  # Palette sampled 2026-07-30 from El Charro Express's own room, at his table:
+  # the turquoise tufted-vinyl booth run and the matching A-frame chalkboard frame
+  # (daylight sample #9cccd4), the menu's teal-on-white panels, chip-basket gold,
+  # and salsa red. Light mode is the default — this is a bright white lunch room.
+  Chips and Salsa:
+    wallpapers:
+      dark: ~/.config/omarchy/themes/chips-and-salsa/backgrounds
+      light: ~/.config/omarchy/themes/chips-and-salsa-light/backgrounds
+    aliases: [el-charro]
+    dark:
+      bg: "#0d1a1b"
+      bg_elev: "#15282a"
+      bg_code: "#102022"
+      text: "#d3eeea"
+      text_soft: "#8fbfba"
+      # NOTE: the html-kit maps its structural --accent from --lookie-LINK (rules,
+      # markers, borders); --lookie-accent drives viewer chrome. Turquoise is this
+      # room's identity, so turquoise goes in `link` and salsa red is the secondary.
+      accent: "#ff8a6b"
+      border: "#2d504f"
+      link: "#3fc4bd"
+      page_bg: "radial-gradient(ellipse at 84% 8%, rgba(63,196,189,0.22), transparent 34%), radial-gradient(ellipse at 12% 86%, rgba(217,164,65,0.16), transparent 38%), linear-gradient(155deg, #091415 0%, #15282a 54%, #0d1a1b 100%)"
+      toolbar_bg: "rgba(13, 26, 27, 0.95)"
+      toolbar_btn_bg: "#1a3032"
+      toolbar_btn_hover: "#254340"
+      toc_active_bg: "rgba(63, 196, 189, 0.20)"
+    light:
+      bg: "#fbfdfc"
+      bg_elev: "#ffffff"
+      bg_code: "#e9f5f4"
+      text: "#16302e"
+      text_soft: "#5b706e"
+      accent: "#b3372c"
+      border: "#c2dedd"
+      link: "#11807e"   # turquoise structure (4.8:1 on white); see the dark-mode note
+      page_bg: "radial-gradient(ellipse at 84% 5%, rgba(17,128,126,0.10), transparent 33%), linear-gradient(165deg, #ffffff 0%, #e9f5f4 100%)"
+      toolbar_bg: "rgba(255, 255, 255, 0.94)"
+      toolbar_btn_bg: "#e9f5f4"
+      toolbar_btn_hover: "#d4ecea"
+      toc_active_bg: "rgba(17, 128, 126, 0.15)"
+  Last Call:
+    wallpapers:
+      dark: ~/.config/omarchy/themes/last-call/backgrounds
+      light: ~/.config/omarchy/themes/last-call-light/backgrounds
+    aliases: [calloways]
+    dark:
+      bg: "#140d0c"
+      bg_elev: "#211514"
+      bg_code: "#1a100f"
+      text: "#f8d2c6"
+      text_soft: "#b79ac9"
+      accent: "#e04338"
+      border: "#4a312d"
+      link: "#f2695f"
+      page_bg: "radial-gradient(circle at top right, #3b1512, #140d0c 58%)"
+      toolbar_bg: "rgba(33, 21, 20, 0.94)"
+      toolbar_btn_bg: "#2a1a18"
+      toolbar_btn_hover: "#3a2320"
+      toc_active_bg: "rgba(224, 67, 56, 0.22)"
+    light:
+      bg: "#faf5ef"
+      bg_elev: "#ffffff"
+      bg_code: "#f4ece3"
+      text: "#241a17"
+      text_soft: "#6b5a54"
+      accent: "#c1272d"
+      border: "#e5d6cd"
+      link: "#a82026"
+      page_bg: "linear-gradient(165deg, #fdfaf6 0%, #f4ece3 100%)"
+      toolbar_bg: "rgba(255, 255, 255, 0.94)"
+      toolbar_btn_bg: "#f4ece3"
+      toolbar_btn_hover: "#ecdfd2"
+      toc_active_bg: "rgba(193, 39, 45, 0.14)"
+  # Palette sampled 2026-07-29 from Smoke Break Cigar Lounge's official logo
+  # (black, warm gold, parchment) and extended with cedar/leather lounge tones.
+  Slow Burn:
+    wallpapers:
+      dark: ~/.config/omarchy/themes/slow-burn/backgrounds
+      light: ~/.config/omarchy/themes/slow-burn-light/backgrounds
+    aliases: [smoke-break]
+    dark:
+      bg: "#0b0907"
+      bg_elev: "#17110c"
+      bg_code: "#120d09"
+      text: "#f1e0b8"
+      text_soft: "#bfa672"
+      accent: "#e5bc75"
+      border: "#534326"
+      link: "#e0c183"
+      page_bg: "radial-gradient(ellipse at 82% 8%, rgba(125,109,69,0.28), transparent 34%), radial-gradient(ellipse at 14% 82%, rgba(83,67,38,0.24), transparent 38%), linear-gradient(150deg, #070605 0%, #17110c 52%, #0b0907 100%)"
+      toolbar_bg: "rgba(11, 9, 7, 0.95)"
+      toolbar_btn_bg: "#1f1710"
+      toolbar_btn_hover: "#302317"
+      toc_active_bg: "rgba(229, 188, 117, 0.18)"
+      heading_font: "Georgia, 'Times New Roman', serif"
+    light:
+      bg: "#f6f0e4"
+      bg_elev: "#fffaf0"
+      bg_code: "#eee3cf"
+      text: "#241a10"
+      text_soft: "#756247"
+      accent: "#957a3f"
+      border: "#c4a569"
+      link: "#7d5f2b"
+      page_bg: "radial-gradient(ellipse at 82% 8%, rgba(229,188,117,0.28), transparent 34%), linear-gradient(150deg, #fffaf0 0%, #eadcc3 100%)"
+      toolbar_bg: "rgba(255, 250, 240, 0.95)"
+      toolbar_btn_bg: "#eee3cf"
+      toolbar_btn_hover: "#e3d1b1"
+      toc_active_bg: "rgba(149, 122, 63, 0.18)"
+      heading_font: "Georgia, 'Times New Roman', serif"
+  # Palette anchored to ferraranypizza.com (2026-07-29): their display red is
+  # #b91c1c on white with #111827 ink. Brightened per Chris to the Italian
+  # tricolor read — vivid red accents, bright basil-green links/structure,
+  # mozzarella cream surfaces. Light mode is the brand default (paper-white
+  # daytime pizzeria); the site's indigo buttons are template stock, skipped.
+  By the Slice:
+    wallpapers:
+      dark: ~/.config/omarchy/themes/by-the-slice/backgrounds
+      light: ~/.config/omarchy/themes/by-the-slice-light/backgrounds
+    aliases: [ferrara]
+    dark:
+      bg: "#1a1512"
+      bg_elev: "#251d17"
+      bg_code: "#1f1813"
+      text: "#f6dcae"
+      text_soft: "#c9a873"
+      accent: "#ff5a45"
+      border: "#4a3c2f"
+      link: "#4fc873"
+      page_bg: "radial-gradient(ellipse at 80% 6%, rgba(255,90,69,0.16), transparent 36%), radial-gradient(ellipse at 12% 88%, rgba(79,200,115,0.10), transparent 40%), linear-gradient(155deg, #151110 0%, #251d17 55%, #1a1512 100%)"
+      toolbar_bg: "rgba(37, 29, 23, 0.94)"
+      toolbar_btn_bg: "#2f251d"
+      toolbar_btn_hover: "#3e3024"
+      toc_active_bg: "rgba(255, 90, 69, 0.22)"
+    light:
+      bg: "#fdfbf6"
+      bg_elev: "#ffffff"
+      bg_code: "#f6ecd9"
+      text: "#111827"
+      text_soft: "#5d6470"
+      accent: "#c81e1e"
+      border: "#e9dcc3"
+      link: "#177d3f"
+      page_bg: "radial-gradient(ellipse at 82% 4%, rgba(200,30,30,0.07), transparent 32%), linear-gradient(165deg, #ffffff 0%, #f6ecd9 100%)"
+      toolbar_bg: "rgba(255, 255, 255, 0.94)"
+      toolbar_btn_bg: "#f6ecd9"
+      toolbar_btn_hover: "#efe0c4"
+      toc_active_bg: "rgba(200, 30, 30, 0.13)"
+  # Palette sampled 2026-07-29 from the Fonte family Carnival Vista cruise:
+  # ship-deck navy, St. Thomas aqua, San Juan coral, and canopy marigold.
+  Lido Deck:
+    wallpapers:
+      dark: ~/.config/omarchy/themes/lido-deck/backgrounds
+      light: ~/.config/omarchy/themes/lido-deck-light/backgrounds
+    aliases: [carniv
