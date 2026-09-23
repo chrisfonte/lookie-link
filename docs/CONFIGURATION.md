@@ -199,6 +199,10 @@ Ripples". A folder that is missing or unreadable logs a warning and yields an
 empty set; the server still starts. Only the images are served, by id, at
 `/wallpaper/<slug>/<mode>/<id>`; the folder path never leaves the server.
 
+### Appearance API and the overlay file
+
+Themes and wallpapers can also be changed over HTTP (see [API.md](API.md#appearance)). Those changes are written to `appearance.yaml` beside the config file (override with `LOOKIE_LINK_APPEARANCE_OVERLAY`), never to the config file itself; the overlay is merged over the config at load time and wins where both set a key. Uploaded pictures go to `wallpapers/<slug>/<mode>/` beside the config file. Writes require a bearer token from `access.appearance.adminTokens` (same shape as the grant admin tokens); when that block is absent the grant admin tokens are accepted.
+
 ### Aliases
 
 A custom theme may also declare `aliases:` — additional names that render the

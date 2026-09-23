@@ -247,6 +247,8 @@ const ROUTE_FOR_ENDPOINT = Object.freeze({
   view: ['get', '/view/*'],
   assetRead: ['get', '/asset/:repo/*'],
   wallpaperImage: ['get', '/wallpaper/:slug/:mode/:id'],
+  appearance: ['get', '/api/appearance'],
+  appearanceTheme: ['get', '/api/appearance/themes/:slug'],
   forms: ['get', '/forms'],
   formsTemplates: ['get', '/api/forms/templates'],
   formsSubmissions: ['get', '/api/forms/:templateId/submissions'],
@@ -283,6 +285,7 @@ const CAPABILITY_ENDPOINTS = Object.freeze({
   search: ['search', 'searchSuggest'],
   publish: ['publishCreate', 'publishUpdate', 'publishRevoke'],
   wallpapers: ['wallpaperImage'],
+  appearance: ['appearance', 'appearanceTheme'],
   forms: ['forms', 'formsTemplates', 'formsSubmissions'],
 });
 

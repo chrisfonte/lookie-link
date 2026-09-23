@@ -44,6 +44,8 @@ The inventory was checked against the route registrations in [`server.js`](../se
 | Health: `/healthz` | `GET` | Public | Always | Returns status and the three server feature booleans. [`server.js`](../server.js) |
 | Agent discovery: `/.well-known/agent.json` | `GET` | Non-denied caller | Always | Versioned caller-scoped discovery document. [`server.js`](../server.js) |
 | Caller discovery: `/api/whoami` | `GET` | Non-denied caller | Always | Caller identity, permissions, scopes, capabilities, and endpoints. [`server.js`](../server.js) |
+| OpenAPI document: `/openapi.json` | `GET` | Non-denied caller | Always | OpenAPI 3.1 description of every route in this matrix (plus forms routes when mounted); `Cache-Control: no-cache`. Test-bound to the registered routes. [`server.js`](../server.js) |
+| API explorer: `/api/docs` | `GET` | Non-denied caller | Always | HTML try-it page rendered from `/openapi.json`; sends requests with a bearer token kept in `sessionStorage`. [`server.js`](../server.js) |
 | Repo discovery: `/api/repos` | `GET` | Non-denied caller; results require effective `view` | Always | Returns opaque repo/view/asset URLs, never roots. [`server.js`](../server.js) |
 | Render/browse: `/view/*` | `GET` | Effective `view` on path | Always | Directory, document, code, image, audio, video, PDF, CSV, and JSON views; HTML supports `?validate=1`; publish readback supports `?version=`. [`server.js`](../server.js) |
 | Edit page: `/edit/*` | `GET` | Effective `write` on file | `server.enableEditing` or `LOOKIE_LINK_ENABLE_EDITING` | Text/non-binary existing files only. [`server.js`](../server.js) |
@@ -53,6 +55,11 @@ The inventory was checked against the route registrations in [`server.js`](../se
 | Annotation create: `/api/annotations/:repo/*` | `POST` | Effective `write` on file | Annotations flag | Supports heading, YAML-key, and line-range anchors. [`server.js`](../server.js) |
 | Annotation update: `/api/annotations/:repo/*` | `PATCH` | Effective `write` on file | Annotations flag | Claim, resolve, reopen, reply, or redact; optional stale-write guard. [`server.js`](../server.js) |
 | Raw asset: `/asset/:repo/*` | `GET` | Effective `view` on file | Always | Allowlisted image/audio/video/PDF/text MIME types; published revisions accept `?version=`. [`server.js`](../server.js) |
+| Appearance list: `/api/appearance` | `GET` | Non-denied caller | Always | Pollable list of themes (palettes, aliases, picture ids per mode, effective glass values) plus global defaults, URL parameter names, `revision`; weak ETag, `no-cache`, 304 on `If-None-Match`. Never includes folder paths. [`lib/appearance-api.js`](../lib/appearance-api.js) |
+| Appearance theme: `/api/appearance/themes/:slug` | `GET` | Non-denied caller | Always | One theme by slug or alias. [`lib/appearance-api.js`](../lib/appearance-api.js) |
+| Appearance change: `/api/appearance` | `PATCH` | Appearance admin bearer token (`access.appearance.adminTokens`, else `access.grants.adminTokens`) | Admin tokens configured | Merges `wallpapers` / `themes` keys into the server-owned overlay file; `expectedRevision` required (409 `revision_conflict` + `currentRevision`); unknown keys, bad ranges and loader-level rejections return 400 with `details[]`; `themes.<Name>: null` removes a theme; audit `appearance.update`. [`lib/appearance-api.js`](../lib/appearance-api.js) |
+| Wallpaper upload: `/api/appearance/themes/:slug/wallpapers/:mode` | `POST` | Appearance admin bearer token | Admin tokens configured | Raw image body (`image/jpeg`, `image/png`, `image/webp`, ≤24 MB), `?name=` becomes the picture id. Writes only the server-managed folder; a mode fed from another folder returns 409 `folder_not_managed`. First upload adopts the managed folder in the overlay. Audit `appearance.wallpaper.upload`. [`lib/appearance-api.js`](../lib/appearance-api.js) |
+| Wallpaper delete: `/api/appearance/themes/:slug/wallpapers/:mode/:id` | `DELETE` | Appearance admin bearer token | Admin tokens configured | Managed folder only. Audit `appearance.wallpaper.delete`. [`lib/appearance-api.js`](../lib/appearance-api.js) |
 | Wallpaper image: `/wallpaper/:slug/:mode/:id` | `GET` | Non-denied caller | Any theme declares `wallpapers` | Serves one image from the live catalog of a theme's configured folder; ids come from the catalog, never from a path. `Cache-Control: no-cache` with ETag revalidation, so a replaced picture shows on the next load. [`server.js`](../server.js) |
 | Transformed HTML: `/embed/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; preserves scripts while rewriting local URLs and injecting theme/annotation integration. Mounted repos only. [`server.js`](../server.js) |
 | Verbatim HTML: `/raw/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; unsanitized same-origin content; supports published revisions. [`server.js`](../server.js) |
@@ -90,6 +97,8 @@ This three-column table is test-checked against `lib/agent-discovery.js` and the
 | `publishUpdate` | `/api/publish/:slug` | Publish capability is available |
 | `publishRevoke` | `/api/publish/:slug/revoke` | Publish capability is available |
 | `wallpaperImage` | `/wallpaper/:scheme/:mode/:id` | Any theme declares `wallpapers` and the route is registered |
+| `appearance` | `/api/appearance` | Always (non-denied caller) |
+| `appearanceTheme` | `/api/appearance/themes/:slug` | Always (non-denied caller) |
 | `forms` | `/forms` | `forms.enabled` is true |
 | `formsTemplates` | `/api/forms/templates` | `forms.enabled` is true |
 | `formsSubmissions` | `/api/forms/:templateId/submissions` | `forms.enabled` is true |
@@ -114,13 +123,14 @@ Both discovery responses contain these booleans. They are computed from register
 | `search` | Managed-repo capability and search route are available |
 | `publish` | Publish store is enabled and caller has whole-repo `publish` scope on its virtual repo |
 | `wallpapers` | At least one theme has a picture set and the wallpaper image route is registered |
+| `appearance` | The appearance list route is registered (always); its admin writes are not advertised |
 | `forms` | The forms router is mounted (`forms.enabled: true`); per-template authorization still applies on each forms route |
 
 ## Discovery field inventory
 
 `GET /api/whoami` returns `ok`; the same `themes` appearance block as the agent card (below); `auth.mode`, `auth.type`, `auth.source`, and `auth.queryToken`; sanitized `subject` (`companyId`, `agentId`, `label`, or `null`); `permissions` (`view`, `write`, legacy-equivalent `edit`, `publish`); `repoScopes[]` (`repo`, `managed`, and `scopes[]` with `type` and `path`); plus `capabilities` and `endpoints` from the tables above.
 
-`GET /.well-known/agent.json` returns `ok`, `schemaVersion`, `name`, package `version`, `generatedAt`; `instance.baseUrl` and `instance.mode`; `authentication.bearerToken` and `authentication.queryTokenForReadRequests`; `discovery.whoamiUrl`, `discovery.reposUrl`, and `discovery.agentJsonUrl`; `caller` containing the same `auth`, `subject`, `permissions`, and `repoScopes`; plus the same `capabilities` and `endpoints`. It also carries the appearance surface under `themes`: `parameters` (the five URL parameter names, see [URL selection](#url-selection-the-appearance-api)), `modes`, `wallpapers` (the `imageUrl` template, the `none` sentinel, and `panelOpacity` / `blur` ranges with their configured defaults), and `available[]` with each theme's `id`, `label`, `aliases`, and `wallpapers` (`dark[]` / `light[]` picture `id` + `label`, and that theme's effective `panelOpacity` / `blur`). A caller can build any valid appearance URL from this document alone.
+`GET /.well-known/agent.json` returns `ok`, `schemaVersion`, `name`, package `version`, `generatedAt`; `instance.baseUrl` and `instance.mode`; `authentication.bearerToken` and `authentication.queryTokenForReadRequests`; `discovery.whoamiUrl`, `discovery.reposUrl`, `discovery.agentJsonUrl`, `discovery.openapiUrl`, and `discovery.apiDocsUrl`; `caller` containing the same `auth`, `subject`, `permissions`, and `repoScopes`; plus the same `capabilities` and `endpoints`. It also carries the appearance surface under `themes`: `parameters` (the five URL parameter names, see [URL selection](#url-selection-the-appearance-api)), `modes`, `wallpapers` (the `imageUrl` template, the `none` sentinel, and `panelOpacity` / `blur` ranges with their configured defaults), and `available[]` with each theme's `id`, `label`, `aliases`, and `wallpapers` (`dark[]` / `light[]` picture `id` + `label`, and that theme's effective `panelOpacity` / `blur`). A caller can build any valid appearance URL from this document alone.
 
 Neither response includes credentials, token names, repository roots, store paths, private metadata, or administrative capabilities. A restricted missing credential returns `401`; an invalid credential returns `403`, without capability data.
 
@@ -168,6 +178,7 @@ Neither response includes credentials, token names, repository roots, store path
 | `themes.<name>.aliases[]` | Additional names that render the same theme; never listed separately in the picker. See [CONFIGURATION.md](CONFIGURATION.md#aliases) |
 | `wallpapers.panel_opacity` / `wallpapers.blur` | Global glass defaults (50–100 %, 0–16 px). See [CONFIGURATION.md](CONFIGURATION.md#wallpapers) |
 | `themes.<name>.wallpapers.default.dark` / `.light`, `.panel_opacity`, `.blur` | Per-theme starting picture and glass overrides |
+| `access.appearance.adminTokens` | Bearer tokens for the appearance write API (same `{ name: { secret \| secretEnv } }` shape as grant admin tokens); when absent, `access.grants.adminTokens` are accepted |
 | `themes.<name>.wallpapers.dark` / `.light` | Folder of images (`.jpg`, `.jpeg`, `.png`, `.webp`, at most 50) painted behind every page while that theme and mode are active. See [CONFIGURATION.md](CONFIGURATION.md#wallpapers) |
 
 Configuration file lookup is `LOOKIE_LINK_CONFIG`, then the reader config directory, then the project root. The recognized server environment variables are `LOOKIE_LINK_CONFIG`, `ROOT_MAPPINGS`, `PORT`, `HOSTNAME`, `LOOKIE_LINK_ENABLE_EDITING`, `LOOKIE_LINK_ENABLE_ANNOTATIONS`, and `LOOKIE_LINK_ENABLE_RAW_HTML`. Secret environment-variable names are chosen by each `secretEnv` value.
