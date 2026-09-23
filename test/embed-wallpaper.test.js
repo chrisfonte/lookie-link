@@ -80,6 +80,7 @@ test('empty theme catalogs clear prior choices and disable cycling', () => {
     assert.equal(t.menu.querySelector('[data-wallpaper-next]').disabled,true);
     assert.equal(t.menu.querySelector('[data-wallpaper-previous]').disabled,true);
     assert.equal(t.menu.querySelector('select').disabled,true);
+    assert.match(t.menu.querySelector('option').textContent,/has no backgrounds\. Pick another theme\./);
     t.post(t.valid);
     assert.equal(t.menu.querySelector('select').disabled,false);
     assert.equal(t.menu.querySelectorAll('option').length,3);
