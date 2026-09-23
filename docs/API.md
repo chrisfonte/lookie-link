@@ -12,11 +12,11 @@ Everything below is discoverable from the first request; nothing needs prior kno
 | 2 | `GET /api/repos` | visible repos with `viewUrl` and `assetUrl` |
 | 3 | `GET /api/appearance` | themes, aliases, picture counts, defaults, `revision`; poll with `If-None-Match` using the `ETag` |
 | 4 | `GET /api/appearance/themes/:slug` | one theme's palettes, glass values and picture ids (aliases resolve) |
-| 5 | `GET /asset/:repo/*path` | the page's bytes with its content type (`/view` is the client-rendered HTML shell) |
+| 5 | `GET /api/repos/:repo/tree`, `…/changes?since=<ms>`, `…/files/*path` | list a folder, what changed since a time, read a text file as JSON — any served repo; `GET /asset/:repo/*path` for raw bytes (`/view` is the client-rendered HTML shell) |
 | 6 | `GET /api/annotations/:repo/*path` | the page's annotations, when enabled |
 | 7 | any error | `{ "ok": false, "error": { "code", "message", "details"? } }` on every route |
 
-Tree, changes and search apply to managed repositories only (`capabilities.managedRepos`). The same flow from the CLI: `lookie capabilities`, `lookie repos`, `lookie appearance show`, `lookie read`, `lookie annotations list`, `lookie openapi`.
+Search covers every served repo; scope it when the repo is known (unscoped fleet search is sampled by fair-shared budgets). The same flow from the CLI: `lookie capabilities`, `lookie repos`, `lookie appearance show`, `lookie tree`, `lookie changes --since`, `lookie search [--scope]`, `lookie read`, `lookie annotations list`, `lookie openapi`.
 
 ## Authentication and authorization
 
