@@ -52,7 +52,7 @@ The inventory was checked against the route registrations in [`server.js`](../se
 | Annotation create: `/api/annotations/:repo/*` | `POST` | Effective `write` on file | Annotations flag | Supports heading, YAML-key, and line-range anchors. [`server.js#L2138`](../server.js#L2138) |
 | Annotation update: `/api/annotations/:repo/*` | `PATCH` | Effective `write` on file | Annotations flag | Claim, resolve, reopen, reply, or redact; optional stale-write guard. [`server.js#L2226`](../server.js#L2226) |
 | Raw asset: `/asset/:repo/*` | `GET` | Effective `view` on file | Always | Allowlisted image/audio/video/PDF/text MIME types; published revisions accept `?version=`. [`server.js#L2327`](../server.js#L2327) |
-| Wallpaper image: `/wallpaper/:slug/:mode/:id` | `GET` | Public | Any theme declares `wallpapers` | Serves one image from the startup scan of a theme's configured folder; ids come from the catalog, never from a path. Long cache. |
+| Wallpaper image: `/wallpaper/:slug/:mode/:id` | `GET` | Public | Any theme declares `wallpapers` | Serves one image from the live catalog of a theme's configured folder; ids come from the catalog, never from a path. `Cache-Control: no-cache` with ETag revalidation, so a replaced picture shows on the next load. [`server.js`](../server.js) |
 | Transformed HTML: `/embed/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; preserves scripts while rewriting local URLs and injecting theme/annotation integration. Mounted repos only. [`server.js#L2420`](../server.js#L2420) |
 | Verbatim HTML: `/raw/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; unsanitized same-origin content; supports published revisions. [`server.js#L2534`](../server.js#L2534) |
 | View redirect: `/view` | `GET` | Public redirect | Always | Redirects to `/`; a restricted caller is then challenged there. [`server.js#L2636`](../server.js#L2636) |
@@ -259,8 +259,9 @@ the theme ground so the toolbar never ends in a hard edge.
 The picture follows the active theme and mode. Choices persist in the browser
 (`localStorage` key `lookie-link-wallpaper`): the picked image per theme, a
 remembered "No background", opacity and blur. A theme without a set shows a
-plain page and the menu says so. The catalog is scanned once at startup;
-new images, wallpaper keys and theme palettes are picked up live (the server watches the folders and the config file).
+plain page and the menu says so. The catalog reloads live: new images,
+wallpaper keys and theme palettes are picked up within about half a second
+(the server watches the folders and the config file).
 
 The embedded-HTML page is the exception: its sandboxed frame is opaque, so
 there the document supplies pictures over the bridge below.
