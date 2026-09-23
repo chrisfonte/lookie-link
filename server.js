@@ -1946,6 +1946,9 @@ function createApp(options = {}) {
       repo,
       repoRoot: rootPath,
       ...linkResolutionContext(accessContext),
+      // Cache the rendered body only for unscoped callers: their link rewriting
+      // is identical, so one render serves everyone with full view access.
+      renderCacheKey: accessContext.mode === 'unrestricted' ? `u|${rawHtmlEnabled ? 1 : 0}` : null,
       relativePath,
       source,
       parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
