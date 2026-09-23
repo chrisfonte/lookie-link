@@ -70,7 +70,7 @@ function printUsage(stream = process.stdout) {
     '  changes <repo> --since (ISO_TIMESTAMP | UNIX_SECONDS)',
     '  write <repo>/<path> (--content TEXT | --content-file FILE | --content-from-stdin) [--expected-mtime N]',
     '  delete <repo>/<path> [--hard]',
-    '  search <query> [--scope REPO]...',
+    '  search <query> [--scope REPO]...   (all words must match; "quote" a phrase)',
     '  search suggest <query>',
     '  publish <file> [--slug SLUG] [--entry-path PATH] [--expected-revision N]',
     '  publish --manifest FILE [--slug SLUG] [--entry-path PATH] [--expected-revision N]',

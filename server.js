@@ -1271,9 +1271,24 @@ function createApp(options = {}) {
       apiError(res, 400, null, 'q must be at most 256 characters.');
       return;
     }
+    if (req.query.limit !== undefined && !(Number.isInteger(Number(req.query.limit)) && Number(req.query.limit) >= 1)) {
+      apiError(res, 400, null, 'limit must be an integer of at least 1.', [{ path: 'limit', message: 'integer >= 1' }]);
+      return;
+    }
     const accessContext = resolveAccessContext(req);
     try {
       const canView = (repo, relativePath, type) => canAccessPath(accessContext, 'view', repo, relativePath, type);
+      // A scope that names no repo this caller can search is an error, not an
+      // empty result: a typo used to look like "nothing there" (2026-09-23).
+      const requestedScopes = searchScope(req.query).flatMap((v) => String(v).split(',')).map((v) => v.trim()).filter(Boolean);
+      if (requestedScopes.length) {
+        const searchable = new Set(repoResolver.listAll().filter((repo) => canView(repo.id, '', 'directory')).map((repo) => repo.id));
+        const unknown = requestedScopes.filter((id) => !searchable.has(id));
+        if (unknown.length) {
+          apiError(res, 400, null, `scope names no searchable repo: ${unknown.join(', ')}. See GET /api/repos for the repos you can search.`, unknown.map((id) => ({ path: 'scope', message: `not searchable: ${id}` })));
+          return;
+        }
+      }
       const result = ripgrepBinary
         ? await searchWithRipgrep({
           binary: ripgrepBinary,
