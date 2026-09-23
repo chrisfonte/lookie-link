@@ -653,6 +653,8 @@ function getRouteAvailability(app) {
     publishCreate: has('post', '/api/publish'),
     publishUpdate: has('post', '/api/publish/:slug'),
     publishRevoke: has('post', '/api/publish/:slug/revoke'),
+    publishList: has('get', '/api/publish'),
+    publishGet: has('get', '/api/publish/:slug'),
     wallpaperImage: has('get', '/wallpaper/:slug/:mode/:id'),
     appearance: has('get', '/api/appearance'),
     appearanceTheme: has('get', '/api/appearance/themes/:slug'),
@@ -791,6 +793,7 @@ function createApp(options = {}) {
     throw new Error(`publish.repoId "${publishedRepo}" conflicts with a configured repository mapping.`);
   }
   const canPublishTarget = (accessContext) => canAccessRepo(accessContext, 'publish', publishedRepo);
+  const canViewPublished = (accessContext) => canAccessRepo(accessContext, 'view', publishedRepo);
   const resolvePublishedTarget = async (repo, relativePath, version) => {
     if (!publishStore || !publishStore.isEnabled() || repo !== publishedRepo) {
       return null;
@@ -1408,6 +1411,105 @@ function createApp(options = {}) {
     } catch (error) {
       const status = error.code === 'ENOENT' ? 404 : error.code === 'EREVOKED' ? 410 : 400;
       sendPathJsonError(res, { status, message: error.message });
+    }
+  });
+
+  const PUBLISH_LIST_QUERY_KEYS = new Set(['state']);
+  const PUBLISH_GET_QUERY_KEYS = new Set(['version']);
+  const rejectUnknownPublishParams = (req, res, allowed) => {
+    const unknown = Object.keys(req.query).filter((key) => !allowed.has(key));
+    if (!unknown.length) return false;
+    apiError(res, 400, 'invalid_request', `Unknown query parameter${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}. Accepted: ${[...allowed].join(', ')}.`, unknown.map((key) => ({ path: key, message: 'unknown query parameter' })));
+    return true;
+  };
+
+  function sendPublishWithEtag(req, res, revision, body) {
+    const etag = `W/"publish-${revision}"`;
+    res.set('ETag', etag);
+    res.set('Cache-Control', 'no-cache');
+    if (req.get('if-none-match') === etag) {
+      res.status(304).end();
+      return;
+    }
+    res.status(200).json(body);
+  }
+
+  app.get('/api/publish', async (req, res) => {
+    if (!publishStore || !publishStore.isEnabled()) {
+      sendPathJsonError(res, { status: 404, message: 'Publishing is not configured.' });
+      return;
+    }
+    const accessContext = resolveAccessContext(req);
+    if (!canViewPublished(accessContext)) {
+      sendAccessError(res, accessContext, true);
+      return;
+    }
+    if (rejectUnknownPublishParams(req, res, PUBLISH_LIST_QUERY_KEYS)) return;
+    const state = req.query.state === undefined ? null : String(req.query.state).trim();
+    if (state !== null && state !== 'active' && state !== 'revoked') {
+      apiError(res, 400, 'invalid_request', 'state must be active or revoked.', [{ path: 'state', message: 'active or revoked' }]);
+      return;
+    }
+    try {
+      const publications = await publishStore.listPublications(state ? { state } : {});
+      const revision = publishStore.computeListRevision(publications);
+      sendPublishWithEtag(req, res, revision, {
+        ok: true,
+        publications: publications.map((publication) => publishStore.serializePublicationSummary(publication)),
+        count: publications.length,
+        revision,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      apiError(res, 500, null, 'Failed to list publications.');
+    }
+  });
+
+  app.get('/api/publish/:slug', async (req, res) => {
+    if (!publishStore || !publishStore.isEnabled()) {
+      sendPathJsonError(res, { status: 404, message: 'Publishing is not configured.' });
+      return;
+    }
+    const accessContext = resolveAccessContext(req);
+    if (!canViewPublished(accessContext)) {
+      sendAccessError(res, accessContext, true);
+      return;
+    }
+    if (rejectUnknownPublishParams(req, res, PUBLISH_GET_QUERY_KEYS)) return;
+    let version = null;
+    if (req.query.version !== undefined) {
+      version = Number(req.query.version);
+      if (!Number.isSafeInteger(version) || version < 1) {
+        apiError(res, 400, 'invalid_request', 'version must be a positive integer.', [{ path: 'version', message: 'positive integer' }]);
+        return;
+      }
+    }
+    try {
+      const publication = await publishStore.readPublication(req.params.slug);
+      if (!publication) {
+        apiError(res, 404, 'not_found', 'Published artifact not found.');
+        return;
+      }
+      const record = publishStore.serializePublication(publication);
+      let files = null;
+      if (version !== null) {
+        const revisionRecord = publication.revisions.find((entry) => entry.revision === version);
+        if (!revisionRecord) {
+          apiError(res, 404, 'not_found', `Published revision not found: ${version}`);
+          return;
+        }
+        files = record.revisions.find((entry) => entry.revision === version) || null;
+      }
+      const revision = publishStore.computeListRevision([publication]);
+      sendPublishWithEtag(req, res, revision, {
+        ok: true,
+        publication: record,
+        revision,
+        generatedAt: new Date().toISOString(),
+        ...(version !== null ? { version, files } : {}),
+      });
+    } catch (error) {
+      apiError(res, 500, null, 'Failed to read publication.');
     }
   });
 

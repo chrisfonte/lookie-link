@@ -82,6 +82,24 @@ The `expectedRevision` check and per-slug lock coordinate one Lookie-Link proces
 
 These routes reuse the normal viewer authorization and rendering rules under the `published` repo name. They never use metadata to resolve or authorize a source repository.
 
+## List And Inspect Publications
+
+`GET /api/publish` needs whole-repo `view` (not `publish`) on the publish repo and returns every publication the caller may view, sorted by slug, as a summary projection (no `revisions[]`): `{ ok, publications, count, revision, generatedAt }`. `?state=active` or `?state=revoked` filters; any other query parameter is a `400`.
+
+```bash
+curl http://localhost:9876/api/publish
+curl 'http://localhost:9876/api/publish?state=active'
+```
+
+`GET /api/publish/:slug` returns one publication's full projection plus `revisions[]` (`revision`, `createdAt`, `entryPath`, `fileCount`, `sizeBytes`, `viewUrl`). A revoked slug still returns its record with `state: "revoked"`; an unknown slug is `404 not_found`. `?version=N` adds a `files` entry for that one revision.
+
+```bash
+curl http://localhost:9876/api/publish/release-notes
+curl 'http://localhost:9876/api/publish/release-notes?version=1'
+```
+
+Both routes carry `revision` (an opaque hash over every publication's `slug`/`updatedAt`/`currentRevision`/`revokedAt`, changing whenever anything is created, updated, or revoked) and set a weak `ETag`; send `If-None-Match` on later polls and expect `304` when nothing changed.
+
 ## Revoke A Slug
 
 ```bash

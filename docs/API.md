@@ -4,7 +4,7 @@ The [capability and route matrix](CAPABILITIES.md) is the authoritative endpoint
 
 ## An agent's first seven requests
 
-Everything below is discoverable from the first request; nothing needs prior knowledge of the host.
+Everything below is discoverable from the first request; nothing needs prior knowledge of the host. Copy-paste shell versions of these and of search live in [EXAMPLES.md](EXAMPLES.md).
 
 | # | Request | Answers |
 |---|---|---|
@@ -139,6 +139,8 @@ Create payloads contain a non-empty `files` array and may include `slug`, `entry
 Updates use the same complete-bundle payload plus a mandatory `expectedRevision`; stale updates return `409` with the safe current projection. Revoke requests require `{ "reason": "..." }`; revoked current and historical reads return `410`.
 
 Readback uses the normal `view`, `asset`, and optional `raw` routes beneath the configured virtual repo. Public metadata containing absolute filesystem paths is rejected; private metadata is never projected. See [PUBLISHING.md](PUBLISHING.md).
+
+`GET /api/publish` and `GET /api/publish/:slug` require whole-repo `view` (not `publish`) on the publish repo, and read what create/update/revoke wrote. Both carry a `revision` that changes whenever any publication changes, and set a weak `ETag`; poll with `If-None-Match` and treat `304` as "nothing changed" instead of re-fetching and diffing.
 
 ## Administrative stores
 

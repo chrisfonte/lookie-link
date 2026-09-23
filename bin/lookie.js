@@ -75,6 +75,8 @@ function printUsage(stream = process.stdout) {
     '  publish <file> [--slug SLUG] [--entry-path PATH] [--expected-revision N]',
     '  publish --manifest FILE [--slug SLUG] [--entry-path PATH] [--expected-revision N]',
     '  publish revoke <slug> --reason TEXT',
+    '  publish list [--state active|revoked]',
+    '  publish show <slug> [--version N]',
     '  annotations list <repo>/<path> [--state open|claimed|resolved]...',
     '  annotations get <repo>/<path> <id>',
     '  annotations add <repo>/<path> --anchor A --kind heading|yamlKey|lineRange (--body TEXT|- | --body-file FILE) [--author NAME]',
@@ -399,7 +401,42 @@ async function buildPublishPayload(args) {
   return payload;
 }
 
+async function publishListCommand(auth, args) {
+  const query = new URLSearchParams();
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === '--state') {
+      const state = optionValue(args, index, '--state');
+      if (state !== 'active' && state !== 'revoked') die(EXIT_USAGE, '--state must be active or revoked');
+      query.set('state', state);
+      index += 1;
+    } else {
+      die(EXIT_USAGE, `unknown publish list option: ${args[index]}`);
+    }
+  }
+  const qs = query.toString();
+  const response = await request(auth, `/api/publish${qs ? `?${qs}` : ''}`);
+  formatOutput(await handleApiResponse(response, auth), true);
+}
+
+async function publishShowCommand(auth, args) {
+  const slug = requireArgument(args[0], 'publish show slug');
+  let version;
+  for (let index = 1; index < args.length; index += 1) {
+    if (args[index] === '--version') {
+      version = optionValue(args, index, '--version');
+      index += 1;
+    } else {
+      die(EXIT_USAGE, `unknown publish show option: ${args[index]}`);
+    }
+  }
+  const query = version !== undefined ? `?${new URLSearchParams({ version })}` : '';
+  const response = await request(auth, `/api/publish/${encodeURIComponent(slug)}${query}`);
+  formatOutput(await handleApiResponse(response, auth), true);
+}
+
 async function publishCommand(auth, args) {
+  if (args[0] === 'list') return publishListCommand(auth, args.slice(1));
+  if (args[0] === 'show') return publishShowCommand(auth, args.slice(1));
   if (args[0] === 'revoke') {
     const slug = requireArgument(args[1], 'publish slug');
     let reason;

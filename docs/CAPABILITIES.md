@@ -36,6 +36,8 @@ The inventory was checked against the route registrations in [`server.js`](../se
 | Suggestions: `/api/search/suggest` | `GET` | Effective `view`; results are caller-filtered | Always | Requires `q`; returns bounded path suggestions. [`server.js`](../server.js) |
 | Publish update: `/api/publish/:slug` | `POST` | Repo-level `publish` on publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | Requires `expectedRevision`; creates a complete immutable next revision. [`server.js`](../server.js) |
 | Publish revoke: `/api/publish/:slug/revoke` | `POST` | Repo-level `publish` on publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | Requires a reason and revokes current and historical readback. [`server.js`](../server.js) |
+| Publish list: `/api/publish` | `GET` | Repo-level `view` on the configured publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | Lists publications (summary projection, no `revisions[]`); optional `?state=active|revoked`; unknown query parameters are rejected (400); `revision` (a store-state hash), weak ETag, `no-cache`, 304 on `If-None-Match`. [`server.js`](../server.js) |
+| Publish get: `/api/publish/:slug` | `GET` | Repo-level `view` on the configured publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | One publication with full `revisions[]`; a revoked slug still returns its record (`state: "revoked"`); `?version=N` adds that revision's file summary; unknown slug is `404 not_found`; ETag/304 as above. [`server.js`](../server.js) |
 | API-key list: `/api/agent-keys` | `GET` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Optional state/agent filters and audit projection. [`server.js`](../server.js) |
 | API-key create: `/api/agent-keys` | `POST` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Returns the new secret once; stores only its hash. [`server.js`](../server.js) |
 | API-key rotate: `/api/agent-keys/:keyId/rotate` | `POST` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Replaces and returns the secret once. [`server.js`](../server.js) |
@@ -103,6 +105,8 @@ This three-column table is test-checked against `lib/agent-discovery.js` and the
 | `publishCreate` | `/api/publish` | Publish store is enabled and caller has repo-level `publish` |
 | `publishUpdate` | `/api/publish/:slug` | Publish capability is available |
 | `publishRevoke` | `/api/publish/:slug/revoke` | Publish capability is available |
+| `publishList` | `/api/publish` | Publish store is enabled and caller has repo-level `view` on the publish repo |
+| `publishGet` | `/api/publish/:slug` | Publish-read capability is available |
 | `wallpaperImage` | `/wallpaper/:scheme/:mode/:id` | Any theme declares `wallpapers` and the route is registered |
 | `appearance` | `/api/appearance` | Always (non-denied caller) |
 | `appearanceTheme` | `/api/appearance/themes/:slug` | Always (non-denied caller) |
@@ -130,6 +134,7 @@ Both discovery responses contain these booleans. They are computed from register
 | `search` | Caller has a visible `view` scope and the search route exists (covers managed and mapped repos) |
 | `repoRead` | Caller has a visible `view` scope and the generic tree/file-read routes exist |
 | `publish` | Publish store is enabled and caller has whole-repo `publish` scope on its virtual repo |
+| `publishRead` | Publish store is enabled and caller has whole-repo `view` scope on its virtual repo |
 | `wallpapers` | At least one theme has a picture set and the wallpaper image route is registered |
 | `appearance` | The appearance list route is registered (always); its admin writes are not advertised |
 | `forms` | The forms router is mounted (`forms.enabled: true`); per-template authorization still applies on each forms route |
@@ -213,6 +218,8 @@ The `lookie` executable resolves the instance in this order: global `--instance`
 | `lookie publish <file> ...` | Creates a single-file publication; accepts `--slug`, `--entry-path`, and `--expected-revision` |
 | `lookie publish --manifest FILE ...` | Creates or updates from a JSON manifest |
 | `lookie publish revoke <slug> --reason TEXT` | Revokes a publication |
+| `lookie publish list [--state active\|revoked]` | Lists publications the caller can view |
+| `lookie publish show <slug> [--version N]` | Reads one publication record, its revisions, and optionally one revision's files |
 | `lookie annotations list <repo>/<path> [--state S]...` | `GET /api/annotations/:repo/*`; states `open`, `claimed`, `resolved` |
 | `lookie annotations get <repo>/<path> <id>` | Reads the document and selects one annotation; exit `4` if absent |
 | `lookie annotations add <repo>/<path> --anchor A --kind K ...` | `POST /api/annotations/:repo/*`; kinds `heading`, `yamlKey`, `lineRange`; body via `--body`, `--body -` (stdin), or `--body-file`; `--author` (default `$LOOKIE_LINK_AUTHOR` or `lookie`) |
