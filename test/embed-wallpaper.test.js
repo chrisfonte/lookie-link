@@ -47,7 +47,8 @@ test('wallpaper toolbar cycles, sends numeric controls, and clears on navigation
     assert.equal(t.sent.at(-1).choice,'second');
     click('[data-wallpaper-next]');
     assert.equal(t.sent.at(-1).choice,'first');
-    click('[data-wallpaper-none]');
+    const select=t.menu.querySelector('[data-wallpaper-choice]');
+    select.value='none'; select.dispatchEvent(new t.win.Event('change'));
     assert.equal(t.sent.at(-1).choice,'none');
     click('[data-wallpaper-next]');
     assert.equal(t.sent.at(-1).choice,'first');
@@ -59,6 +60,9 @@ test('wallpaper toolbar cycles, sends numeric controls, and clears on navigation
     t.menu.open=true;
     t.win.document.dispatchEvent(new t.win.KeyboardEvent('keydown',{key:'Escape'}));
     assert.equal(t.menu.open,false);
+    t.menu.open=true;
+    t.win.dispatchEvent(new t.win.Event('blur'));
+    assert.equal(t.menu.open,true, 'blur without frame focus keeps the menu');
     t.frame.dispatchEvent(new t.win.Event('load'));
     assert.equal(t.menu.hidden,true);
     assert.equal(t.sent.at(-1).type,'lookie-link:request-wallpaper-state');
@@ -75,7 +79,9 @@ test('empty theme catalogs clear prior choices and disable cycling', () => {
     assert.equal(t.menu.querySelector('select').value,'none');
     assert.equal(t.menu.querySelector('[data-wallpaper-next]').disabled,true);
     assert.equal(t.menu.querySelector('[data-wallpaper-previous]').disabled,true);
+    assert.equal(t.menu.querySelector('select').disabled,true);
     t.post(t.valid);
+    assert.equal(t.menu.querySelector('select').disabled,false);
     assert.equal(t.menu.querySelectorAll('option').length,3);
     assert.equal(t.menu.querySelector('[data-wallpaper-next]').disabled,false);
   } finally { t.dom.window.close(); }
