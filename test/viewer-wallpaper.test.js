@@ -189,3 +189,25 @@ test('theme CSS swaps live through app.locals.setCustomThemeCss', async () => {
     assert.doesNotMatch(html, /\/\* before \*\//);
   } finally { server.close(); }
 });
+
+test('the agent card advertises the appearance surface', async () => {
+  const dark = tempSet(['0-sunset-a.jpg']);
+  const catalog = loadWallpaperCatalog([{slug:'sunset', label:'Sunset', wallpapers:{dark}}]);
+  const {createApp} = require('../server');
+  const {setThemeList} = require('../lib/renderer');
+  setThemeList([{slug:'slate', label:'Slate'}, {slug:'sunset', label:'Sunset', aliases:['beach']}]);
+  const app = createApp({mappings:{}, accessConfig:{}, apiKeyStore:null, grantStore:null, managedRepoStore:null, publishStore:null, editingEnabled:false, annotationsEnabled:false, rawHtmlEnabled:false, wallpaperCatalog:catalog, wallpaperThemes:[{slug:'sunset', aliases:['beach']}], wallpaperDefaults:{panelOpacity:66, blur:5}});
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((r) => server.once('listening', r));
+  try {
+    const card = await (await fetch('http://127.0.0.1:' + server.address().port + '/.well-known/agent.json')).json();
+    assert.deepEqual(card.themes.parameters, {scheme:'lookie-scheme', mode:'lookie-theme', wallpaper:'lookie-wallpaper', panelOpacity:'lookie-panel', blur:'lookie-blur'});
+    assert.equal(card.themes.wallpapers.imageUrl, '/wallpaper/{scheme}/{mode}/{id}');
+    assert.equal(card.themes.wallpapers.panelOpacity.default, 66);
+    const sunset = card.themes.available.find((t) => t.id === 'sunset');
+    assert.deepEqual(sunset.wallpapers.dark, [{id:'a', label:'A'}]);
+    assert.equal(sunset.wallpapers.blur, 5);
+    assert.deepEqual(card.themes.available.find((t) => t.id === 'slate').wallpapers.dark, []);
+    assert.equal(JSON.stringify(card).includes(dark), false, 'no folder paths leak');
+  } finally { server.close(); setThemeList(null); wallpaper.setWallpaperCatalog({}, [], {panelOpacity:72, blur:12}); }
+});
