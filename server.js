@@ -627,6 +627,7 @@ function getRouteAvailability(app) {
     publishCreate: has('post', '/api/publish'),
     publishUpdate: has('post', '/api/publish/:slug'),
     publishRevoke: has('post', '/api/publish/:slug/revoke'),
+    wallpaperImage: has('get', '/wallpaper/:slug/:mode/:id'),
   };
 }
 
@@ -1437,6 +1438,7 @@ function createApp(options = {}) {
     publishStore,
     publishedRepo,
     routeAvailability: getRouteAvailability(app),
+    formsEnabled: Boolean(formsConfig && formsConfig.enabled === true),
   });
 
   app.get('/.well-known/agent.json', (req, res) => {
@@ -2445,6 +2447,13 @@ function createApp(options = {}) {
   // an id survives a picture being replaced in place, so a long max-age would
   // pin the old bytes in the browser for a day (review finding D1, 2026-09-23).
   app.get('/wallpaper/:slug/:mode/:id', (req, res) => {
+    // Same gate as every other viewer surface: a denied caller on a locked-down
+    // instance learns nothing, not even theme or picture names (review D10).
+    const accessContext = req.accessContext || resolveAccessContext(req);
+    if (accessContext.mode === 'denied') {
+      sendAccessError(res, accessContext);
+      return;
+    }
     const file = resolveWallpaperFile(req.params.slug, req.params.mode, req.params.id);
     if (!file) {
       res.status(404).type('text/plain').send('Wallpaper not found.');

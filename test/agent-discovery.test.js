@@ -246,6 +246,10 @@ const ROUTE_FOR_ENDPOINT = Object.freeze({
   repos: ['get', '/api/repos'],
   view: ['get', '/view/*'],
   assetRead: ['get', '/asset/:repo/*'],
+  wallpaperImage: ['get', '/wallpaper/:slug/:mode/:id'],
+  forms: ['get', '/forms'],
+  formsTemplates: ['get', '/api/forms/templates'],
+  formsSubmissions: ['get', '/api/forms/:templateId/submissions'],
   edit: ['get', '/edit/*'],
   save: ['post', '/api/save/*'],
   preview: ['post', '/api/preview/*'],
@@ -278,14 +282,24 @@ const CAPABILITY_ENDPOINTS = Object.freeze({
   managedRepos: ['managedRepoList', 'managedFileRead', 'managedTree', 'managedChanges'],
   search: ['search', 'searchSuggest'],
   publish: ['publishCreate', 'publishUpdate', 'publishRevoke'],
+  wallpapers: ['wallpaperImage'],
+  forms: ['forms', 'formsTemplates', 'formsSubmissions'],
 });
 
-function registeredRoutes(app) {
-  return app._router.stack
-    .filter((layer) => layer.route)
-    .flatMap((layer) => Object.keys(layer.route.methods || {})
-      .filter((method) => layer.route.methods[method])
-      .map((method) => `${method}:${layer.route.path}`));
+// App-level routes only by default (the authoritative matrix covers those).
+// includeRouters walks mounted routers too (the forms router), for checks
+// that must see every route a caller can actually reach.
+function registeredRoutes(app, { includeRouters = false } = {}) {
+  const fromStack = (stack) => stack.flatMap((layer) => {
+    if (layer.route) {
+      return Object.keys(layer.route.methods || {})
+        .filter((method) => layer.route.methods[method])
+        .map((method) => `${method}:${layer.route.path}`);
+    }
+    if (includeRouters && layer.handle && Array.isArray(layer.handle.stack)) return fromStack(layer.handle.stack);
+    return [];
+  });
+  return fromStack(app._router.stack);
 }
 
 async function documentedEndpointTemplates() {
@@ -427,6 +441,9 @@ test('discovery matrix agrees across caller class, route availability, repo disc
       }
 
       assert.deepEqual(agentResult.body.capabilities, whoamiResult.body.capabilities);
+      assert.deepEqual(agentResult.body.themes, whoamiResult.body.themes, 'themes block identical in both documents');
+      assert.deepEqual(Object.keys(whoamiResult.body.themes.parameters).sort(), ['blur', 'mode', 'panelOpacity', 'scheme', 'wallpaper']);
+      assert.equal(whoamiResult.body.themes.wallpapers.imageUrl, '/wallpaper/:scheme/:mode/:id');
       assert.deepEqual(agentResult.body.endpoints, whoamiResult.body.endpoints);
       assert.deepEqual(agentResult.body.caller.repoScopes, whoamiResult.body.repoScopes);
       const scopeRepos = whoamiResult.body.repoScopes.map((entry) => entry.repo).sort();
@@ -447,7 +464,7 @@ test('discovery matrix agrees across caller class, route availability, repo disc
         }
       }
 
-      const routes = new Set(registeredRoutes(callerCase.server.app));
+      const routes = new Set(registeredRoutes(callerCase.server.app, { includeRouters: true }));
       for (const [endpointKey, template] of Object.entries(whoamiResult.body.endpoints)) {
         assert.equal(docs.get(endpointKey), template, `docs template for ${endpointKey}`);
         const [method, routePath] = ROUTE_FOR_ENDPOINT[endpointKey];

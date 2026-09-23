@@ -16,48 +16,48 @@ The inventory was checked against the route registrations in [`server.js`](../se
 
 | Route / capability | Method | Required auth | Enabled by config | Notes and source |
 |---|---|---|---|---|
-| Static browser assets: `/public/*` | `GET`, `HEAD` | Public | Always | Express static mount; no repository data. [`server.js#L767`](../server.js#L767) |
-| Managed repo list: `/api/managed-repos` | `GET` | Results require effective `view` | `managedRepos.storePath` | Returns only visible managed repos and omits roots; a denied caller receives an empty list rather than an auth error. [`server.js#L772`](../server.js#L772) |
-| Managed repo registration: `/api/managed-repos` | `POST` | Managed-repo admin bearer token | `managedRepos.storePath`, `allowRoots`, and `adminTokens` | Registers or creates a root only below an existing allow-root. [`server.js#L784`](../server.js#L784) |
-| Managed tree: `/api/managed-repos/:repo/tree` | `GET` | Effective `view` on requested directory and returned entries | `managedRepos.storePath` | Bounded by depth and entry limits; internal trash is hidden. [`server.js#L804`](../server.js#L804) |
-| Managed changes: `/api/managed-repos/:repo/changes` | `GET` | Effective `view` | `managedRepos.storePath` | Bounded mtime-based file listing; `since` is a numeric Unix timestamp. [`server.js#L845`](../server.js#L845) |
-| Managed file read: `/api/managed-repos/:repo/files/*` | `GET` | Effective `view` on file | `managedRepos.storePath` | Returns UTF-8 content and metadata as JSON. [`server.js#L874`](../server.js#L874) |
-| Managed file create/update: `/api/managed-repos/:repo/files/*` | `PUT` | Effective `write` on file | `managedRepos.storePath` | Atomic UTF-8 write; optional `expectedMtimeMs`; records managed API-key audit events. [`server.js#L891`](../server.js#L891) |
-| Publish create: `/api/publish` | `POST` | Repo-level `publish` on the configured publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | Creates immutable revision 1. Path-only publish scope is insufficient. [`server.js#L920`](../server.js#L920) |
-| Managed file delete: `/api/managed-repos/:repo/files/*` | `DELETE` | Effective `write` on file | `managedRepos.storePath` | Soft delete by default; `?hard=1` permanently deletes. [`server.js#L955`](../server.js#L955) |
-| Managed trash restore: `/api/managed-repos/:repo/trash/:trashId/restore` | `POST` | Effective `write` on repo and original file | `managedRepos.storePath` | Restores a soft-deleted file. [`server.js#L973`](../server.js#L973) |
-| Managed trash removal: `/api/managed-repos/:repo/trash/:trashId` | `DELETE` | Effective `write` on repo and original file | `managedRepos.storePath` | Permanently deletes one trash item. [`server.js#L994`](../server.js#L994) |
-| Managed search: `/api/search` | `GET` | Effective `view`; results are caller-filtered | `managedRepos.storePath` | Requires `q`; searches bounded path/content candidates in supported text formats. [`server.js#L1015`](../server.js#L1015) |
-| Managed suggestions: `/api/search/suggest` | `GET` | Effective `view`; results are caller-filtered | `managedRepos.storePath` | Requires `q`; returns bounded path suggestions. [`server.js#L1046`](../server.js#L1046) |
-| Publish update: `/api/publish/:slug` | `POST` | Repo-level `publish` on publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | Requires `expectedRevision`; creates a complete immutable next revision. [`server.js#L1077`](../server.js#L1077) |
-| Publish revoke: `/api/publish/:slug/revoke` | `POST` | Repo-level `publish` on publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | Requires a reason and revokes current and historical readback. [`server.js#L1117`](../server.js#L1117) |
-| API-key list: `/api/agent-keys` | `GET` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Optional state/agent filters and audit projection. [`server.js#L1144`](../server.js#L1144) |
-| API-key create: `/api/agent-keys` | `POST` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Returns the new secret once; stores only its hash. [`server.js#L1163`](../server.js#L1163) |
-| API-key rotate: `/api/agent-keys/:keyId/rotate` | `POST` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Replaces and returns the secret once. [`server.js#L1178`](../server.js#L1178) |
-| API-key revoke: `/api/agent-keys/:keyId/revoke` | `POST` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Requires a reason. [`server.js#L1194`](../server.js#L1194) |
-| Grant list: `/api/grants` | `GET` | Grant admin token; bearer preferred, query accepted for this read | `access.grants.storePath` and `adminTokens` | Optional filters and audit projection. [`server.js#L1210`](../server.js#L1210) |
-| Grant create: `/api/grants` | `POST` | Grant admin bearer token | `access.grants.storePath` and `adminTokens` | Enforces issuer, subject, owner, expiry, approval, and cross-company allow-root policy. [`server.js#L1231`](../server.js#L1231) |
-| Grant renew: `/api/grants/:grantId/renew` | `POST` | Grant admin bearer token | `access.grants.storePath` and `adminTokens` | Updates expiry and rotates the grant token unless disabled in the request. [`server.js#L1250`](../server.js#L1250) |
-| Grant revoke: `/api/grants/:grantId/revoke` | `POST` | Grant admin bearer token | `access.grants.storePath` and `adminTokens` | Requires a reason and authorized issuer identity in the payload. [`server.js#L1270`](../server.js#L1270) |
-| Repository index: `/` | `GET` | Non-denied caller; entries require effective `view` | Always | HTML index filtered to visible repos. [`server.js#L1290`](../server.js#L1290) |
-| Health: `/healthz` | `GET` | Public | Always | Returns status and the three server feature booleans. [`server.js#L1320`](../server.js#L1320) |
-| Agent discovery: `/.well-known/agent.json` | `GET` | Non-denied caller | Always | Versioned caller-scoped discovery document. [`server.js#L1338`](../server.js#L1338) |
-| Caller discovery: `/api/whoami` | `GET` | Non-denied caller | Always | Caller identity, permissions, scopes, capabilities, and endpoints. [`server.js#L1347`](../server.js#L1347) |
-| Repo discovery: `/api/repos` | `GET` | Non-denied caller; results require effective `view` | Always | Returns opaque repo/view/asset URLs, never roots. [`server.js#L1356`](../server.js#L1356) |
-| Render/browse: `/view/*` | `GET` | Effective `view` on path | Always | Directory, document, code, image, audio, video, PDF, CSV, and JSON views; HTML supports `?validate=1`; publish readback supports `?version=`. [`server.js#L1372`](../server.js#L1372) |
-| Edit page: `/edit/*` | `GET` | Effective `write` on file | `server.enableEditing` or `LOOKIE_LINK_ENABLE_EDITING` | Text/non-binary existing files only. [`server.js#L1705`](../server.js#L1705) |
-| Save mounted file: `/api/save/*` | `POST` | Effective `write` on existing file | Editing flag | Atomic UTF-8 replacement with optional `expectedMtimeMs`. [`server.js#L1805`](../server.js#L1805) |
-| Preview draft: `/api/preview/*` | `POST` | Effective `view` on existing file | Editing flag | Renders supplied content without writing it. [`server.js#L1955`](../server.js#L1955) |
-| Annotation read: `/api/annotations/:repo/*` | `GET` | Effective `view` on file | `server.enableAnnotations` or `LOOKIE_LINK_ENABLE_ANNOTATIONS` | Sidecar read with repeatable `state` filter. [`server.js#L2040`](../server.js#L2040) |
-| Annotation create: `/api/annotations/:repo/*` | `POST` | Effective `write` on file | Annotations flag | Supports heading, YAML-key, and line-range anchors. [`server.js#L2138`](../server.js#L2138) |
-| Annotation update: `/api/annotations/:repo/*` | `PATCH` | Effective `write` on file | Annotations flag | Claim, resolve, reopen, reply, or redact; optional stale-write guard. [`server.js#L2226`](../server.js#L2226) |
-| Raw asset: `/asset/:repo/*` | `GET` | Effective `view` on file | Always | Allowlisted image/audio/video/PDF/text MIME types; published revisions accept `?version=`. [`server.js#L2327`](../server.js#L2327) |
-| Wallpaper image: `/wallpaper/:slug/:mode/:id` | `GET` | Public | Any theme declares `wallpapers` | Serves one image from the live catalog of a theme's configured folder; ids come from the catalog, never from a path. `Cache-Control: no-cache` with ETag revalidation, so a replaced picture shows on the next load. [`server.js`](../server.js) |
-| Transformed HTML: `/embed/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; preserves scripts while rewriting local URLs and injecting theme/annotation integration. Mounted repos only. [`server.js#L2420`](../server.js#L2420) |
-| Verbatim HTML: `/raw/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; unsanitized same-origin content; supports published revisions. [`server.js#L2534`](../server.js#L2534) |
-| View redirect: `/view` | `GET` | Public redirect | Always | Redirects to `/`; a restricted caller is then challenged there. [`server.js#L2636`](../server.js#L2636) |
+| Static browser assets: `/public/*` | `GET`, `HEAD` | Public | Always | Express static mount; no repository data. [`server.js`](../server.js) |
+| Managed repo list: `/api/managed-repos` | `GET` | Results require effective `view` | `managedRepos.storePath` | Returns only visible managed repos and omits roots; a denied caller receives an empty list rather than an auth error. [`server.js`](../server.js) |
+| Managed repo registration: `/api/managed-repos` | `POST` | Managed-repo admin bearer token | `managedRepos.storePath`, `allowRoots`, and `adminTokens` | Registers or creates a root only below an existing allow-root. [`server.js`](../server.js) |
+| Managed tree: `/api/managed-repos/:repo/tree` | `GET` | Effective `view` on requested directory and returned entries | `managedRepos.storePath` | Bounded by depth and entry limits; internal trash is hidden. [`server.js`](../server.js) |
+| Managed changes: `/api/managed-repos/:repo/changes` | `GET` | Effective `view` | `managedRepos.storePath` | Bounded mtime-based file listing; `since` is a numeric Unix timestamp. [`server.js`](../server.js) |
+| Managed file read: `/api/managed-repos/:repo/files/*` | `GET` | Effective `view` on file | `managedRepos.storePath` | Returns UTF-8 content and metadata as JSON. [`server.js`](../server.js) |
+| Managed file create/update: `/api/managed-repos/:repo/files/*` | `PUT` | Effective `write` on file | `managedRepos.storePath` | Atomic UTF-8 write; optional `expectedMtimeMs`; records managed API-key audit events. [`server.js`](../server.js) |
+| Publish create: `/api/publish` | `POST` | Repo-level `publish` on the configured publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | Creates immutable revision 1. Path-only publish scope is insufficient. [`server.js`](../server.js) |
+| Managed file delete: `/api/managed-repos/:repo/files/*` | `DELETE` | Effective `write` on file | `managedRepos.storePath` | Soft delete by default; `?hard=1` permanently deletes. [`server.js`](../server.js) |
+| Managed trash restore: `/api/managed-repos/:repo/trash/:trashId/restore` | `POST` | Effective `write` on repo and original file | `managedRepos.storePath` | Restores a soft-deleted file. [`server.js`](../server.js) |
+| Managed trash removal: `/api/managed-repos/:repo/trash/:trashId` | `DELETE` | Effective `write` on repo and original file | `managedRepos.storePath` | Permanently deletes one trash item. [`server.js`](../server.js) |
+| Managed search: `/api/search` | `GET` | Effective `view`; results are caller-filtered | `managedRepos.storePath` | Requires `q`; searches bounded path/content candidates in supported text formats. [`server.js`](../server.js) |
+| Managed suggestions: `/api/search/suggest` | `GET` | Effective `view`; results are caller-filtered | `managedRepos.storePath` | Requires `q`; returns bounded path suggestions. [`server.js`](../server.js) |
+| Publish update: `/api/publish/:slug` | `POST` | Repo-level `publish` on publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | Requires `expectedRevision`; creates a complete immutable next revision. [`server.js`](../server.js) |
+| Publish revoke: `/api/publish/:slug/revoke` | `POST` | Repo-level `publish` on publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | Requires a reason and revokes current and historical readback. [`server.js`](../server.js) |
+| API-key list: `/api/agent-keys` | `GET` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Optional state/agent filters and audit projection. [`server.js`](../server.js) |
+| API-key create: `/api/agent-keys` | `POST` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Returns the new secret once; stores only its hash. [`server.js`](../server.js) |
+| API-key rotate: `/api/agent-keys/:keyId/rotate` | `POST` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Replaces and returns the secret once. [`server.js`](../server.js) |
+| API-key revoke: `/api/agent-keys/:keyId/revoke` | `POST` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Requires a reason. [`server.js`](../server.js) |
+| Grant list: `/api/grants` | `GET` | Grant admin token; bearer preferred, query accepted for this read | `access.grants.storePath` and `adminTokens` | Optional filters and audit projection. [`server.js`](../server.js) |
+| Grant create: `/api/grants` | `POST` | Grant admin bearer token | `access.grants.storePath` and `adminTokens` | Enforces issuer, subject, owner, expiry, approval, and cross-company allow-root policy. [`server.js`](../server.js) |
+| Grant renew: `/api/grants/:grantId/renew` | `POST` | Grant admin bearer token | `access.grants.storePath` and `adminTokens` | Updates expiry and rotates the grant token unless disabled in the request. [`server.js`](../server.js) |
+| Grant revoke: `/api/grants/:grantId/revoke` | `POST` | Grant admin bearer token | `access.grants.storePath` and `adminTokens` | Requires a reason and authorized issuer identity in the payload. [`server.js`](../server.js) |
+| Repository index: `/` | `GET` | Non-denied caller; entries require effective `view` | Always | HTML index filtered to visible repos. [`server.js`](../server.js) |
+| Health: `/healthz` | `GET` | Public | Always | Returns status and the three server feature booleans. [`server.js`](../server.js) |
+| Agent discovery: `/.well-known/agent.json` | `GET` | Non-denied caller | Always | Versioned caller-scoped discovery document. [`server.js`](../server.js) |
+| Caller discovery: `/api/whoami` | `GET` | Non-denied caller | Always | Caller identity, permissions, scopes, capabilities, and endpoints. [`server.js`](../server.js) |
+| Repo discovery: `/api/repos` | `GET` | Non-denied caller; results require effective `view` | Always | Returns opaque repo/view/asset URLs, never roots. [`server.js`](../server.js) |
+| Render/browse: `/view/*` | `GET` | Effective `view` on path | Always | Directory, document, code, image, audio, video, PDF, CSV, and JSON views; HTML supports `?validate=1`; publish readback supports `?version=`. [`server.js`](../server.js) |
+| Edit page: `/edit/*` | `GET` | Effective `write` on file | `server.enableEditing` or `LOOKIE_LINK_ENABLE_EDITING` | Text/non-binary existing files only. [`server.js`](../server.js) |
+| Save mounted file: `/api/save/*` | `POST` | Effective `write` on existing file | Editing flag | Atomic UTF-8 replacement with optional `expectedMtimeMs`. [`server.js`](../server.js) |
+| Preview draft: `/api/preview/*` | `POST` | Effective `view` on existing file | Editing flag | Renders supplied content without writing it. [`server.js`](../server.js) |
+| Annotation read: `/api/annotations/:repo/*` | `GET` | Effective `view` on file | `server.enableAnnotations` or `LOOKIE_LINK_ENABLE_ANNOTATIONS` | Sidecar read with repeatable `state` filter. [`server.js`](../server.js) |
+| Annotation create: `/api/annotations/:repo/*` | `POST` | Effective `write` on file | Annotations flag | Supports heading, YAML-key, and line-range anchors. [`server.js`](../server.js) |
+| Annotation update: `/api/annotations/:repo/*` | `PATCH` | Effective `write` on file | Annotations flag | Claim, resolve, reopen, reply, or redact; optional stale-write guard. [`server.js`](../server.js) |
+| Raw asset: `/asset/:repo/*` | `GET` | Effective `view` on file | Always | Allowlisted image/audio/video/PDF/text MIME types; published revisions accept `?version=`. [`server.js`](../server.js) |
+| Wallpaper image: `/wallpaper/:slug/:mode/:id` | `GET` | Non-denied caller | Any theme declares `wallpapers` | Serves one image from the live catalog of a theme's configured folder; ids come from the catalog, never from a path. `Cache-Control: no-cache` with ETag revalidation, so a replaced picture shows on the next load. [`server.js`](../server.js) |
+| Transformed HTML: `/embed/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; preserves scripts while rewriting local URLs and injecting theme/annotation integration. Mounted repos only. [`server.js`](../server.js) |
+| Verbatim HTML: `/raw/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; unsanitized same-origin content; supports published revisions. [`server.js`](../server.js) |
+| View redirect: `/view` | `GET` | Public redirect | Always | Redirects to `/`; a restricted caller is then challenged there. [`server.js`](../server.js) |
 
-Unmatched paths use the final `404` middleware and unhandled errors use the final `500` middleware at [`server.js#L2640`](../server.js#L2640). These are fallbacks, not separately registered application routes.
+Unmatched paths use the final `404` middleware and unhandled errors use the final `500` middleware at [`server.js`](../server.js). These are fallbacks, not separately registered application routes.
 
 ## Discovery endpoint templates
 
@@ -88,6 +88,10 @@ This three-column table is test-checked against `lib/agent-discovery.js` and the
 | `publishCreate` | `/api/publish` | Publish store is enabled and caller has repo-level `publish` |
 | `publishUpdate` | `/api/publish/:slug` | Publish capability is available |
 | `publishRevoke` | `/api/publish/:slug/revoke` | Publish capability is available |
+| `wallpaperImage` | `/wallpaper/:scheme/:mode/:id` | Any theme declares `wallpapers` and the route is registered |
+| `forms` | `/forms` | `forms.enabled` is true |
+| `formsTemplates` | `/api/forms/templates` | `forms.enabled` is true |
+| `formsSubmissions` | `/api/forms/:templateId/submissions` | `forms.enabled` is true |
 
 Administrative grant, API-key, and managed-repo registration routes are intentionally not emitted.
 
@@ -108,12 +112,14 @@ Both discovery responses contain these booleans. They are computed from register
 | `managedRepos` | Managed store is enabled and caller can see at least one managed repo |
 | `search` | Managed-repo capability and search route are available |
 | `publish` | Publish store is enabled and caller has whole-repo `publish` scope on its virtual repo |
+| `wallpapers` | At least one theme has a picture set and the wallpaper image route is registered |
+| `forms` | The forms router is mounted (`forms.enabled: true`); per-template authorization still applies on each forms route |
 
 ## Discovery field inventory
 
-`GET /api/whoami` returns `ok`; `auth.mode`, `auth.type`, `auth.source`, and `auth.queryToken`; sanitized `subject` (`companyId`, `agentId`, `label`, or `null`); `permissions` (`view`, `write`, legacy-equivalent `edit`, `publish`); `repoScopes[]` (`repo`, `managed`, and `scopes[]` with `type` and `path`); plus `capabilities` and `endpoints` from the tables above.
+`GET /api/whoami` returns `ok`; the same `themes` appearance block as the agent card (below); `auth.mode`, `auth.type`, `auth.source`, and `auth.queryToken`; sanitized `subject` (`companyId`, `agentId`, `label`, or `null`); `permissions` (`view`, `write`, legacy-equivalent `edit`, `publish`); `repoScopes[]` (`repo`, `managed`, and `scopes[]` with `type` and `path`); plus `capabilities` and `endpoints` from the tables above.
 
-`GET /.well-known/agent.json` returns `schemaVersion`, `name`, package `version`, `generatedAt`; `instance.baseUrl` and `instance.mode`; `authentication.bearerToken` and `authentication.queryTokenForReadRequests`; `discovery.whoamiUrl`, `discovery.reposUrl`, and `discovery.agentJsonUrl`; `caller` containing the same `auth`, `subject`, `permissions`, and `repoScopes`; plus the same `capabilities` and `endpoints`. It also carries the appearance surface under `themes`: `parameters` (the five URL parameter names, see [URL selection](#url-selection-the-appearance-api)), `modes`, `wallpapers` (the `imageUrl` template, the `none` sentinel, and `panelOpacity` / `blur` ranges with their configured defaults), and `available[]` with each theme's `id`, `label`, `aliases`, and `wallpapers` (`dark[]` / `light[]` picture `id` + `label`, and that theme's effective `panelOpacity` / `blur`). A caller can build any valid appearance URL from this document alone.
+`GET /.well-known/agent.json` returns `ok`, `schemaVersion`, `name`, package `version`, `generatedAt`; `instance.baseUrl` and `instance.mode`; `authentication.bearerToken` and `authentication.queryTokenForReadRequests`; `discovery.whoamiUrl`, `discovery.reposUrl`, and `discovery.agentJsonUrl`; `caller` containing the same `auth`, `subject`, `permissions`, and `repoScopes`; plus the same `capabilities` and `endpoints`. It also carries the appearance surface under `themes`: `parameters` (the five URL parameter names, see [URL selection](#url-selection-the-appearance-api)), `modes`, `wallpapers` (the `imageUrl` template, the `none` sentinel, and `panelOpacity` / `blur` ranges with their configured defaults), and `available[]` with each theme's `id`, `label`, `aliases`, and `wallpapers` (`dark[]` / `light[]` picture `id` + `label`, and that theme's effective `panelOpacity` / `blur`). A caller can build any valid appearance URL from this document alone.
 
 Neither response includes credentials, token names, repository roots, store paths, private metadata, or administrative capabilities. A restricted missing credential returns `401`; an invalid credential returns `403`, without capability data.
 
@@ -212,7 +218,10 @@ The package also ships compatibility executables `lookie-read` and `lookie-annot
 
 These routes are **not** part of the default route set above: they are registered
 only when the opt-in `forms` configuration block is present, so the route-matrix
-equality test intentionally does not cover them.
+equality test intentionally does not cover them. When mounted, discovery
+advertises the `forms` capability and the `forms`, `formsTemplates` and
+`formsSubmissions` endpoint templates; per-template authorization still
+applies on every forms route.
 
 | Route | Method | Effective auth | Enabled by | Notes |
 |---|---|---|---|---|
