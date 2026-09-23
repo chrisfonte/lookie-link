@@ -52,6 +52,7 @@ The inventory was checked against the route registrations in [`server.js`](../se
 | Annotation create: `/api/annotations/:repo/*` | `POST` | Effective `write` on file | Annotations flag | Supports heading, YAML-key, and line-range anchors. [`server.js#L2138`](../server.js#L2138) |
 | Annotation update: `/api/annotations/:repo/*` | `PATCH` | Effective `write` on file | Annotations flag | Claim, resolve, reopen, reply, or redact; optional stale-write guard. [`server.js#L2226`](../server.js#L2226) |
 | Raw asset: `/asset/:repo/*` | `GET` | Effective `view` on file | Always | Allowlisted image/audio/video/PDF/text MIME types; published revisions accept `?version=`. [`server.js#L2327`](../server.js#L2327) |
+| Wallpaper image: `/wallpaper/:slug/:mode/:id` | `GET` | Public | Any theme declares `wallpapers` | Serves one image from the startup scan of a theme's configured folder; ids come from the catalog, never from a path. Long cache. |
 | Transformed HTML: `/embed/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; preserves scripts while rewriting local URLs and injecting theme/annotation integration. Mounted repos only. [`server.js#L2420`](../server.js#L2420) |
 | Verbatim HTML: `/raw/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; unsanitized same-origin content; supports published revisions. [`server.js#L2534`](../server.js#L2534) |
 | View redirect: `/view` | `GET` | Public redirect | Always | Redirects to `/`; a restricted caller is then challenged there. [`server.js#L2636`](../server.js#L2636) |
@@ -158,6 +159,7 @@ Neither response includes credentials, token names, repository roots, store path
 | `forms.publicOrigins[]` / `.publicOrigin` | Exact allowed browser mutation origins, including scheme and port; browser mutations fail closed when absent |
 | `themes.<name>.dark` / `.light` | Custom CSS-variable maps. Accepted keys: `bg`, `bg_elev`, `bg_code`, `text`, `text_soft`, `accent`, `border`, `link`, `page_bg`, `toolbar_bg`, `toolbar_btn_bg`, `toolbar_btn_hover`, `toolbar_btn_text`, `toc_active_bg`, `heading_font` |
 | `themes.<name>.aliases[]` | Additional names that render the same theme; never listed separately in the picker. See [CONFIGURATION.md](CONFIGURATION.md#aliases) |
+| `themes.<name>.wallpapers.dark` / `.light` | Folder of images (`.jpg`, `.jpeg`, `.png`, `.webp`, at most 50) painted behind every page while that theme and mode are active. See [CONFIGURATION.md](CONFIGURATION.md#wallpapers) |
 
 Configuration file lookup is `LOOKIE_LINK_CONFIG`, then the reader config directory, then the project root. The recognized server environment variables are `LOOKIE_LINK_CONFIG`, `ROOT_MAPPINGS`, `PORT`, `HOSTNAME`, `LOOKIE_LINK_ENABLE_EDITING`, `LOOKIE_LINK_ENABLE_ANNOTATIONS`, and `LOOKIE_LINK_ENABLE_RAW_HTML`. Secret environment-variable names are chosen by each `secretEnv` value.
 
@@ -241,6 +243,25 @@ event includes storage paths.
 
 Dynamic option providers, sessions, and reaction dispatch are **not** implemented.
 
+
+## Viewer-wide wallpapers
+
+When any custom theme declares `wallpapers`, every page built on the shared
+shell (file browser, rendered files, Trackers) paints a fixed picture behind
+the page and adds a Wallpaper menu to the floating toolbar, between the theme
+picker and the light/dark button. Reading surfaces become frosted glass: panel
+opacity (50–100%, default 72) and blur behind the panel (0–16 px, default 12)
+are tunable; text stays fully opaque. A scrim fades the top of the picture into
+the theme ground so the toolbar never ends in a hard edge.
+
+The picture follows the active theme and mode. Choices persist in the browser
+(`localStorage` key `lookie-link-wallpaper`): the picked image per theme, a
+remembered "No background", opacity and blur. A theme without a set shows a
+plain page and the menu says so. The catalog is scanned once at startup;
+restart the server after adding images.
+
+The embedded-HTML page is the exception: its sandboxed frame is opaque, so
+there the document supplies pictures over the bridge below.
 
 ## Embedded wallpaper controls
 

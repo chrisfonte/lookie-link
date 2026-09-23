@@ -144,6 +144,28 @@ they are claimed across the whole pass, so the later entry is skipped
 entirely, with a warning naming the theme (or theme and alias) and the
 colliding slug. Only the first claim survives.
 
+### Wallpapers
+
+A custom theme may point at a folder of images per mode. The viewer scans each
+folder once at startup and paints the pictures behind every page while that
+theme and mode are active (see [CAPABILITIES.md](CAPABILITIES.md#viewer-wide-wallpapers)).
+
+```yaml
+themes:
+  Carolina Sunset:
+    wallpapers:
+      dark: ~/.config/omarchy/themes/carolina-sunset/backgrounds
+      light: ~/.config/omarchy/themes/carolina-sunset-light/backgrounds
+```
+
+Accepted files: `.jpg`, `.jpeg`, `.png`, `.webp`; at most 50 per folder.
+Files are ordered by a leading number (`3-…`) when present, then by name. The
+picture's id and label come from the filename with the number and the theme's
+own name stripped, so `0-carolina-sunset-ember-ripples.jpg` is "Ember
+Ripples". A folder that is missing or unreadable logs a warning and yields an
+empty set; the server still starts. Only the images are served, by id, at
+`/wallpaper/<slug>/<mode>/<id>`; the folder path never leaves the server.
+
 ### Aliases
 
 A custom theme may also declare `aliases:` — additional names that render the
