@@ -21,7 +21,7 @@ The inventory was checked against the route registrations in [`server.js`](../se
 | Managed repo list: `/api/managed-repos` | `GET` | Results require effective `view` | `managedRepos.storePath` | Returns only visible managed repos and omits roots; a denied caller receives an empty list rather than an auth error. [`server.js`](../server.js) |
 | Managed repo registration: `/api/managed-repos` | `POST` | Managed-repo admin bearer token | `managedRepos.storePath`, `allowRoots`, and `adminTokens` | Registers or creates a root only below an existing allow-root. [`server.js`](../server.js) |
 | Managed tree: `/api/managed-repos/:repo/tree` | `GET` | Effective `view` on requested directory and returned entries | `managedRepos.storePath` | Bounded by depth and entry limits; internal trash is hidden. [`server.js`](../server.js) |
-| Managed changes: `/api/managed-repos/:repo/changes` | `GET` | Effective `view` | `managedRepos.storePath` | Bounded mtime-based file listing; `since` is a numeric Unix timestamp. [`server.js`](../server.js) |
+| Managed changes: `/api/managed-repos/:repo/changes` | `GET` | Effective `view` | `managedRepos.storePath` | Bounded mtime-based file listing; `since` is epoch milliseconds (compared against `mtimeMs`). [`server.js`](../server.js) |
 | Managed file read: `/api/managed-repos/:repo/files/*` | `GET` | Effective `view` on file | `managedRepos.storePath` | Returns UTF-8 content and metadata as JSON. [`server.js`](../server.js) |
 | Managed file create/update: `/api/managed-repos/:repo/files/*` | `PUT` | Effective `write` on file | `managedRepos.storePath` | Atomic UTF-8 write; optional `expectedMtimeMs`; records managed API-key audit events. [`server.js`](../server.js) |
 | Publish create: `/api/publish` | `POST` | Repo-level `publish` on the configured publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | Creates immutable revision 1. Path-only publish scope is insufficient. [`server.js`](../server.js) |
@@ -196,7 +196,7 @@ The `lookie` executable resolves the instance in this order: global `--instance`
 | `lookie repos` | Lists caller-visible repos |
 | `lookie read <repo>/<path>` | Tries managed-file JSON first, then falls back to `/asset`; `--json` wraps asset output |
 | `lookie tree <repo> [--path REL] [--max-depth N]` | Reads managed bounded tree |
-| `lookie changes <repo> --since VALUE` | Reads managed changes; the server expects a numeric Unix timestamp despite the CLI help label `ISO_TIMESTAMP` |
+| `lookie changes <repo> --since VALUE` | Reads managed changes; `VALUE` is an ISO-8601 timestamp or Unix seconds (13+ digit values are taken as milliseconds). The CLI converts to the epoch milliseconds the server compares against file `mtimeMs` |
 | `lookie write <repo>/<path> ...` | Managed atomic write using exactly one of `--content`, `--content-file`, or `--content-from-stdin`; optional `--expected-mtime` |
 | `lookie delete <repo>/<path> [--hard]` | Managed soft or hard delete |
 | `lookie search <query> [--scope REPO]...` | Managed path/content search |
@@ -204,9 +204,26 @@ The `lookie` executable resolves the instance in this order: global `--instance`
 | `lookie publish <file> ...` | Creates a single-file publication; accepts `--slug`, `--entry-path`, and `--expected-revision` |
 | `lookie publish --manifest FILE ...` | Creates or updates from a JSON manifest |
 | `lookie publish revoke <slug> --reason TEXT` | Revokes a publication |
+| `lookie annotations list <repo>/<path> [--state S]...` | `GET /api/annotations/:repo/*`; states `open`, `claimed`, `resolved` |
+| `lookie annotations get <repo>/<path> <id>` | Reads the document and selects one annotation; exit `4` if absent |
+| `lookie annotations add <repo>/<path> --anchor A --kind K ...` | `POST /api/annotations/:repo/*`; kinds `heading`, `yamlKey`, `lineRange`; body via `--body`, `--body -` (stdin), or `--body-file`; `--author` (default `$LOOKIE_LINK_AUTHOR` or `lookie`) |
+| `lookie annotations claim <repo>/<path> <id> [--by NAME]` | `PATCH` op `claim` |
+| `lookie annotations resolve <repo>/<path> <id>` | `PATCH` op `resolve` |
+| `lookie annotations replies <repo>/<path> <id> [--add BODY]` | Lists replies, or with `--add`/`--body-file` appends one (`PATCH` op `reply`) |
+| `lookie trash restore <repo> <trashId>` | `POST /api/managed-repos/:repo/trash/:trashId/restore` |
+| `lookie trash remove <repo> <trashId>` | `DELETE /api/managed-repos/:repo/trash/:trashId` (permanent) |
+| `lookie trash list` | Not supported: the server has no trash listing endpoint; use the `trashId` returned by `lookie delete`. Exits `2` |
+| `lookie appearance show [--theme SLUG]` | `GET /api/appearance` (includes `revision`) or `GET /api/appearance/themes/:slug` |
+| `lookie appearance set --revision N [--blur N] [--panel N] [--theme-json JSON]` | `PATCH /api/appearance` with `expectedRevision`; `--panel` maps to `wallpapers.panel_opacity`, `--theme-json` to `themes`; `--json-file FILE` supplies a whole body (flags override). Stale revision exits `5` |
+| `lookie appearance upload <slug> <dark\|light> --name ID <file>` | `POST /api/appearance/themes/:slug/wallpapers/:mode?name=ID` with raw bytes; Content-Type from extension (`.jpg`/`.jpeg`/`.png`/`.webp`) |
+| `lookie appearance delete <slug> <dark\|light> <id>` | `DELETE /api/appearance/themes/:slug/wallpapers/:mode/:id` |
+| `lookie openapi` | Prints `/openapi.json` |
+| `lookie docs` | Prints the `/api/docs` URL (`--json` wraps it as `{ok,url}`) |
 | `lookie --help`, `lookie --version`, global `--json` | Help, version, and supported JSON output |
 
-The package also ships compatibility executables `lookie-read` and `lookie-annotations`; they are separate scripts, not subcommands of the unified CLI.
+Appearance writes (`set`, `upload`, `delete`) send `LOOKIE_LINK_ADMIN_TOKEN` as the bearer, falling back to the normal token. Exit codes: `0` ok, `2` usage, `3` auth (401/403), `4` not found, `5` conflict, `6` transport/other.
+
+The package also ships compatibility executables `lookie-read` and `lookie-annotations`; they remain as separate scripts. `lookie annotations` in the unified CLI covers the same operations (output is always JSON; the shim's `--pretty`/`--json-errors` are not ported).
 
 ## Library and store inventory
 

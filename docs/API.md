@@ -107,7 +107,7 @@ Registration is an administrative operation constrained to configured existing a
 - Writes require string `content`; optional `expectedMtimeMs` returns `409` on conflict.
 - Deletes are soft by default and return a `trashId`; `?hard=1` deletes immediately.
 - Restore and permanent-trash deletion re-check `write` on the original path.
-- Tree and change responses are bounded and caller-filtered. `changes?since=` expects a numeric Unix timestamp.
+- Tree and change responses are bounded and caller-filtered. `changes?since=` expects epoch **milliseconds** (compared against file `mtimeMs`); the CLI accepts ISO-8601 or seconds and converts.
 - Search requires `q`, supports repeated `scope`, and bounds results, entries, file size, and total bytes. Suggestions match visible paths only.
 
 ## Publishing
@@ -125,6 +125,15 @@ Readback uses the normal `view`, `asset`, and optional `raw` routes beneath the 
 API-key lifecycle routes require an API-key admin bearer token. Created and rotated secrets are returned once and stored only as hashes. Grant lifecycle routes require a grant admin token; mutation credentials must be bearer tokens. Grant requests also enforce issuer, subject, source-owner, expiry, approval, and cross-company allow-root policy.
 
 These routes intentionally use store-specific admin credentials rather than the caller's `view`, `write`, or `publish` permissions.
+
+## Stale-write guards
+
+Two guard styles exist, for historical reasons:
+
+| Guard | Used by | Semantics |
+|---|---|---|
+| `expectedRevision` (integer) | publish, forms templates, appearance | The standard for every new API. Compare with the resource's `revision`; a mismatch is `409 revision_conflict` and the body carries `currentRevision` (or the safe current projection). |
+| `expectedMtimeMs` (number) | managed files, `/api/save`, annotations | Legacy file-backed guard. Compare with the file's `mtimeMs`; a mismatch is `409 stale_write` with `currentMtimeMs`. Kept because those resources have no revision counter; not to be used for new resources. |
 
 ## Error conventions
 

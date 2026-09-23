@@ -958,7 +958,7 @@ function createApp(options = {}) {
     }
     const since = req.query.since == null || req.query.since === '' ? null : Number(req.query.since);
     if (since !== null && !Number.isFinite(since)) {
-      apiError(res, 400, null, 'since must be a unix timestamp.');
+      apiError(res, 400, null, 'since must be a unix timestamp in milliseconds.');
       return;
     }
     try {
