@@ -39,6 +39,7 @@ House standards bind this project but live outside it, in the maintainer's opera
 
 ## Commands
 
+- `npm run verify` — the single pre-commit gate: Node suite, browser spec, raw-HTML validator, skill-package sync. Gate on its exit code; never on a grep of its output.
 - `npm test` — Node test suite, including the discovery-to-documentation matrix check
 - `npm run validate:raw-html` — raw/transformed HTML regression checks
 - `npm run validate:editable` — editor, annotation, and compatibility CLI regression checks
