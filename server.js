@@ -353,6 +353,21 @@ function parseBooleanQuery(value) {
   return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
+// `since` for change listings: epoch milliseconds, epoch seconds (< 1e12), or
+// an ISO-8601 timestamp. Independent-agent trial 2026-09-23: an agent given an
+// ISO time had to convert it by hand; the server should take what people have.
+function parseSince(raw) {
+  if (raw == null || raw === '') return { since: null };
+  const text = String(raw).trim();
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    const n = Number(text);
+    return { since: n < 1e12 ? Math.round(n * 1000) : Math.round(n) };
+  }
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) return { since: parsed };
+  return { error: 'since must be epoch milliseconds, epoch seconds, or an ISO-8601 timestamp.' };
+}
+
 function managedNotFound(res) {
   apiError(res, 404, null, 'Not found.');
 }
@@ -959,11 +974,12 @@ function createApp(options = {}) {
     const found = resolveReadableRepo(req, res, '', 'directory');
     if (!found) return;
     const { repo, reader, accessContext } = found;
-    const since = req.query.since == null || req.query.since === '' ? null : Number(req.query.since);
-    if (since !== null && !Number.isFinite(since)) {
-      apiError(res, 400, null, 'since must be a unix timestamp in milliseconds.', [{ path: 'since', message: 'epoch milliseconds' }]);
+    const parsedSince = parseSince(req.query.since);
+    if (parsedSince.error) {
+      apiError(res, 400, null, parsedSince.error, [{ path: 'since', message: 'epoch ms | epoch s | ISO-8601' }]);
       return;
     }
+    const since = parsedSince.since;
     try {
       const tree = await reader.listTree(repo, '', {
         maxDepth: 10,
@@ -1044,11 +1060,12 @@ function createApp(options = {}) {
       managedNotFound(res);
       return;
     }
-    const since = req.query.since == null || req.query.since === '' ? null : Number(req.query.since);
-    if (since !== null && !Number.isFinite(since)) {
-      apiError(res, 400, null, 'since must be a unix timestamp in milliseconds.');
+    const parsedSince = parseSince(req.query.since);
+    if (parsedSince.error) {
+      apiError(res, 400, null, parsedSince.error, [{ path: 'since', message: 'epoch ms | epoch s | ISO-8601' }]);
       return;
     }
+    const since = parsedSince.since;
     try {
       const tree = await managedRepoStore.listTree(repo, '', {
         maxDepth: 10,
@@ -1202,11 +1219,24 @@ function createApp(options = {}) {
     }
   });
 
+  // A misspelled filter must not silently widen a search (independent-agent
+  // trial 2026-09-23: `repo=` was ignored and 18 repos were searched). `repo`
+  // is accepted as an alias of `scope`; anything else unknown is a 400.
+  const SEARCH_QUERY_KEYS = new Set(['q', 'scope', 'repo', 'limit', 'maxEntries', 'token']);
+  const rejectUnknownSearchParams = (req, res) => {
+    const unknown = Object.keys(req.query).filter((key) => !SEARCH_QUERY_KEYS.has(key));
+    if (!unknown.length) return false;
+    apiError(res, 400, 'invalid_request', `Unknown query parameter${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}. Accepted: q, scope (alias repo), limit, maxEntries.`, unknown.map((key) => ({ path: key, message: 'unknown query parameter' })));
+    return true;
+  };
+  const searchScope = (query) => [].concat(query.scope || [], query.repo || []);
+
   app.get('/api/search', async (req, res) => {
     if (req.accessContext && req.accessContext.mode === 'denied') {
       sendAccessError(res, req.accessContext, true);
       return;
     }
+    if (rejectUnknownSearchParams(req, res)) return;
     const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (!query) {
       apiError(res, 400, null, 'q is required.', [{ path: 'q', message: 'q is required.' }]);
@@ -1222,7 +1252,7 @@ function createApp(options = {}) {
         store: repoResolver.store,
         repos: repoResolver.listAll(),
         query,
-        scope: req.query.scope,
+        scope: searchScope(req.query),
         limit: req.query.limit,
         maxEntries: req.query.maxEntries,
         canView: (repo, relativePath, type) => canAccessPath(accessContext, 'view', repo, relativePath, type),
@@ -1238,6 +1268,7 @@ function createApp(options = {}) {
       sendAccessError(res, req.accessContext, true);
       return;
     }
+    if (rejectUnknownSearchParams(req, res)) return;
     const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (!query) {
       apiError(res, 400, null, 'q is required.', [{ path: 'q', message: 'q is required.' }]);
@@ -1253,7 +1284,7 @@ function createApp(options = {}) {
         store: repoResolver.store,
         repos: repoResolver.listAll(),
         query,
-        scope: req.query.scope,
+        scope: searchScope(req.query),
         limit: req.query.limit,
         maxEntries: req.query.maxEntries,
         canView: (repo, relativePath, type) => canAccessPath(accessContext, 'view', repo, relativePath, type),

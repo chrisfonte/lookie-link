@@ -117,7 +117,7 @@ Create request:
 
 ## Any served repository: tree, changes, file read, search
 
-Since 2026-09-23 the read half of the repository API is not limited to managed repositories. `GET /api/repos/:repo/tree`, `GET /api/repos/:repo/changes?since=<epoch ms>` and `GET /api/repos/:repo/files/*path` work for every repo the caller can view, managed or plainly mapped, with the same bounds, caller filtering, envelope and `viewUrl` fields; responses carry `managed: true|false`. `.git`, Syncthing state folders and `node_modules` are never listed. `GET /api/search` and `/suggest` cover the union of managed and mapped repos. The `/api/managed-repos/...` read routes remain for managed repos.
+Since 2026-09-23 the read half of the repository API is not limited to managed repositories. `GET /api/repos/:repo/tree`, `GET /api/repos/:repo/changes?since=<epoch ms | epoch s | ISO-8601>` and `GET /api/repos/:repo/files/*path` work for every repo the caller can view, managed or plainly mapped, with the same bounds, caller filtering, envelope and `viewUrl` fields; responses carry `managed: true|false`. `.git`, Syncthing state folders and `node_modules` are never listed. `GET /api/search` and `/suggest` cover the union of managed and mapped repos. The `/api/managed-repos/...` read routes remain for managed repos.
 
 ## Managed repositories
 
@@ -127,8 +127,8 @@ Registration is an administrative operation constrained to configured existing a
 - Writes require string `content`; optional `expectedMtimeMs` returns `409` on conflict.
 - Deletes are soft by default and return a `trashId`; `?hard=1` deletes immediately.
 - Restore and permanent-trash deletion re-check `write` on the original path.
-- Tree and change responses are bounded and caller-filtered (the generic `/api/repos/:repo/...` routes above give the same for mapped repos). `changes?since=` expects epoch **milliseconds** (compared against file `mtimeMs`); the CLI accepts ISO-8601 or seconds and converts.
-- Search requires `q`, supports repeated `scope`, and bounds results, entries, file size, and total bytes. The entry budget (default 20000, max 40000) is shared fairly across the candidate repos (500–5000 entries each), so an unscoped search across a large fleet samples every repo rather than exhausting the budget on the first; `truncated` says when a repo's slice ran out. Scope the search when you know the repo. A search index is roadmap R8. Suggestions match visible paths only.
+- Tree and change responses are bounded and caller-filtered (the generic `/api/repos/:repo/...` routes above give the same for mapped repos). `changes?since=` accepts epoch milliseconds, epoch seconds or an ISO-8601 timestamp (compared against file `mtimeMs`).
+- Search requires `q`, supports repeated `scope` (alias `repo`), rejects unknown query parameters with `400` so a misspelled filter cannot silently widen a search, and bounds results, entries, file size, and total bytes. The entry budget (default 20000, max 40000) is shared fairly across the candidate repos (500–5000 entries each), so an unscoped search across a large fleet samples every repo rather than exhausting the budget on the first; `truncated` says when a repo's slice ran out. Scope the search when you know the repo. A search index is roadmap R8. Suggestions match visible paths only.
 
 ## Publishing
 
