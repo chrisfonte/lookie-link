@@ -159,6 +159,8 @@ Neither response includes credentials, token names, repository roots, store path
 | `forms.publicOrigins[]` / `.publicOrigin` | Exact allowed browser mutation origins, including scheme and port; browser mutations fail closed when absent |
 | `themes.<name>.dark` / `.light` | Custom CSS-variable maps. Accepted keys: `bg`, `bg_elev`, `bg_code`, `text`, `text_soft`, `accent`, `border`, `link`, `page_bg`, `toolbar_bg`, `toolbar_btn_bg`, `toolbar_btn_hover`, `toolbar_btn_text`, `toc_active_bg`, `heading_font` |
 | `themes.<name>.aliases[]` | Additional names that render the same theme; never listed separately in the picker. See [CONFIGURATION.md](CONFIGURATION.md#aliases) |
+| `wallpapers.panel_opacity` / `wallpapers.blur` | Global glass defaults (50–100 %, 0–16 px). See [CONFIGURATION.md](CONFIGURATION.md#wallpapers) |
+| `themes.<name>.wallpapers.default.dark` / `.light`, `.panel_opacity`, `.blur` | Per-theme starting picture and glass overrides |
 | `themes.<name>.wallpapers.dark` / `.light` | Folder of images (`.jpg`, `.jpeg`, `.png`, `.webp`, at most 50) painted behind every page while that theme and mode are active. See [CONFIGURATION.md](CONFIGURATION.md#wallpapers) |
 
 Configuration file lookup is `LOOKIE_LINK_CONFIG`, then the reader config directory, then the project root. The recognized server environment variables are `LOOKIE_LINK_CONFIG`, `ROOT_MAPPINGS`, `PORT`, `HOSTNAME`, `LOOKIE_LINK_ENABLE_EDITING`, `LOOKIE_LINK_ENABLE_ANNOTATIONS`, and `LOOKIE_LINK_ENABLE_RAW_HTML`. Secret environment-variable names are chosen by each `secretEnv` value.
