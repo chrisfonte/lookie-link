@@ -11,6 +11,7 @@ The inventory was checked against the route registrations in [`server.js`](../se
 - `edit` is accepted in stored credentials as a legacy alias, but is normalized to `write`.
 - Read requests accept a bearer token or `?token=`. All `POST`, `PUT`, `PATCH`, and `DELETE` requests reject query credentials before route handling and therefore require bearer credentials when access is restricted.
 - Administrative tokens are separate from caller permissions and are never advertised by discovery.
+- Denials and every other JSON API failure use the single error envelope `{ ok: false, error: { code, message, details? } }` (for example `unauthenticated`, `forbidden`, `query_credentials_rejected`); see [API.md → Error conventions](API.md#error-conventions).
 
 ## Registered HTTP routes
 

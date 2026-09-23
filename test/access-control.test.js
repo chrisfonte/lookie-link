@@ -895,7 +895,8 @@ test('managed grant API rejects issue-linked creates and renewals without explic
     });
     assert.equal(createResponse.status, 400);
     const createPayload = await createResponse.json();
-    assert.match(createPayload.error, /expiresAt is required/);
+    assert.equal(createPayload.error.code, 'invalid_request');
+    assert.match(createPayload.error.message, /expiresAt is required/);
 
     const seededCreate = await server.request('/api/grants', {
       method: 'POST',
@@ -947,7 +948,8 @@ test('managed grant API rejects issue-linked creates and renewals without explic
     });
     assert.equal(renewResponse.status, 400);
     const renewPayload = await renewResponse.json();
-    assert.match(renewPayload.error, /expiresAt is required/);
+    assert.equal(renewPayload.error.code, 'invalid_request');
+    assert.match(renewPayload.error.message, /expiresAt is required/);
   } finally {
     await server.close();
     await fs.rm(fixture.root, { recursive: true, force: true });

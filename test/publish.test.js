@@ -222,7 +222,7 @@ test('publish requires whole-repo scope for create, update, and revoke', async (
 
     for (const response of await Promise.all(deniedRequests)) {
       assert.equal(response.status, 403);
-      assert.deepEqual(await response.json(), { ok: false, error: 'Access denied.' });
+      assert.deepEqual(await response.json(), { ok: false, error: { code: 'forbidden', message: 'Access denied.' } });
     }
 
     const entries = await fs.readdir(fixture.publishArea);

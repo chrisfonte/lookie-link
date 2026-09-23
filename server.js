@@ -92,6 +92,7 @@ const {
 const { SubmissionService } = require('./lib/forms/submission-service');
 const { setWallpaperCatalog, resolveWallpaperFile, contentTypeFor: wallpaperContentType, watchWallpapers, publicCatalog: publicWallpaperCatalog, currentDefaults: wallpaperDefaultsForDiscovery } = require('./lib/viewer-wallpaper');
 const { createFormsRouter } = require('./lib/forms/routes');
+const { apiError } = require('./lib/api-error');
 
 const { version: LOOKIE_LINK_VERSION } = require('./package.json');
 
@@ -301,12 +302,12 @@ function sendPathError(res, error) {
 }
 
 function sendPathJsonError(res, error) {
-  res.status(error.status).json({ ok: false, error: error.message });
+  apiError(res, error.status, null, error.message);
 }
 
 function sendAccessError(res, accessContext, asJson = false) {
   if (asJson) {
-    res.status(accessContext.denialStatus).json({ ok: false, error: accessContext.denialMessage });
+    apiError(res, accessContext.denialStatus, null, accessContext.denialMessage);
     return;
   }
 
@@ -350,7 +351,7 @@ function parseBooleanQuery(value) {
 }
 
 function managedNotFound(res) {
-  res.status(404).json({ ok: false, error: 'Not found.' });
+  apiError(res, 404, null, 'Not found.');
 }
 
 function publicManagedRepo(repo) {
@@ -579,11 +580,11 @@ async function buildHtmlRenderValidation({ repo, rootPath, relativePath, stat, s
 }
 
 function sendGrantJsonError(res, status, error) {
-  res.status(status).json({ ok: false, error });
+  apiError(res, status, null, error);
 }
 
 function sendApiKeyJsonError(res, status, error) {
-  res.status(status).json({ ok: false, error });
+  apiError(res, status, null, error);
 }
 
 function inferBaseUrl(req) {
@@ -802,7 +803,7 @@ function createApp(options = {}) {
   }
   app.use((req, res, next) => {
     if (mutationUsesQueryToken(req)) {
-      res.status(400).json({ ok: false, error: 'Mutation credentials must use the Authorization header.' });
+      apiError(res, 400, 'query_credentials_rejected', 'Mutation credentials must use the Authorization header.');
       return;
     }
     next();
@@ -886,12 +887,12 @@ function createApp(options = {}) {
   app.post('/api/managed-repos', (req, res) => {
     const auth = authenticateManagedRepoAdmin(req);
     if (!auth.ok) {
-      res.status(auth.status).json({ ok: false, error: auth.error });
+      apiError(res, auth.status, null, auth.error);
       return;
     }
     try {
       if (req.body && mappings[String(req.body.repoId || '').trim().toLowerCase()]) {
-        res.status(409).json({ ok: false, error: 'Repository id already exists.' });
+        apiError(res, 409, null, 'Repository id already exists.');
         return;
       }
       const result = managedRepoStore.createRepo(req.body || {}, auth.admin);
@@ -899,7 +900,7 @@ function createApp(options = {}) {
       res.status(201).json({ ok: true, repo: publicManagedRepo(result.repo) });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
     }
   });
 
@@ -940,7 +941,7 @@ function createApp(options = {}) {
       });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
     }
   });
 
@@ -953,7 +954,7 @@ function createApp(options = {}) {
     }
     const since = req.query.since == null || req.query.since === '' ? null : Number(req.query.since);
     if (since !== null && !Number.isFinite(since)) {
-      res.status(400).json({ ok: false, error: 'since must be a unix timestamp.' });
+      apiError(res, 400, null, 'since must be a unix timestamp.');
       return;
     }
     try {
@@ -969,7 +970,7 @@ function createApp(options = {}) {
       res.status(200).json({ ok: true, repo: repo.id, entries, count: entries.length, truncated: tree.truncated });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
     }
   });
 
@@ -986,7 +987,7 @@ function createApp(options = {}) {
       res.status(200).json({ ok: true, repo: repo.id, ...result, viewUrl: buildHref(repo.id, result.path) });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
     }
   });
 
@@ -999,7 +1000,7 @@ function createApp(options = {}) {
       return;
     }
     if (!req.body || typeof req.body.content !== 'string') {
-      res.status(400).json({ ok: false, error: 'content is required.' });
+      apiError(res, 400, null, 'content is required.', [{ path: 'content', message: 'content is required.' }]);
       return;
     }
     try {
@@ -1011,11 +1012,8 @@ function createApp(options = {}) {
       res.status(result.created ? 201 : 200).json({ ok: true, repo: repo.id, ...result });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({
-        ok: false,
-        error: status === 404 ? 'Not found.' : error.message,
-        ...(status === 409 ? { current: error.current } : {}),
-      });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message, null,
+        status === 409 ? { current: error.current } : null);
     }
   });
 
@@ -1046,9 +1044,7 @@ function createApp(options = {}) {
       });
     } catch (error) {
       const status = error.code === 'ECONFLICT' ? 409 : 400;
-      res.status(status).json({
-        ok: false,
-        error: error.message,
+      apiError(res, status, status === 409 ? 'revision_conflict' : null, error.message, null, {
         current: error.current ? publishStore.serializePublication(error.current) : null,
       });
     }
@@ -1068,7 +1064,7 @@ function createApp(options = {}) {
       res.status(200).json({ ok: true, repo: repo.id, ...result });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
     }
   });
 
@@ -1089,7 +1085,7 @@ function createApp(options = {}) {
       res.status(200).json({ ok: true, repo: repo.id, ...result });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
     }
   });
 
@@ -1110,7 +1106,7 @@ function createApp(options = {}) {
       res.status(200).json({ ok: true, repo: repo.id, ...result });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
     }
   });
 
@@ -1121,11 +1117,11 @@ function createApp(options = {}) {
     }
     const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (!query) {
-      res.status(400).json({ ok: false, error: 'q is required.' });
+      apiError(res, 400, null, 'q is required.', [{ path: 'q', message: 'q is required.' }]);
       return;
     }
     if (query.length > 256) {
-      res.status(400).json({ ok: false, error: 'q must be at most 256 characters.' });
+      apiError(res, 400, null, 'q must be at most 256 characters.');
       return;
     }
     const accessContext = resolveAccessContext(req);
@@ -1141,7 +1137,7 @@ function createApp(options = {}) {
       });
       res.status(200).json({ ok: true, ...result });
     } catch (error) {
-      res.status(500).json({ ok: false, error: 'Search failed.' });
+      apiError(res, 500, null, 'Search failed.');
     }
   });
 
@@ -1152,11 +1148,11 @@ function createApp(options = {}) {
     }
     const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (!query) {
-      res.status(400).json({ ok: false, error: 'q is required.' });
+      apiError(res, 400, null, 'q is required.', [{ path: 'q', message: 'q is required.' }]);
       return;
     }
     if (query.length > 256) {
-      res.status(400).json({ ok: false, error: 'q must be at most 256 characters.' });
+      apiError(res, 400, null, 'q must be at most 256 characters.');
       return;
     }
     const accessContext = resolveAccessContext(req);
@@ -1172,7 +1168,7 @@ function createApp(options = {}) {
       });
       res.status(200).json({ ok: true, ...result });
     } catch (error) {
-      res.status(500).json({ ok: false, error: 'Suggestion lookup failed.' });
+      apiError(res, 500, null, 'Suggestion lookup failed.');
     }
   });
 
@@ -1203,9 +1199,7 @@ function createApp(options = {}) {
       });
     } catch (error) {
       if (error.code === 'ECONFLICT') {
-        res.status(409).json({
-          ok: false,
-          error: error.message,
+        apiError(res, 409, 'revision_conflict', error.message, null, {
           currentRevision: error.current ? error.current.currentRevision : null,
           current: error.current ? publishStore.serializePublication(error.current) : null,
         });
@@ -1602,12 +1596,12 @@ function createApp(options = {}) {
         sourceBuffer = await fs.readFile(resolved);
       } catch (error) {
         console.error('Failed to read HTML file for validation', { resolved, error });
-        res.status(500).json({ ok: false, error: 'Failed to read file.' });
+        apiError(res, 500, null, 'Failed to read file.');
         return;
       }
 
       if (isBinaryBuffer(sourceBuffer)) {
-        res.status(415).json({ ok: false, error: 'Binary files are not supported.' });
+        apiError(res, 415, null, 'Binary files are not supported.');
         return;
       }
 
@@ -1625,7 +1619,7 @@ function createApp(options = {}) {
         return;
       } catch (error) {
         console.error('Failed to validate HTML render', { resolved, error });
-        res.status(500).json({ ok: false, error: 'Failed to validate HTML render.' });
+        apiError(res, 500, null, 'Failed to validate HTML render.');
         return;
       }
     }
@@ -1911,14 +1905,14 @@ function createApp(options = {}) {
   app.post('/api/save/*', async (req, res) => {
     const accessContext = resolveAccessContext(req);
     if (!editingEnabled) {
-      res.status(404).json({ ok: false, error: 'Editing mode is disabled.' });
+      apiError(res, 404, 'feature_disabled', 'Editing mode is disabled.');
       return;
     }
 
     const requested = splitViewPath(req.params[0] || '');
     if (requested && getManagedRepo(requested.repo)
       && !canAccessPath(accessContext, 'write', requested.repo, requested.relativePath, 'file')) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
 
@@ -1927,7 +1921,7 @@ function createApp(options = {}) {
       resolvedInput = await resolveFromRequest(mappings, req.params[0] || '');
     } catch (error) {
       console.error('Failed to resolve save path', { error });
-      res.status(500).json({ ok: false, error: 'Failed to resolve path.' });
+      apiError(res, 500, null, 'Failed to resolve path.');
       return;
     }
 
@@ -1938,22 +1932,22 @@ function createApp(options = {}) {
 
     const { repo, relativePath, resolved } = resolvedInput;
     if (isManagedInternalPath(repo, relativePath)) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
     if (!relativePath) {
-      res.status(400).json({ ok: false, error: 'Save requires a file path.' });
+      apiError(res, 400, null, 'Save requires a file path.');
       return;
     }
 
     if (!canAccessPath(accessContext, 'edit', repo, relativePath, 'file')) {
-      res.status(403).json({ ok: false, error: 'Access denied.' });
+      apiError(res, 403, null, 'Access denied.');
       return;
     }
 
     const content = req.body && req.body.content;
     if (typeof content !== 'string') {
-      res.status(400).json({ ok: false, error: 'Invalid payload. Expected JSON body with string content.' });
+      apiError(res, 400, null, 'Invalid payload. Expected JSON body with string content.');
       return;
     }
 
@@ -1962,22 +1956,22 @@ function createApp(options = {}) {
       stat = await statResolvedPath(resolved);
     } catch (error) {
       console.error('Failed to stat save path', { resolved, error });
-      res.status(500).json({ ok: false, error: 'Failed to read file metadata.' });
+      apiError(res, 500, null, 'Failed to read file metadata.');
       return;
     }
 
     if (!stat) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
 
     if (stat.isDirectory()) {
-      res.status(400).json({ ok: false, error: 'Directories are not editable.' });
+      apiError(res, 400, null, 'Directories are not editable.');
       return;
     }
 
     if (!stat.isFile()) {
-      res.status(415).json({ ok: false, error: 'Unsupported path type.' });
+      apiError(res, 415, null, 'Unsupported path type.');
       return;
     }
 
@@ -1986,12 +1980,12 @@ function createApp(options = {}) {
       currentBuffer = await fs.readFile(resolved);
     } catch (error) {
       console.error('Failed to read existing file for save', { resolved, error });
-      res.status(500).json({ ok: false, error: 'Failed to read existing file.' });
+      apiError(res, 500, null, 'Failed to read existing file.');
       return;
     }
 
     if (isBinaryBuffer(currentBuffer)) {
-      res.status(415).json({ ok: false, error: 'Binary files are not editable.' });
+      apiError(res, 415, null, 'Binary files are not editable.');
       return;
     }
 
@@ -2001,14 +1995,12 @@ function createApp(options = {}) {
       const current = Math.trunc(stat.mtimeMs);
 
       if (!Number.isFinite(expected)) {
-        res.status(400).json({ ok: false, error: 'Invalid expectedMtimeMs value.' });
+        apiError(res, 400, null, 'Invalid expectedMtimeMs value.');
         return;
       }
 
       if (expected !== current) {
-        res.status(409).json({
-          ok: false,
-          error: 'File changed on disk since you opened it. Refresh before saving.',
+        apiError(res, 409, 'stale_write', 'File changed on disk since you opened it. Refresh before saving.', null, {
           currentMtimeMs: current,
         });
         return;
@@ -2031,7 +2023,7 @@ function createApp(options = {}) {
       }
 
       console.error('Failed to save file', { resolved, error });
-      res.status(500).json({ ok: false, error: 'Failed to save file.' });
+      apiError(res, 500, null, 'Failed to save file.');
       return;
     }
 
@@ -2040,7 +2032,7 @@ function createApp(options = {}) {
       updatedStat = await fs.stat(resolved);
     } catch (error) {
       console.error('Failed to stat updated file', { resolved, error });
-      res.status(500).json({ ok: false, error: 'Saved file but failed to fetch metadata.' });
+      apiError(res, 500, null, 'Saved file but failed to fetch metadata.');
       return;
     }
 
@@ -2061,14 +2053,14 @@ function createApp(options = {}) {
   app.post('/api/preview/*', async (req, res) => {
     const accessContext = resolveAccessContext(req);
     if (!editingEnabled) {
-      res.status(404).json({ ok: false, error: 'Editing mode is disabled.' });
+      apiError(res, 404, 'feature_disabled', 'Editing mode is disabled.');
       return;
     }
 
     const requested = splitViewPath(req.params[0] || '');
     if (requested && getManagedRepo(requested.repo)
       && !canAccessPath(accessContext, 'view', requested.repo, requested.relativePath, 'file')) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
 
@@ -2077,7 +2069,7 @@ function createApp(options = {}) {
       resolvedInput = await resolveFromRequest(mappings, req.params[0] || '');
     } catch (error) {
       console.error('Failed to resolve preview path', { error });
-      res.status(500).json({ ok: false, error: 'Failed to resolve path.' });
+      apiError(res, 500, null, 'Failed to resolve path.');
       return;
     }
 
@@ -2088,22 +2080,22 @@ function createApp(options = {}) {
 
     const { repo, relativePath, rootPath, resolved } = resolvedInput;
     if (isManagedInternalPath(repo, relativePath)) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
     if (!relativePath) {
-      res.status(400).json({ ok: false, error: 'Preview requires a file path.' });
+      apiError(res, 400, null, 'Preview requires a file path.');
       return;
     }
 
     if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
-      res.status(403).json({ ok: false, error: 'Access denied.' });
+      apiError(res, 403, null, 'Access denied.');
       return;
     }
 
     const content = req.body && req.body.content;
     if (typeof content !== 'string') {
-      res.status(400).json({ ok: false, error: 'Invalid payload. Expected JSON body with string content.' });
+      apiError(res, 400, null, 'Invalid payload. Expected JSON body with string content.');
       return;
     }
 
@@ -2112,22 +2104,22 @@ function createApp(options = {}) {
       stat = await statResolvedPath(resolved);
     } catch (error) {
       console.error('Failed to stat preview path', { resolved, error });
-      res.status(500).json({ ok: false, error: 'Failed to read path metadata.' });
+      apiError(res, 500, null, 'Failed to read path metadata.');
       return;
     }
 
     if (!stat) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
 
     if (stat.isDirectory()) {
-      res.status(400).json({ ok: false, error: 'Directories are not editable.' });
+      apiError(res, 400, null, 'Directories are not editable.');
       return;
     }
 
     if (!stat.isFile()) {
-      res.status(415).json({ ok: false, error: 'Unsupported path type.' });
+      apiError(res, 415, null, 'Unsupported path type.');
       return;
     }
 
@@ -2145,7 +2137,7 @@ function createApp(options = {}) {
 
   app.get('/api/annotations/:repo/*', async (req, res) => {
     if (!annotationsEnabled) {
-      res.status(404).json({ ok: false, error: 'Annotations are disabled.' });
+      apiError(res, 404, 'feature_disabled', 'Annotations are disabled.');
       return;
     }
 
@@ -2155,17 +2147,17 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
 
     if (isManagedInternalPath(repo, relativePath)) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
 
     if (!rootPath) {
-      res.status(404).json({ ok: false, error: `Unknown repository: ${repo}` });
+      apiError(res, 404, 'unknown_repo', `Unknown repository: ${repo}`);
       return;
     }
 
     if (!relativePath) {
-      res.status(400).json({ ok: false, error: 'Annotations require a file path.' });
+      apiError(res, 400, null, 'Annotations require a file path.');
       return;
     }
 
@@ -2180,17 +2172,17 @@ function createApp(options = {}) {
       resolved = await safeResolve(rootPath, relativePath);
     } catch (error) {
       if (error && error.code === 'EACCES') {
-        res.status(403).json({ ok: false, error: 'Invalid path.' });
+        apiError(res, 403, null, 'Invalid path.');
         return;
       }
 
       if (error && error.code === 'ENOENT') {
-        res.status(404).json({ ok: false, error: 'File not found.' });
+        apiError(res, 404, null, 'File not found.');
         return;
       }
 
       console.error('Failed to resolve annotation path', { rootPath, relativePath, error });
-      res.status(500).json({ ok: false, error: 'Failed to resolve file path.' });
+      apiError(res, 500, null, 'Failed to resolve file path.');
       return;
     }
 
@@ -2199,17 +2191,17 @@ function createApp(options = {}) {
       stat = await fs.stat(resolved);
     } catch (error) {
       if (error && error.code === 'ENOENT') {
-        res.status(404).json({ ok: false, error: 'File not found.' });
+        apiError(res, 404, null, 'File not found.');
         return;
       }
 
       console.error('Failed to stat annotation file', { resolved, error });
-      res.status(500).json({ ok: false, error: 'Failed to read file metadata.' });
+      apiError(res, 500, null, 'Failed to read file metadata.');
       return;
     }
 
     if (!stat.isFile()) {
-      res.status(400).json({ ok: false, error: 'Annotations only apply to files.' });
+      apiError(res, 400, null, 'Annotations only apply to files.');
       return;
     }
 
@@ -2238,23 +2230,23 @@ function createApp(options = {}) {
       });
     } catch (error) {
       if (error instanceof SyntaxError) {
-        res.status(500).json({ ok: false, error: 'Annotation sidecar contains invalid JSON.' });
+        apiError(res, 500, null, 'Annotation sidecar contains invalid JSON.');
         return;
       }
 
       if (error.message.startsWith('Unsupported state filter:')) {
-        res.status(400).json({ ok: false, error: error.message });
+        apiError(res, 400, null, error.message);
         return;
       }
 
       console.error('Failed to read annotations', { repo, relativePath, error });
-      res.status(500).json({ ok: false, error: 'Failed to read annotations.' });
+      apiError(res, 500, null, 'Failed to read annotations.');
     }
   });
 
   app.post('/api/annotations/:repo/*', async (req, res) => {
     if (!annotationsEnabled) {
-      res.status(404).json({ ok: false, error: 'Annotations are disabled.' });
+      apiError(res, 404, 'feature_disabled', 'Annotations are disabled.');
       return;
     }
 
@@ -2264,17 +2256,17 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
 
     if (isManagedInternalPath(repo, relativePath)) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
 
     if (!rootPath) {
-      res.status(404).json({ ok: false, error: `Unknown repository: ${repo}` });
+      apiError(res, 404, 'unknown_repo', `Unknown repository: ${repo}`);
       return;
     }
 
     if (!relativePath) {
-      res.status(400).json({ ok: false, error: 'Annotations require a file path.' });
+      apiError(res, 400, null, 'Annotations require a file path.');
       return;
     }
 
@@ -2289,22 +2281,22 @@ function createApp(options = {}) {
       sourceStat = await fs.stat(await safeResolve(rootPath, relativePath));
     } catch (error) {
       if (error && error.code === 'EACCES') {
-        res.status(403).json({ ok: false, error: 'Invalid path.' });
+        apiError(res, 403, null, 'Invalid path.');
         return;
       }
 
       if (error && error.code === 'ENOENT') {
-        res.status(404).json({ ok: false, error: 'File not found.' });
+        apiError(res, 404, null, 'File not found.');
         return;
       }
 
       console.error('Failed to stat source file for annotations', { repo, relativePath, error });
-      res.status(500).json({ ok: false, error: 'Failed to read file metadata.' });
+      apiError(res, 500, null, 'Failed to read file metadata.');
       return;
     }
 
     if (!sourceStat.isFile()) {
-      res.status(400).json({ ok: false, error: 'Annotations only apply to files.' });
+      apiError(res, 400, null, 'Annotations only apply to files.');
       return;
     }
 
@@ -2326,23 +2318,23 @@ function createApp(options = {}) {
         error.message.startsWith('lineRange anchors must') ||
         error.message.startsWith('lineRange anchor end')
       ) {
-        res.status(400).json({ ok: false, error: error.message });
+        apiError(res, 400, null, error.message);
         return;
       }
 
       if (error instanceof SyntaxError) {
-        res.status(500).json({ ok: false, error: 'Annotation sidecar contains invalid JSON.' });
+        apiError(res, 500, null, 'Annotation sidecar contains invalid JSON.');
         return;
       }
 
       console.error('Failed to create annotation', { repo, relativePath, error });
-      res.status(500).json({ ok: false, error: 'Failed to create annotation.' });
+      apiError(res, 500, null, 'Failed to create annotation.');
     }
   });
 
   app.patch('/api/annotations/:repo/*', async (req, res) => {
     if (!annotationsEnabled) {
-      res.status(404).json({ ok: false, error: 'Annotations are disabled.' });
+      apiError(res, 404, 'feature_disabled', 'Annotations are disabled.');
       return;
     }
 
@@ -2352,17 +2344,17 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
 
     if (isManagedInternalPath(repo, relativePath)) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
 
     if (!rootPath) {
-      res.status(404).json({ ok: false, error: `Unknown repository: ${repo}` });
+      apiError(res, 404, 'unknown_repo', `Unknown repository: ${repo}`);
       return;
     }
 
     if (!relativePath) {
-      res.status(400).json({ ok: false, error: 'Annotations require a file path.' });
+      apiError(res, 400, null, 'Annotations require a file path.');
       return;
     }
 
@@ -2377,22 +2369,22 @@ function createApp(options = {}) {
       sourceStat = await fs.stat(await safeResolve(rootPath, relativePath));
     } catch (error) {
       if (error && error.code === 'EACCES') {
-        res.status(403).json({ ok: false, error: 'Invalid path.' });
+        apiError(res, 403, null, 'Invalid path.');
         return;
       }
 
       if (error && error.code === 'ENOENT') {
-        res.status(404).json({ ok: false, error: 'File not found.' });
+        apiError(res, 404, null, 'File not found.');
         return;
       }
 
       console.error('Failed to stat source file for annotation update', { repo, relativePath, error });
-      res.status(500).json({ ok: false, error: 'Failed to read file metadata.' });
+      apiError(res, 500, null, 'Failed to read file metadata.');
       return;
     }
 
     if (!sourceStat.isFile()) {
-      res.status(400).json({ ok: false, error: 'Annotations only apply to files.' });
+      apiError(res, 400, null, 'Annotations only apply to files.');
       return;
     }
 
@@ -2406,9 +2398,7 @@ function createApp(options = {}) {
     } catch (error) {
       if (error.code === 'ESTALE') {
         const current = await readAnnotationDocument(rootPath, repo, relativePath);
-        res.status(409).json({
-          ok: false,
-          error: error.message,
+        apiError(res, 409, 'stale_write', error.message, null, {
           currentMtimeMs: error.currentMtimeMs,
           current: current.document,
         });
@@ -2427,17 +2417,17 @@ function createApp(options = {}) {
         error.message === 'Invalid expectedMtimeMs value.'
       ) {
         const status = error.message === 'Annotation not found.' ? 404 : 400;
-        res.status(status).json({ ok: false, error: error.message });
+        apiError(res, status, null, error.message);
         return;
       }
 
       if (error instanceof SyntaxError) {
-        res.status(500).json({ ok: false, error: 'Annotation sidecar contains invalid JSON.' });
+        apiError(res, 500, null, 'Annotation sidecar contains invalid JSON.');
         return;
       }
 
       console.error('Failed to update annotation', { repo, relativePath, error });
-      res.status(500).json({ ok: false, error: 'Failed to update annotation.' });
+      apiError(res, 500, null, 'Failed to update annotation.');
     }
   });
 
@@ -2784,20 +2774,33 @@ function createApp(options = {}) {
     res.redirect(302, appendAccessToken('/', resolveAccessContext(req)));
   });
 
+  // Fallbacks answer in the JSON error envelope for API callers and keep
+  // text/plain for browsers and asset requests.
+  const wantsJsonError = (req) => req.path.startsWith('/api/')
+    || req.path.startsWith('/.well-known/')
+    || req.accepts(['text/plain', 'text/html', 'application/json']) === 'application/json';
+  const sendFallbackError = (req, res, status, message) => {
+    if (wantsJsonError(req)) {
+      apiError(res, status, null, message);
+      return;
+    }
+    res.status(status).type('text/plain').send(message);
+  };
+
   app.use((req, res) => {
-    res.status(404).type('text/plain').send(`Not found: ${req.path}`);
+    sendFallbackError(req, res, 404, `Not found: ${req.path}`);
   });
 
-  app.use((error, _req, res, _next) => {
+  app.use((error, req, res, _next) => {
     if (error && (error.status === 413 || error.type === 'entity.too.large')) {
-      res.status(413).type('text/plain').send('Request body is too large.');
+      sendFallbackError(req, res, 413, 'Request body is too large.');
       return;
     }
     logger.error('Unhandled request error.', {
       name: error && error.name || 'Error',
       code: error && error.code || 'EUNHANDLED',
     });
-    res.status(500).type('text/plain').send('Internal server error.');
+    sendFallbackError(req, res, 500, 'Internal server error.');
   });
 
   return app;

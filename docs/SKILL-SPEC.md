@@ -196,6 +196,8 @@ Use the current server revision for the update expectation.
 | `5` | Conflict | Re-read, reconcile, and retry |
 | `6` | Transport or other HTTP failure | Check the instance and server response |
 
+Server failures arrive as `{ "ok": false, "error": { "code": "not_found", "message": "Not found." } }` (see [API.md → Error conventions](API.md#error-conventions)); `error` is never a bare string. CLIs print `error.message`; with `--json-errors` they pass the server's whole `error` object through (as `serverError`).
+
 Errors and URLs must not contain the configured token.
 
 ## Versioning and generation

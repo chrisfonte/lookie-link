@@ -120,7 +120,8 @@
     }
 
     if (!response.ok) {
-      const error = new Error((data && data.error) || `HTTP ${response.status}`);
+      const serverError = data && data.error;
+      const error = new Error((serverError && typeof serverError === 'object' ? serverError.message : serverError) || `HTTP ${response.status}`);
       error.status = response.status;
       error.data = data;
       throw error;

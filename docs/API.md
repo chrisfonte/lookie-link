@@ -105,4 +105,34 @@ These routes intentionally use store-specific admin credentials rather than the 
 
 ## Error conventions
 
-JSON APIs generally return `{ "ok": false, "error": "..." }`. Common statuses are `400` invalid input, `401` missing required authentication, `403` denied, `404` missing/disabled/hidden, `409` optimistic conflict, `410` revoked publication, `415` unsupported type, and `500` internal failure.
+Every JSON error — core routes and forms alike — uses one envelope:
+
+```json
+{ "ok": false, "error": { "code": "invalid_request", "message": "q is required.", "details": [{ "path": "q", "message": "q is required." }] } }
+```
+
+- `error.code` is a stable `snake_case` identifier; branch on it, not on the text.
+- `error.message` is human-readable. It carries the exact string earlier releases sent as the bare `error` value (breaking change, API review 2026-09-23: `error` is now always an object, never a string).
+- `error.details` is optional: an array of `{ path, message }` pointing at the offending field(s).
+- A few conflict responses keep extra top-level context beside `error` (`current`, `currentRevision`, `currentMtimeMs`).
+
+Default codes by status, used when no more specific code applies:
+
+| Status | Code |
+|---|---|
+| `400` | `invalid_request` |
+| `401` | `unauthenticated` |
+| `403` | `forbidden` |
+| `404` | `not_found` |
+| `405` | `method_not_allowed` |
+| `409` | `conflict` |
+| `410` | `gone` |
+| `413` | `payload_too_large` |
+| `415` | `unsupported_media_type` |
+| `422` | `invalid_request` |
+| `429` | `rate_limited` |
+| `500` | `internal_error` |
+
+More specific codes: `query_credentials_rejected` (400, a mutation carried `?token=` / URL credentials), `unknown_repo` (404, annotation routes naming an unconfigured repository), `feature_disabled` (404, editing or annotations turned off), `stale_write` (409, file changed on disk since `expectedMtimeMs`), `revision_conflict` (409, stale publish or form-template revision), and the forms codes `invalid_json` and `validation_error`.
+
+Unmatched routes and unhandled errors (`404`, `413`, `500`) answer in the envelope when the path starts with `/api/` or `/.well-known/`, or the `Accept` header prefers `application/json`; browser and asset requests still get `text/plain`. HTML and asset routes (`/view`, `/raw`, `/embed`, `/assets`) keep their `text/plain` error bodies.

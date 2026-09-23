@@ -158,7 +158,7 @@ test('managed repo HTTP CRUD is scoped, conflict-aware, non-leaking, and recover
     );
     assert.equal(hiddenTree.status, 404);
     const hiddenTreeText = await hiddenTree.text();
-    assert.deepEqual(JSON.parse(hiddenTreeText), { ok: false, error: 'Not found.' });
+    assert.deepEqual(JSON.parse(hiddenTreeText), { ok: false, error: { code: 'not_found', message: 'Not found.' } });
     assert.equal(hiddenTreeText.includes(deleted.trashId), false);
     assert.equal(hiddenTreeText.includes('metadata'), false);
   }
@@ -168,7 +168,7 @@ test('managed repo HTTP CRUD is scoped, conflict-aware, non-leaking, and recover
     { headers: auth('reader-placeholder') }
   );
   assert.equal(pathScopedTrashTree.status, 404);
-  assert.deepEqual(await pathScopedTrashTree.json(), { ok: false, error: 'Not found.' });
+  assert.deepEqual(await pathScopedTrashTree.json(), { ok: false, error: { code: 'not_found', message: 'Not found.' } });
 
   const hiddenTrash = await fixture.request(`/asset/shared-notes/.lookie-link-trash/${deleted.trashId}/payload`, {
     headers: auth('maintainer-placeholder'),

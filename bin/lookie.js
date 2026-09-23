@@ -176,8 +176,10 @@ async function parseJsonResponse(response) {
 async function handleApiResponse(response, auth) {
   if (response.ok) return parseJsonResponse(response);
   const payload = await parseJsonResponse(response);
-  const message = payload && (payload.error || payload.message)
-    ? payload.error || payload.message
+  const serverError = payload && payload.error;
+  const serverMessage = serverError && typeof serverError === 'object' ? serverError.message : serverError;
+  const message = payload && (serverMessage || payload.message)
+    ? serverMessage || payload.message
     : `HTTP ${response.status}`;
   if (response.status === 401 || response.status === 403) die(EXIT_AUTH, message, [auth.token]);
   if (response.status === 404) die(EXIT_NOT_FOUND, message, [auth.token]);
