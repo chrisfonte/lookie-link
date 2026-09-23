@@ -179,6 +179,11 @@ themes:
       blur: 6
 ```
 
+Changes take effect without a restart. The server watches the config file
+and every wallpaper folder; a saved edit or a new image is picked up within
+about half a second and shows on the next page load. Other config sections
+are still read at startup.
+
 A reader's own slider changes, once made, persist in their browser and win
 over these defaults until they press Reset. URL parameters
 (`lookie-wallpaper`, `lookie-panel`, `lookie-blur`) win over both for that

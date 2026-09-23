@@ -149,3 +149,28 @@ test('glass defaults and starting picture come from config, per theme over globa
     } finally { dom.window.close(); }
   } finally { wallpaper.setWallpaperCatalog({}, [], {panelOpacity: 72, blur: 12}); }
 });
+
+test('wallpaper watcher rescans after a folder change without a restart', async () => {
+  const dark = tempSet(['0-sunset-a.jpg']);
+  const seen = [];
+  let calls = 0;
+  const watcher = wallpaper.watchWallpapers({
+    fs, path, quietMs: 50, log: (m) => seen.push(m), warn: () => {},
+    reload() {
+      calls += 1;
+      const catalog = loadWallpaperCatalog([{slug:'sunset', label:'Sunset', wallpapers:{dark}}]);
+      wallpaper.setWallpaperCatalog(catalog);
+      return { watch: [dark], summary: `${catalog.sunset.dark.length} pictures` };
+    },
+  });
+  try {
+    assert.equal(calls, 1);
+    assert.equal(wallpaper.publicCatalog().sunset.dark.length, 1);
+    fs.writeFileSync(path.join(dark, '1-sunset-b.jpg'), 'x');
+    const started = Date.now();
+    while (calls < 2 && Date.now() - started < 3000) await new Promise((r) => setTimeout(r, 25));
+    assert.equal(calls, 2, 'folder change triggered one rescan');
+    assert.equal(wallpaper.publicCatalog().sunset.dark.length, 2);
+    assert.match(seen.at(-1), /Wallpapers reloaded: 2 pictures/);
+  } finally { watcher.close(); wallpaper.setWallpaperCatalog({}); }
+});

@@ -260,7 +260,7 @@ The picture follows the active theme and mode. Choices persist in the browser
 (`localStorage` key `lookie-link-wallpaper`): the picked image per theme, a
 remembered "No background", opacity and blur. A theme without a set shows a
 plain page and the menu says so. The catalog is scanned once at startup;
-restart the server after adding images.
+new images and wallpaper config edits are picked up live (the server watches the folders and the config file).
 
 The embedded-HTML page is the exception: its sandboxed frame is opaque, so
 there the document supplies pictures over the bridge below.
