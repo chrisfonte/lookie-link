@@ -254,8 +254,10 @@ test('search and suggest responses contain only caller-visible managed paths', a
   const excludedScope = await fixture.request('/api/search?q=common&scope=unknown-repo', {
     headers: auth('reader-placeholder'),
   });
-  assert.equal(excludedScope.status, 200);
-  assert.deepEqual((await excludedScope.json()).results, []);
+  assert.equal(excludedScope.status, 400, 'a scope naming no searchable repo is an error, not an empty result');
+  const excludedBody = await excludedScope.json();
+  assert.equal(excludedBody.error.code, 'invalid_request');
+  assert.match(excludedBody.error.message, /unknown-repo/);
 });
 
 test('trash listing shows soft-deleted records the caller may view, newest first, and empties on restore', async (t) => {

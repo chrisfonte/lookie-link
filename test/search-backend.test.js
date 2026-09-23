@@ -78,3 +78,45 @@ test('the search route names its backend and falls back to the walk when ripgrep
   }
   fs.rmSync(f.root, { recursive: true, force: true });
 });
+
+test('query semantics: every term must match in any order, quotes make a phrase, path-only terms', { skip: RG ? false : 'ripgrep not on PATH' }, async () => {
+  const f = fixture();
+  fs.writeFileSync(path.join(f.repos[0].rootPath, 'notes', 'multi.md'), 'first line has alpha-term\nlast line has BETA-term\n');
+  fs.writeFileSync(path.join(f.repos[1].rootPath, 'deep', 'only-alpha-term.md'), 'alpha-term alone\n');
+  const run = (query) => searchWithRipgrep({ binary: RG, repos: f.repos, query, canView: () => true });
+  try {
+    const both = await run('beta-term alpha-term');
+    assert.deepEqual(both.results.map((r) => r.path), ['notes/multi.md'], 'order-independent AND across lines');
+    assert.deepEqual(both.terms, ['alpha-term', 'beta-term'], 'terms echoed, most selective first');
+    assert.match(both.results[0].snippet, /alpha-term/i, 'snippet from the primary term line');
+    const phrase = await run('"line has beta"');
+    assert.deepEqual(phrase.results.map((r) => r.path), ['notes/multi.md']);
+    const phraseMiss = await run('"beta line has"');
+    assert.equal(phraseMiss.count, 0, 'a phrase is literal and ordered');
+    const pathOnly = await run('deep only-alpha');
+    assert.deepEqual(pathOnly.results.map((r) => `${r.repo}/${r.path}`), ['beta/deep/only-alpha-term.md'], 'all terms in the path');
+    const none = await run('alpha-term zzz-absent');
+    assert.equal(none.count, 0); assert.equal(none.totalMatches, 0);
+  } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('walk backend shares the query semantics; the route rejects limit < 1', async () => {
+  const f = fixture();
+  fs.writeFileSync(path.join(f.repos[0].rootPath, 'notes', 'multi.md'), 'first line has alpha-term\nlast line has BETA-term\n');
+  const app = createApp({ mappings: { alpha: f.repos[0].rootPath, beta: f.repos[1].rootPath }, accessConfig: {}, apiKeyStore: null, grantStore: null, managedRepoStore: null, publishStore: null, editingEnabled: false, annotationsEnabled: false, rawHtmlEnabled: false, searchConfig: { ripgrep: false } });
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((r) => server.once('listening', r));
+  const base = 'http://127.0.0.1:' + server.address().port;
+  const get = (qs) => new Promise((resolve, reject) => http.get(base + '/api/search?' + qs, (res) => { let d = ''; res.on('data', (c) => d += c); res.on('end', () => resolve({ status: res.statusCode, body: JSON.parse(d) })); }).on('error', reject));
+  try {
+    const both = await get('q=beta-term+alpha-term');
+    assert.equal(both.body.backend, 'walk');
+    assert.deepEqual(both.body.results.map((r) => r.path), ['notes/multi.md']);
+    assert.deepEqual(both.body.terms, ['alpha-term', 'beta-term']);
+    assert.equal(both.body.totalMatches, 1);
+    const zero = await get('q=alpha&limit=0');
+    assert.equal(zero.status, 400); assert.equal(zero.body.error.details[0].path, 'limit');
+    const bad = await get('q=alpha&scope=nope');
+    assert.equal(bad.status, 400); assert.match(bad.body.error.message, /nope/);
+  } finally { server.close(); fs.rmSync(f.root, { recursive: true, force: true }); }
+});

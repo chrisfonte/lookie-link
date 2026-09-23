@@ -119,6 +119,8 @@ search:
   maxResults: 100      # 1-100
 ```
 
+Query semantics are the same on both backends: every whitespace-separated term must occur in a file's content (any order) or every term in its path; `"quoted words"` form one phrase; matching is literal and case-insensitive.
+
 With a ripgrep binary available, `/api/search` searches every served repository in one process and is complete (the response says `backend: "ripgrep"`). Without one, the built-in walk is used: complete when scoped to one repo, fair-share sampled across a fleet (`backend: "walk"`, `truncated` says when a slice ran out). `maxEntries` applies to the walk only. The binary must be on the SERVICE's PATH (a shell alias or function does not count) or named explicitly.
 
 ## Custom themes
