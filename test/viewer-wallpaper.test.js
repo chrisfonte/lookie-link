@@ -202,7 +202,7 @@ test('the agent card advertises the appearance surface', async () => {
   try {
     const card = await (await fetch('http://127.0.0.1:' + server.address().port + '/.well-known/agent.json')).json();
     assert.deepEqual(card.themes.parameters, {scheme:'lookie-scheme', mode:'lookie-theme', wallpaper:'lookie-wallpaper', panelOpacity:'lookie-panel', blur:'lookie-blur'});
-    assert.equal(card.themes.wallpapers.imageUrl, '/wallpaper/{scheme}/{mode}/{id}');
+    assert.equal(card.themes.wallpapers.imageUrl, '/wallpaper/:scheme/:mode/:id');
     assert.equal(card.themes.wallpapers.panelOpacity.default, 66);
     const sunset = card.themes.available.find((t) => t.id === 'sunset');
     assert.deepEqual(sunset.wallpapers.dark, [{id:'a', label:'A'}]);
