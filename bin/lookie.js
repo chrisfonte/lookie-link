@@ -67,7 +67,7 @@ function printUsage(stream = process.stdout) {
     '  repos',
     '  read <repo>/<path>',
     '  tree <repo> [--path REL] [--max-depth N]',
-    '  changes <repo> --since ISO_TIMESTAMP',
+    '  changes <repo> --since (ISO_TIMESTAMP | UNIX_SECONDS)',
     '  write <repo>/<path> (--content TEXT | --content-file FILE | --content-from-stdin) [--expected-mtime N]',
     '  delete <repo>/<path> [--hard]',
     '  search <query> [--scope REPO]...',
@@ -75,8 +75,23 @@ function printUsage(stream = process.stdout) {
     '  publish <file> [--slug SLUG] [--entry-path PATH] [--expected-revision N]',
     '  publish --manifest FILE [--slug SLUG] [--entry-path PATH] [--expected-revision N]',
     '  publish revoke <slug> --reason TEXT',
+    '  annotations list <repo>/<path> [--state open|claimed|resolved]...',
+    '  annotations get <repo>/<path> <id>',
+    '  annotations add <repo>/<path> --anchor A --kind heading|yamlKey|lineRange (--body TEXT|- | --body-file FILE) [--author NAME]',
+    '  annotations claim <repo>/<path> <id> [--by NAME]',
+    '  annotations resolve <repo>/<path> <id>',
+    '  annotations replies <repo>/<path> <id> [--add TEXT|- | --body-file FILE] [--author NAME]',
+    '  trash restore <repo> <trashId>',
+    '  trash remove <repo> <trashId>',
+    '  appearance show [--theme SLUG]',
+    '  appearance set --revision N [--blur N] [--panel N] [--theme-json JSON] | --json-file FILE',
+    '  appearance upload <slug> <dark|light> --name ID <file>',
+    '  appearance delete <slug> <dark|light> <id>',
+    '  openapi',
+    '  docs',
     '',
     'Tokens are accepted through auth login stdin or LOOKIE_LINK_TOKEN, never URL query parameters.',
+    'Appearance writes use LOOKIE_LINK_ADMIN_TOKEN (falls back to LOOKIE_LINK_TOKEN).',
     `Auth file: ${AUTH_PATH}`,
     '',
   ].join('\n'));
@@ -290,6 +305,19 @@ async function treeCommand(auth, repo, args) {
   formatOutput(await handleApiResponse(response, auth), true);
 }
 
+// The server filters on entry mtimeMs, so --since is sent in milliseconds.
+// Accept an ISO-8601 timestamp or Unix seconds (13+ digit values are taken as ms already).
+function sinceToMs(value) {
+  const text = String(value).trim();
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    const numeric = Number(text);
+    return /^\d{13,}/.test(text) ? numeric : Math.round(numeric * 1000);
+  }
+  const parsed = Date.parse(text);
+  if (!Number.isFinite(parsed)) die(EXIT_USAGE, '--since must be an ISO-8601 timestamp or Unix seconds');
+  return parsed;
+}
+
 async function changesCommand(auth, repo, args) {
   let since;
   for (let index = 0; index < args.length; index += 1) {
@@ -297,8 +325,9 @@ async function changesCommand(auth, repo, args) {
     since = optionValue(args, index, '--since');
     index += 1;
   }
-  if (!since) die(EXIT_USAGE, 'changes requires --since ISO_TIMESTAMP');
-  const response = await request(auth, `/api/managed-repos/${encodeURIComponent(repo)}/changes?${new URLSearchParams({ since })}`);
+  if (!since) die(EXIT_USAGE, 'changes requires --since (ISO_TIMESTAMP | UNIX_SECONDS)');
+  const query = new URLSearchParams({ since: String(sinceToMs(since)) });
+  const response = await request(auth, `/api/managed-repos/${encodeURIComponent(repo)}/changes?${query}`);
   formatOutput(await handleApiResponse(response, auth), true);
 }
 
@@ -394,6 +423,184 @@ async function publishCommand(auth, args) {
   formatOutput(await handleApiResponse(response, auth), true);
 }
 
+const ANNOTATION_STATES = ['open', 'claimed', 'resolved'];
+const ANNOTATION_KINDS = ['heading', 'yamlKey', 'lineRange'];
+
+async function annotationBody(opts) {
+  if (opts.bodyFile) return fs.readFile(opts.bodyFile, 'utf8');
+  if (opts.body === '-') return readAllStdin();
+  return opts.body === undefined ? null : opts.body;
+}
+
+function parseAnnotationArgs(args) {
+  const opts = { positional: [], states: [], author: process.env.LOOKIE_LINK_AUTHOR || 'lookie' };
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    const takes = (key) => { opts[key] = optionValue(args, index, arg); index += 1; };
+    if (arg === '--state') {
+      const value = optionValue(args, index, arg);
+      if (!ANNOTATION_STATES.includes(value)) die(EXIT_USAGE, `--state must be one of ${ANNOTATION_STATES.join('|')}`);
+      opts.states.push(value);
+      index += 1;
+    } else if (arg === '--kind') {
+      takes('kind');
+      if (!ANNOTATION_KINDS.includes(opts.kind)) die(EXIT_USAGE, `--kind must be ${ANNOTATION_KINDS.join('|')}`);
+    } else if (arg === '--body' || arg === '--add') {
+      if (args[index + 1] === undefined) die(EXIT_USAGE, `${arg} requires a value`);
+      opts.body = args[index + 1];
+      if (arg === '--add') opts.addReply = true;
+      index += 1;
+    } else if (arg === '--anchor') takes('anchor');
+    else if (arg === '--body-file') takes('bodyFile');
+    else if (arg === '--author') takes('author');
+    else if (arg === '--by') takes('by');
+    else if (arg.startsWith('--')) die(EXIT_USAGE, `unknown annotations option: ${arg}`);
+    else opts.positional.push(arg);
+  }
+  return opts;
+}
+
+async function annotationsCommand(auth, args) {
+  const sub = args[0];
+  if (!['list', 'get', 'add', 'claim', 'resolve', 'replies'].includes(sub)) {
+    die(EXIT_USAGE, 'annotations requires list, get, add, claim, resolve, or replies');
+  }
+  const opts = parseAnnotationArgs(args.slice(1));
+  const { repo, relativePath } = parseRepoPath(requireArgument(opts.positional[0], 'repo/path'));
+  const route = `/api/annotations/${encodeURIComponent(repo)}/${encodePath(relativePath)}`;
+  const id = opts.positional[1];
+  if (sub !== 'list' && sub !== 'add' && !id) die(EXIT_USAGE, `annotations ${sub}: missing <id>`);
+  const send = async (method, body) => handleApiResponse(await request(auth, route, {
+    method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }), auth);
+  const fetchDoc = async (states) => {
+    const query = new URLSearchParams();
+    for (const state of states) query.append('state', state);
+    const doc = await handleApiResponse(await request(auth, query.size ? `${route}?${query}` : route), auth);
+    if (!doc || !Array.isArray(doc.annotations)) die(EXIT_TRANSPORT, 'malformed annotation response');
+    return doc;
+  };
+  const findById = async () => {
+    const found = (await fetchDoc([])).annotations.find((item) => item && item.id === id);
+    if (!found) die(EXIT_NOT_FOUND, `annotation not found: ${id}`);
+    return found;
+  };
+
+  if (sub === 'list') return formatOutput(await fetchDoc(opts.states), true);
+  if (sub === 'get') return formatOutput({ ok: true, annotation: await findById() }, true);
+  if (sub === 'add') {
+    if (!opts.anchor) die(EXIT_USAGE, 'annotations add: --anchor is required');
+    if (!opts.kind) die(EXIT_USAGE, 'annotations add: --kind is required');
+    const body = await annotationBody(opts);
+    if (body === null || !String(body).trim()) die(EXIT_USAGE, 'annotations add: --body, --body-file, or --body - is required');
+    return formatOutput(await send('POST', { anchor: opts.anchor, anchorKind: opts.kind, body: String(body), author: opts.author }), true);
+  }
+  if (sub === 'claim') return formatOutput(await send('PATCH', { id, op: 'claim', payload: { claimedBy: opts.by || opts.author } }), true);
+  if (sub === 'resolve') return formatOutput(await send('PATCH', { id, op: 'resolve', payload: {} }), true);
+  if (opts.addReply || opts.bodyFile) {
+    const body = await annotationBody(opts);
+    if (body === null || !String(body).trim()) die(EXIT_USAGE, 'annotations replies --add: body is required');
+    return formatOutput(await send('PATCH', { id, op: 'reply', payload: { author: opts.author, body: String(body) } }), true);
+  }
+  const annotation = await findById();
+  return formatOutput({ ok: true, id, file: `${repo}/${relativePath}`, replies: Array.isArray(annotation.replies) ? annotation.replies : [] }, true);
+}
+
+// The server has no trash listing endpoint (trash is hidden from tree/changes);
+// trash IDs come from the soft-delete response of `lookie delete`.
+async function trashCommand(auth, args) {
+  const sub = args[0];
+  if (sub === 'list') die(EXIT_USAGE, 'trash list is not supported: the server exposes no trash listing endpoint; use the trashId returned by `lookie delete`');
+  if (sub !== 'restore' && sub !== 'remove') die(EXIT_USAGE, 'trash requires restore or remove');
+  const repo = requireArgument(args[1], 'repo');
+  const trashId = requireArgument(args[2], 'trashId');
+  if (args.length > 3) die(EXIT_USAGE, `unknown trash option: ${args[3]}`);
+  const base = `/api/managed-repos/${encodeURIComponent(repo)}/trash/${encodeURIComponent(trashId)}`;
+  const response = sub === 'restore'
+    ? await request(auth, `${base}/restore`, { method: 'POST' })
+    : await request(auth, base, { method: 'DELETE' });
+  formatOutput(await handleApiResponse(response, auth), true);
+}
+
+const IMAGE_TYPES = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+
+function integerOption(args, index, name) {
+  const value = Number(optionValue(args, index, name));
+  if (!Number.isInteger(value)) die(EXIT_USAGE, `${name} must be an integer`);
+  return value;
+}
+
+async function appearanceCommand(auth, args) {
+  const sub = args[0];
+  const admin = { ...auth, token: process.env.LOOKIE_LINK_ADMIN_TOKEN || auth.token };
+  if (sub === 'show') {
+    let theme;
+    for (let index = 1; index < args.length; index += 1) {
+      if (args[index] !== '--theme') die(EXIT_USAGE, `unknown appearance show option: ${args[index]}`);
+      theme = optionValue(args, index, '--theme');
+      index += 1;
+    }
+    const route = theme ? `/api/appearance/themes/${encodeURIComponent(theme)}` : '/api/appearance';
+    return formatOutput(await handleApiResponse(await request(auth, route), auth), true);
+  }
+  if (sub === 'set') {
+    let body = null;
+    const wallpapers = {};
+    let revision;
+    let themes;
+    for (let index = 1; index < args.length; index += 1) {
+      const arg = args[index];
+      if (arg === '--revision') revision = integerOption(args, index, arg);
+      else if (arg === '--blur') wallpapers.blur = integerOption(args, index, arg);
+      else if (arg === '--panel') wallpapers.panel_opacity = integerOption(args, index, arg);
+      else if (arg === '--theme-json' || arg === '--json-file') {
+        const raw = arg === '--json-file' ? await fs.readFile(optionValue(args, index, arg), 'utf8') : optionValue(args, index, arg);
+        let parsed;
+        try { parsed = JSON.parse(raw); } catch (error) { die(EXIT_USAGE, `${arg}: invalid JSON (${error.message})`); }
+        if (arg === '--json-file') body = parsed; else themes = parsed;
+      } else die(EXIT_USAGE, `unknown appearance set option: ${arg}`);
+      index += 1;
+    }
+    body = body && typeof body === 'object' ? { ...body } : {};
+    if (revision !== undefined) body.expectedRevision = revision;
+    if (Object.keys(wallpapers).length) body.wallpapers = { ...(body.wallpapers || {}), ...wallpapers };
+    if (themes !== undefined) body.themes = themes;
+    if (!Number.isInteger(body.expectedRevision)) die(EXIT_USAGE, 'appearance set requires --revision N (from `lookie appearance show`)');
+    const response = await request(admin, '/api/appearance', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    return formatOutput(await handleApiResponse(response, admin), true);
+  }
+  if (sub === 'upload') {
+    const slug = requireArgument(args[1], 'theme slug');
+    const mode = requireArgument(args[2], 'mode (dark|light)');
+    let name;
+    let file;
+    for (let index = 3; index < args.length; index += 1) {
+      if (args[index] === '--name') { name = optionValue(args, index, '--name'); index += 1; }
+      else if (!args[index].startsWith('--') && !file) file = args[index];
+      else die(EXIT_USAGE, `unknown appearance upload option: ${args[index]}`);
+    }
+    if (!name) die(EXIT_USAGE, 'appearance upload requires --name ID');
+    if (!file) die(EXIT_USAGE, 'appearance upload requires an image file');
+    const type = IMAGE_TYPES[path.extname(file).toLowerCase()];
+    if (!type) die(EXIT_USAGE, 'appearance upload accepts .jpg, .jpeg, .png, or .webp files');
+    const response = await request(admin, `/api/appearance/themes/${encodeURIComponent(slug)}/wallpapers/${encodeURIComponent(mode)}?${new URLSearchParams({ name })}`, {
+      method: 'POST', headers: { 'Content-Type': type }, body: await fs.readFile(file),
+    });
+    return formatOutput(await handleApiResponse(response, admin), true);
+  }
+  if (sub === 'delete') {
+    const slug = requireArgument(args[1], 'theme slug');
+    const mode = requireArgument(args[2], 'mode (dark|light)');
+    const id = requireArgument(args[3], 'picture id');
+    if (args.length > 4) die(EXIT_USAGE, `unknown appearance delete option: ${args[4]}`);
+    const response = await request(admin, `/api/appearance/themes/${encodeURIComponent(slug)}/wallpapers/${encodeURIComponent(mode)}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    return formatOutput(await handleApiResponse(response, admin), true);
+  }
+  return die(EXIT_USAGE, 'appearance requires show, set, upload, or delete');
+}
+
 async function authCommand(args, outputJson) {
   const subcommand = args[0];
   if (subcommand === 'status') {
@@ -451,12 +658,23 @@ async function main() {
     case 'delete': return deleteCommand(auth, requireArgument(args[0], 'repo/path'), args.slice(1));
     case 'search': return searchCommand(auth, args);
     case 'publish': return publishCommand(auth, args);
+    case 'annotations': return annotationsCommand(auth, args);
+    case 'trash': return trashCommand(auth, args);
+    case 'appearance': return appearanceCommand(auth, args);
+    case 'openapi': {
+      const response = await request(auth, '/openapi.json');
+      return formatOutput(await handleApiResponse(response, auth), true);
+    }
+    case 'docs': {
+      const url = requestUrl(auth.baseUrl, '/api/docs');
+      return formatOutput(options.json ? { ok: true, url } : url, options.json);
+    }
     default: return die(EXIT_USAGE, `unknown command: ${command}`);
   }
 }
 
 main().catch(async (error) => {
-  const secrets = [process.env.LOOKIE_LINK_TOKEN];
+  const secrets = [process.env.LOOKIE_LINK_TOKEN, process.env.LOOKIE_LINK_ADMIN_TOKEN];
   try {
     const stored = await readAuthFile();
     if (stored && stored.token) secrets.push(stored.token);
