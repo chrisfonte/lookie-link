@@ -127,6 +127,8 @@ test('lookie changes accepts ISO --since and sends milliseconds; openapi and doc
   const docs = await s.cli(['docs']);
   assert.equal(docs.stdout.trim(), `${s.baseUrl}/api/docs`);
 
-  assert.equal((await s.cli(['trash', 'list', 'notes'])).code, 2);
+  const trashList = await s.cli(['trash', 'list', 'notes']);
+  assert.equal(trashList.code, 0, trashList.stderr);
+  assert.deepEqual(JSON.parse(trashList.stdout).trash, [], 'the fixture repo has no soft-deleted records yet');
   assert.equal((await s.cli(['trash', 'restore', 'notes', '00000000-0000-4000-8000-000000000000'])).code, 4);
 });

@@ -29,6 +29,7 @@ The inventory was checked against the route registrations in [`server.js`](../se
 | Managed file create/update: `/api/managed-repos/:repo/files/*` | `PUT` | Effective `write` on file | `managedRepos.storePath` | Atomic UTF-8 write; optional `expectedMtimeMs`; records managed API-key audit events. [`server.js`](../server.js) |
 | Publish create: `/api/publish` | `POST` | Repo-level `publish` on the configured publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | Creates immutable revision 1. Path-only publish scope is insufficient. [`server.js`](../server.js) |
 | Managed file delete: `/api/managed-repos/:repo/files/*` | `DELETE` | Effective `write` on file | `managedRepos.storePath` | Soft delete by default; `?hard=1` permanently deletes. [`server.js`](../server.js) |
+| Managed trash list: `/api/managed-repos/:repo/trash` | `GET` | Effective `view` on repo; entries filtered by `view` on the original path | `managedRepos.storePath` | Soft-deleted records newest first: `trashId`, `originalPath`, `deletedAt`, `size`. [`server.js`](../server.js) |
 | Managed trash restore: `/api/managed-repos/:repo/trash/:trashId/restore` | `POST` | Effective `write` on repo and original file | `managedRepos.storePath` | Restores a soft-deleted file. [`server.js`](../server.js) |
 | Managed trash removal: `/api/managed-repos/:repo/trash/:trashId` | `DELETE` | Effective `write` on repo and original file | `managedRepos.storePath` | Permanently deletes one trash item. [`server.js`](../server.js) |
 | Search: `/api/search` | `GET` | Effective `view`; results are caller-filtered | Always | Backend `ripgrep` (complete, every served repo) when a binary is available, else the fair-shared walk; the response names the backend. Unknown query parameters are rejected (400 with `details[]`); `repo` is an alias of `scope`. Requires `q`; searches bounded path/content candidates in supported text formats. [`server.js`](../server.js) |
@@ -220,7 +221,7 @@ The `lookie` executable resolves the instance in this order: global `--instance`
 | `lookie annotations replies <repo>/<path> <id> [--add BODY]` | Lists replies, or with `--add`/`--body-file` appends one (`PATCH` op `reply`) |
 | `lookie trash restore <repo> <trashId>` | `POST /api/managed-repos/:repo/trash/:trashId/restore` |
 | `lookie trash remove <repo> <trashId>` | `DELETE /api/managed-repos/:repo/trash/:trashId` (permanent) |
-| `lookie trash list` | Not supported: the server has no trash listing endpoint; use the `trashId` returned by `lookie delete`. Exits `2` |
+| `lookie trash list <repo>` | Lists soft-deleted records of a managed repo (newest first) via `GET /api/managed-repos/:repo/trash` |
 | `lookie appearance show [--theme SLUG]` | `GET /api/appearance` (includes `revision`) or `GET /api/appearance/themes/:slug` |
 | `lookie appearance set --revision N [--blur N] [--panel N] [--theme-json JSON]` | `PATCH /api/appearance` with `expectedRevision`; `--panel` maps to `wallpapers.panel_opacity`, `--theme-json` to `themes`; `--json-file FILE` supplies a whole body (flags override). Stale revision exits `5` |
 | `lookie appearance upload <slug> <dark\|light> --name ID <file>` | `POST /api/appearance/themes/:slug/wallpapers/:mode?name=ID` with raw bytes; Content-Type from extension (`.jpg`/`.jpeg`/`.png`/`.webp`) |
@@ -266,6 +267,14 @@ applies on every forms route.
 | Create template: `/forms/new`, `/forms` | `GET`, `POST` | `forms.manage` | `forms.enabled` | Single server-rendered creation flow backed by the template API controller; browser writes require exact Origin + CSRF. |
 | Form page: `/forms/:templateId` | `GET` | `forms.submit` or `forms.view` | `forms.enabled` | Server-rendered first-party form; issues the browser context cookie and synchronizer token. |
 | Native submit: `/forms/:templateId` | `POST` | `forms.submit` | `forms.enabled` | Requires exact configured Origin + `_csrf` token; Post/Redirect/Get to the receipt. Fails closed when no public origin is configured. |
+| Entries hub: `/forms/entries` | `GET` | `forms.view` | `forms.enabled` | Root History: recent entries across trackers. |
+| Receipt edit: `/forms/:templateId/receipts/:submissionId/edit` | `GET` | `forms.submit` | `forms.enabled` | Server-rendered correction form; saving creates a NEW record with `supersedesRecord`. |
+| Delete template (browser): `/forms/:templateId/delete` | `POST` | `forms.manage` | `forms.enabled` | Browser path (context cookie + `_csrf` + Origin); API twin is `DELETE /api/forms/templates/:templateId`. |
+| Clone template (browser): `/forms/:templateId/clone` | `POST` | `forms.manage` | `forms.enabled` | Browser twin of the clone API. |
+| Restore version (browser): `/forms/:templateId/configure/restore-version` | `POST` | `forms.manage` | `forms.enabled` | Restores a published version as the draft. |
+| Delete template (API): `/api/forms/templates/:templateId` | `DELETE` | `forms.manage` (bearer or browser context) | `forms.enabled` | Soft-deletes the template; envelope on error. |
+| Submissions list (API): `/api/forms/:templateId/submissions` | `GET` | `forms.view` | `forms.enabled` | The caller's submissions for the template; discovery template `formsSubmissions`. |
+| Submission history (API): `/api/forms/:templateId/submissions/:submissionId/history` | `GET` | `forms.view` | `forms.enabled` | Record lineage (corrections via `supersedesRecord`) with actor per entry. |
 | Entry history: `/forms/:templateId/entries` | `GET` | `forms.submit` or `forms.read_submissions` | `forms.enabled` | Owner-scoped server-rendered history; shares persistent form navigation. |
 | Template builder: `/forms/:templateId/configure` | `GET`, `POST` | `forms.manage` | `forms.enabled` | Server-rendered builder. Browser writes require exact Origin + CSRF and use the template API mutation controller with revision CAS. |
 | Publish template: `/forms/:templateId/configure/publish` | `POST` | `forms.manage` | `forms.enabled` | Creates an immutable version from the rendered draft revision; stale revisions conflict. |

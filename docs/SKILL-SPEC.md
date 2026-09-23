@@ -132,7 +132,7 @@ lookie openapi
 lookie docs
 ```
 
-Trash IDs come from the `lookie delete` response; there is no trash listing command. Appearance writes need an admin token (`LOOKIE_LINK_ADMIN_TOKEN`, falling back to `LOOKIE_LINK_TOKEN`) and the `revision` from the last `appearance show`; a stale revision exits `5`.
+`lookie trash list <repo>` lists soft-deleted records; IDs also come from the `lookie delete` response. Appearance writes need an admin token (`LOOKIE_LINK_ADMIN_TOKEN`, falling back to `LOOKIE_LINK_TOKEN`) and the `revision` from the last `appearance show`; a stale revision exits `5`.
 
 ## When to use this skill
 
