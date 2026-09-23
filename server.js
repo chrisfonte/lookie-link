@@ -16,7 +16,7 @@ const {
   getManagedReposConfig,
   getPublishConfig,
   getFormsConfig,
-  loadCustomThemes, loadWallpaperCatalog,
+  loadCustomThemes, loadWallpaperCatalog, getWallpaperDefaults,
   generateCustomThemeCss,
   BUILT_IN_THEMES,
 } = require('./lib/config');
@@ -638,7 +638,7 @@ function createApp(options = {}) {
   const annotationsEnabled = options.annotationsEnabled === undefined ? getAnnotationsEnabled() : Boolean(options.annotationsEnabled);
   const rawHtmlEnabled = options.rawHtmlEnabled === undefined ? getRawHtmlEnabled() : Boolean(options.rawHtmlEnabled);
   const customThemeCss = options.customThemeCss || '';
-  if (options.wallpaperCatalog !== undefined) setWallpaperCatalog(options.wallpaperCatalog, options.wallpaperThemes || []);
+  if (options.wallpaperCatalog !== undefined) setWallpaperCatalog(options.wallpaperCatalog, options.wallpaperThemes || [], options.wallpaperDefaults || null);
   const rawAccessConfig = options.accessConfig === undefined ? getAccessConfig() : options.accessConfig;
   const rawManagedReposConfig = options.managedReposConfig === undefined ? getManagedReposConfig() : options.managedReposConfig;
   const rawPublishConfig = options.publishConfig === undefined ? getPublishConfig() : options.publishConfig;
@@ -2812,7 +2812,7 @@ function startServer() {
     ...customThemes.map((t) => ({ slug: t.slug, label: t.label, aliases: t.aliases || [] })),
   ];
   setThemeList(allThemes);
-  setWallpaperCatalog(loadWallpaperCatalog(customThemes), customThemes);
+  setWallpaperCatalog(loadWallpaperCatalog(customThemes), customThemes, getWallpaperDefaults());
 
   const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss, accessConfig, managedReposConfig, formsConfig });
 

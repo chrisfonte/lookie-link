@@ -121,3 +121,31 @@ test('URL parameters select wallpaper, panel and blur for this page only', () =>
     assert.equal(new win.URL(win.document.getElementById('l').href).searchParams.get('lookie-wallpaper'), 'a');
   } finally { dom.window.close(); wallpaper.setWallpaperCatalog({}); setThemeList(null); }
 });
+
+test('glass defaults and starting picture come from config, per theme over global', () => {
+  const dark = tempSet(['0-sunset-a.jpg', '1-sunset-b.jpg']);
+  const warnings = [];
+  const previous = console.warn;
+  console.warn = (...args) => warnings.push(args.join(' '));
+  let catalog;
+  try {
+    catalog = loadWallpaperCatalog([
+      {slug:'sunset', label:'Sunset', wallpapers:{dark, default:{dark:'b', light:'missing'}, panelOpacity:88, blur:2}},
+    ]);
+  } finally { console.warn = previous; }
+  assert.deepEqual(catalog.sunset.dark.map(e => e.id), ['b', 'a'], 'configured default leads the set');
+  assert.equal(warnings.length, 0, 'a default for a mode with no folder is silently ignored');
+  wallpaper.setWallpaperCatalog(catalog, [], {panelOpacity: 60, blur: 4});
+  try {
+    assert.equal(wallpaper.publicCatalog().sunset.panelOpacity, 88);
+    assert.equal(wallpaper.publicCatalog().sunset.blur, 2);
+    const html = `<!doctype html><html data-color-scheme="sunset"><body>${wallpaper.viewerWallpaperHtml()}<div class="viewer-toolbar">${wallpaperControlsHtml()}</div>${wallpaper.viewerWallpaperScript()}</body></html>`;
+    const dom = new JSDOM(html, {runScripts:'dangerously', url:'http://localhost/'});
+    try {
+      const root = dom.window.document.documentElement;
+      assert.equal(root.style.getPropertyValue('--wallpaper-panel'), '88%');
+      assert.equal(root.style.getPropertyValue('--wallpaper-blur'), '2px');
+      assert.equal(dom.window.document.querySelector('[data-viewer-wallpaper] img').getAttribute('src'), '/wallpaper/sunset/dark/b');
+    } finally { dom.window.close(); }
+  } finally { wallpaper.setWallpaperCatalog({}, [], {panelOpacity: 72, blur: 12}); }
+});

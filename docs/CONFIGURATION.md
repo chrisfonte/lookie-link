@@ -158,6 +158,32 @@ themes:
       light: ~/.config/omarchy/themes/carolina-sunset-light/backgrounds
 ```
 
+Presentation is configuration too. A global block sets the glass defaults
+every theme starts from, and a theme may override them and name its starting
+picture per mode:
+
+```yaml
+wallpapers:
+  panel_opacity: 72        # 50-100, percent
+  blur: 12                 # 0-16, px behind the panel
+
+themes:
+  Carolina Sunset:
+    wallpapers:
+      dark: ~/.config/omarchy/themes/carolina-sunset/backgrounds
+      light: ~/.config/omarchy/themes/carolina-sunset-light/backgrounds
+      default:
+        dark: mackerel-sky   # picture id; moves to the front of the set
+        light: pale-dawn
+      panel_opacity: 80    # this theme only
+      blur: 6
+```
+
+A reader's own slider changes, once made, persist in their browser and win
+over these defaults until they press Reset. URL parameters
+(`lookie-wallpaper`, `lookie-panel`, `lookie-blur`) win over both for that
+page. A `default` id that is not in the set logs a warning and is ignored.
+
 Accepted files: `.jpg`, `.jpeg`, `.png`, `.webp`; at most 50 per folder.
 Files are ordered by a leading number (`3-…`) when present, then by name. The
 picture's id and label come from the filename with the number and the theme's
