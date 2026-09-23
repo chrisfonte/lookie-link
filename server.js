@@ -360,8 +360,11 @@ function parseSince(raw) {
   if (raw == null || raw === '') return { since: null };
   const text = String(raw).trim();
   if (/^\d+(\.\d+)?$/.test(text)) {
+    // Seconds vs milliseconds: 1e11 ms is 1973-03-03 and 1e11 s is the year
+    // 5138, so anything below 1e11 can only be seconds. (The first cut used
+    // 1e12 and turned a millisecond value for 2000-01-01 into the year 31969.)
     const n = Number(text);
-    return { since: n < 1e12 ? Math.round(n * 1000) : Math.round(n) };
+    return { since: n < 1e11 ? Math.round(n * 1000) : Math.round(n) };
   }
   const parsed = Date.parse(text);
   if (Number.isFinite(parsed)) return { since: parsed };
