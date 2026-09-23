@@ -156,7 +156,7 @@ test('discovery reflects scoped caller identity and omits unauthorized repos, ro
     assert.equal(whoami.capabilities.annotationWrite, false);
     assert.equal(whoami.capabilities.publish, false);
     assert.equal(whoami.capabilities.managedRepos, false);
-    assert.equal(whoami.capabilities.search, false);
+    assert.equal(whoami.capabilities.search, true);
     assert.equal(Object.hasOwn(whoami.endpoints, 'save'), false);
     assert.equal(Object.hasOwn(whoami.endpoints, 'annotationCreate'), false);
     assert.equal(Object.hasOwn(whoami.endpoints, 'publishCreate'), false);
@@ -248,6 +248,9 @@ const ROUTE_FOR_ENDPOINT = Object.freeze({
   assetRead: ['get', '/asset/:repo/*'],
   wallpaperImage: ['get', '/wallpaper/:slug/:mode/:id'],
   appearance: ['get', '/api/appearance'],
+  repoTree: ['get', '/api/repos/:repo/tree'],
+  repoChanges: ['get', '/api/repos/:repo/changes'],
+  repoFileRead: ['get', '/api/repos/:repo/files/*'],
   appearanceTheme: ['get', '/api/appearance/themes/:slug'],
   forms: ['get', '/forms'],
   formsTemplates: ['get', '/api/forms/templates'],
@@ -283,6 +286,7 @@ const CAPABILITY_ENDPOINTS = Object.freeze({
   embeddedHtml: ['embeddedHtml'],
   managedRepos: ['managedRepoList', 'managedFileRead', 'managedTree', 'managedChanges'],
   search: ['search', 'searchSuggest'],
+  repoRead: ['repoTree', 'repoFileRead', 'repoChanges'],
   publish: ['publishCreate', 'publishUpdate', 'publishRevoke'],
   wallpapers: ['wallpaperImage'],
   appearance: ['appearance', 'appearanceTheme'],
@@ -408,7 +412,7 @@ test('discovery matrix agrees across caller class, route availability, repo disc
           editing: false,
           annotationWrite: false,
           managedRepos: false,
-          search: false,
+          search: true,
           publish: false,
         },
       },

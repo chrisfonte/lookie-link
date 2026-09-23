@@ -18,6 +18,9 @@ The inventory was checked against the route registrations in [`server.js`](../se
 | Route / capability | Method | Required auth | Enabled by config | Notes and source |
 |---|---|---|---|---|
 | Static browser assets: `/public/*` | `GET`, `HEAD` | Public | Always | Express static mount; no repository data. [`server.js`](../server.js) |
+| Repo tree: `/api/repos/:repo/tree` | `GET` | Effective `view` on requested directory and returned entries | Always | Any served repo, managed or plainly mapped. Bounded by depth and entry limits; `.git`, Syncthing state and `node_modules` are never listed; managed trash is hidden. [`server.js`](../server.js) |
+| Repo changes: `/api/repos/:repo/changes` | `GET` | Effective `view` | Always | Any served repo. Bounded mtime-based file listing, newest first; `since` is epoch milliseconds (compared against `mtimeMs`); entries carry `viewUrl`. [`server.js`](../server.js) |
+| Repo file read: `/api/repos/:repo/files/*` | `GET` | Effective `view` on file | Always | Any served repo. UTF-8 content and metadata as JSON. [`server.js`](../server.js) |
 | Managed repo list: `/api/managed-repos` | `GET` | Results require effective `view` | `managedRepos.storePath` | Returns only visible managed repos and omits roots; a denied caller receives an empty list rather than an auth error. [`server.js`](../server.js) |
 | Managed repo registration: `/api/managed-repos` | `POST` | Managed-repo admin bearer token | `managedRepos.storePath`, `allowRoots`, and `adminTokens` | Registers or creates a root only below an existing allow-root. [`server.js`](../server.js) |
 | Managed tree: `/api/managed-repos/:repo/tree` | `GET` | Effective `view` on requested directory and returned entries | `managedRepos.storePath` | Bounded by depth and entry limits; internal trash is hidden. [`server.js`](../server.js) |
@@ -28,8 +31,8 @@ The inventory was checked against the route registrations in [`server.js`](../se
 | Managed file delete: `/api/managed-repos/:repo/files/*` | `DELETE` | Effective `write` on file | `managedRepos.storePath` | Soft delete by default; `?hard=1` permanently deletes. [`server.js`](../server.js) |
 | Managed trash restore: `/api/managed-repos/:repo/trash/:trashId/restore` | `POST` | Effective `write` on repo and original file | `managedRepos.storePath` | Restores a soft-deleted file. [`server.js`](../server.js) |
 | Managed trash removal: `/api/managed-repos/:repo/trash/:trashId` | `DELETE` | Effective `write` on repo and original file | `managedRepos.storePath` | Permanently deletes one trash item. [`server.js`](../server.js) |
-| Managed search: `/api/search` | `GET` | Effective `view`; results are caller-filtered | `managedRepos.storePath` | Requires `q`; searches bounded path/content candidates in supported text formats. [`server.js`](../server.js) |
-| Managed suggestions: `/api/search/suggest` | `GET` | Effective `view`; results are caller-filtered | `managedRepos.storePath` | Requires `q`; returns bounded path suggestions. [`server.js`](../server.js) |
+| Search: `/api/search` | `GET` | Effective `view`; results are caller-filtered | Always | Requires `q`; searches bounded path/content candidates in supported text formats. [`server.js`](../server.js) |
+| Suggestions: `/api/search/suggest` | `GET` | Effective `view`; results are caller-filtered | Always | Requires `q`; returns bounded path suggestions. [`server.js`](../server.js) |
 | Publish update: `/api/publish/:slug` | `POST` | Repo-level `publish` on publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | Requires `expectedRevision`; creates a complete immutable next revision. [`server.js`](../server.js) |
 | Publish revoke: `/api/publish/:slug/revoke` | `POST` | Repo-level `publish` on publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | Requires a reason and revokes current and historical readback. [`server.js`](../server.js) |
 | API-key list: `/api/agent-keys` | `GET` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Optional state/agent filters and audit projection. [`server.js`](../server.js) |
@@ -91,7 +94,10 @@ This three-column table is test-checked against `lib/agent-discovery.js` and the
 | `managedFileWrite` | `/api/managed-repos/:repo/files/*path` | Managed store is enabled and caller has a visible `write` scope |
 | `managedTree` | `/api/managed-repos/:repo/tree` | Managed-repo capability is available |
 | `managedChanges` | `/api/managed-repos/:repo/changes` | Managed-repo capability is available |
-| `search` | `/api/search` | Managed-repo capability is available |
+| `search` | `/api/search` | Caller has a visible `view` scope (managed and mapped repos) |
+| `repoTree` | `/api/repos/:repo/tree` | Caller has a visible `view` scope |
+| `repoChanges` | `/api/repos/:repo/changes` | Caller has a visible `view` scope |
+| `repoFileRead` | `/api/repos/:repo/files/*path` | Caller has a visible `view` scope |
 | `searchSuggest` | `/api/search/suggest` | Search capability is available |
 | `publishCreate` | `/api/publish` | Publish store is enabled and caller has repo-level `publish` |
 | `publishUpdate` | `/api/publish/:slug` | Publish capability is available |
@@ -120,7 +126,8 @@ Both discovery responses contain these booleans. They are computed from register
 | `rawHtml` | Raw HTML is enabled, caller has visible `view`, and raw route exists |
 | `embeddedHtml` | Raw HTML is enabled, caller has visible `view`, and embed route exists |
 | `managedRepos` | Managed store is enabled and caller can see at least one managed repo |
-| `search` | Managed-repo capability and search route are available |
+| `search` | Caller has a visible `view` scope and the search route exists (covers managed and mapped repos) |
+| `repoRead` | Caller has a visible `view` scope and the generic tree/file-read routes exist |
 | `publish` | Publish store is enabled and caller has whole-repo `publish` scope on its virtual repo |
 | `wallpapers` | At least one theme has a picture set and the wallpaper image route is registered |
 | `appearance` | The appearance list route is registered (always); its admin writes are not advertised |
