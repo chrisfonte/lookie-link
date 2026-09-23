@@ -488,8 +488,12 @@ function buildReferenceDescription({ repo, normalized, tag, attr, kind, accessCo
   return entry;
 }
 
-async function describeLocalReference({ repo, rootPath, sourceRelativePath, tag, attr, value, kind, accessContext }) {
+async function describeLocalReference({ repo, rootPath, rootPrefix, sourceRelativePath, tag, attr, value, kind, accessContext }) {
   const normalized = normalizeLocalReference(sourceRelativePath, value);
+  // A published bundle's URL path starts with the slug; its revision folder does not.
+  const diskPath = rootPrefix && normalized && normalized.path && (normalized.path === rootPrefix || normalized.path.startsWith(rootPrefix + '/'))
+    ? normalized.path.slice(rootPrefix.length + 1)
+    : (normalized && normalized.path);
   if (!normalized) {
     return null;
   }
@@ -497,7 +501,7 @@ async function describeLocalReference({ repo, rootPath, sourceRelativePath, tag,
   const entry = buildReferenceDescription({ repo, normalized, tag, attr, kind, accessContext });
   let stat;
   try {
-    const absolutePath = await safeResolve(rootPath, normalized.path);
+    const absolutePath = await safeResolve(rootPath, diskPath);
     stat = await fs.stat(absolutePath);
   } catch (_error) {
     entry.error = 'not_found';
@@ -520,7 +524,7 @@ async function describeLocalReference({ repo, rootPath, sourceRelativePath, tag,
   return entry;
 }
 
-async function buildHtmlRenderValidation({ repo, rootPath, relativePath, stat, source, rawHtmlEnabled, accessContext }) {
+async function buildHtmlRenderValidation({ repo, rootPath, rootPrefix, relativePath, stat, source, rawHtmlEnabled, accessContext }) {
   const dom = new JSDOM(source);
   const { document } = dom.window;
   const assetRefs = [];
@@ -558,6 +562,7 @@ async function buildHtmlRenderValidation({ repo, rootPath, relativePath, stat, s
   });
 
   const localAssets = (await Promise.all(assetRefs.map((ref) => describeLocalReference({
+    rootPrefix,
     repo,
     rootPath,
     sourceRelativePath: relativePath,
@@ -565,6 +570,7 @@ async function buildHtmlRenderValidation({ repo, rootPath, relativePath, stat, s
     ...ref,
   })))).filter(Boolean);
   const navigationLinks = (await Promise.all(documentRefs.map((ref) => describeLocalReference({
+    rootPrefix,
     repo,
     rootPath,
     sourceRelativePath: relativePath,
@@ -1909,6 +1915,7 @@ function createApp(options = {}) {
         const validation = await buildHtmlRenderValidation({
           repo,
           rootPath,
+          rootPrefix: resolvedInput.published ? resolvedInput.published.publication.slug : undefined,
           relativePath,
           stat,
           source: sourceBuffer.toString('utf8'),

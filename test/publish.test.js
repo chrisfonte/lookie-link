@@ -430,7 +430,7 @@ test('published bundles render: markdown images keep the slug in their /asset sr
       files: [
         { path: 'index.md', content: '# Render\n\n![pic](assets/pic.svg)\n\n[pic link](assets/pic.svg)\n' },
         { path: 'assets/pic.svg', content: svg },
-        { path: 'page.html', content: '<!doctype html><html><head><title>embedded</title></head><body><p id="x">embedded page</p></body></html>' },
+        { path: 'page.html', content: '<!doctype html><html><head><title>embedded</title></head><body><p id="x">embedded page</p><img src="assets/pic.svg"></body></html>' },
       ],
     }));
     assert.equal(create.status, 201, await create.text());
@@ -447,6 +447,10 @@ test('published bundles render: markdown images keep the slug in their /asset sr
     const embedText = await embed.text();
     assert.equal(embed.status, 200, `embed serves published HTML: ${embed.status} ${embedText}`);
     assert.match(embedText, /embedded page/);
+    const validate = await server.request('/view/published/render-check/page.html?validate=1', auth);
+    assert.equal(validate.status, 200);
+    const report = await validate.json();
+    assert.equal(report.summary ? report.summary.missingLocalAssetCount : report.missingLocalAssetCount, 0, `validate sees bundle assets: ${JSON.stringify(report.localAssets)}`);
     const viewHtml = await server.request('/view/published/render-check/page.html', auth);
     assert.equal(viewHtml.status, 200);
     assert.match(await viewHtml.text(), /\/embed\/published\/render-check\/page\.html/);
