@@ -37,6 +37,7 @@ const {
 const { ApiKeyStore } = require('./lib/api-key-store');
 const { ManagedRepoStore } = require('./lib/managed-repo-store');
 const { searchManagedRepos, suggestManagedRepos } = require('./lib/managed-repo-search');
+const { createRepoResolver } = require('./lib/repo-reader');
 const { PublishStore } = require('./lib/publish-store');
 const {
   safeResolve,
@@ -626,6 +627,9 @@ function getRouteAvailability(app) {
     managedTree: has('get', '/api/managed-repos/:repo/tree'),
     managedChanges: has('get', '/api/managed-repos/:repo/changes'),
     search: has('get', '/api/search'),
+    repoTree: has('get', '/api/repos/:repo/tree'),
+    repoChanges: has('get', '/api/repos/:repo/changes'),
+    repoFileRead: has('get', '/api/repos/:repo/files/*'),
     searchSuggest: has('get', '/api/search/suggest'),
     publishCreate: has('post', '/api/publish'),
     publishUpdate: has('post', '/api/publish/:slug'),
@@ -667,6 +671,9 @@ function createApp(options = {}) {
   const managedRepoStore = options.managedRepoStore === undefined
     ? ManagedRepoStore.fromConfig(rawManagedReposConfig)
     : options.managedRepoStore;
+  // Every served repo (managed or plainly mapped) behind one read-only door
+  // (API roadmap R2): tree / changes / file read / search work for all of them.
+  const repoResolver = createRepoResolver({ mappings, managedRepoStore });
   if (managedRepoStore && managedRepoStore.isEnabled()) {
     for (const repo of managedRepoStore.listRepos().repos) {
       if (!mappings[repo.id]) mappings[repo.id] = repo.rootPath;
@@ -908,6 +915,87 @@ function createApp(options = {}) {
     }
   });
 
+  // ---- Generic read routes: any served repo, managed or mapped -------------
+  const resolveReadableRepo = (req, res, relativePath, type) => {
+    const accessContext = resolveAccessContext(req);
+    if (accessContext.mode === 'denied') {
+      sendAccessError(res, accessContext, true);
+      return null;
+    }
+    const found = repoResolver.resolve(req.params.repo);
+    if (!found
+      || (found.repo.managed && isManagedInternalPath(found.repo.id, relativePath))
+      || !canAccessPath(accessContext, 'view', found.repo.id, relativePath, type)) {
+      managedNotFound(res);
+      return null;
+    }
+    return { ...found, accessContext };
+  };
+
+  app.get('/api/repos/:repo/tree', async (req, res) => {
+    const relativePath = typeof req.query.path === 'string' ? req.query.path : '';
+    const found = resolveReadableRepo(req, res, relativePath, 'directory');
+    if (!found) return;
+    const { repo, reader, accessContext } = found;
+    try {
+      const tree = await reader.listTree(repo, relativePath, {
+        maxDepth: req.query.maxDepth,
+        maxEntries: req.query.maxEntries,
+        includeEntry: (entry) => canAccessPath(accessContext, 'view', repo.id, entry.path, entry.type === 'directory' ? 'directory' : 'file'),
+        shouldDescend: (entry) => canAccessPath(accessContext, 'view', repo.id, entry.path, 'directory'),
+      });
+      res.status(200).json({
+        ok: true, repo: repo.id, managed: repo.managed, path: toPosixPath(relativePath),
+        entries: tree.entries, count: tree.entries.length, truncated: tree.truncated,
+        limits: { maxDepth: tree.maxDepth, maxEntries: tree.maxEntries },
+      });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
+    }
+  });
+
+  app.get('/api/repos/:repo/changes', async (req, res) => {
+    const found = resolveReadableRepo(req, res, '', 'directory');
+    if (!found) return;
+    const { repo, reader, accessContext } = found;
+    const since = req.query.since == null || req.query.since === '' ? null : Number(req.query.since);
+    if (since !== null && !Number.isFinite(since)) {
+      apiError(res, 400, null, 'since must be a unix timestamp in milliseconds.', [{ path: 'since', message: 'epoch milliseconds' }]);
+      return;
+    }
+    try {
+      const tree = await reader.listTree(repo, '', {
+        maxDepth: 10,
+        maxEntries: req.query.maxEntries,
+        includeEntry: (entry) => entry.type === 'file' && canAccessPath(accessContext, 'view', repo.id, entry.path, 'file'),
+        shouldDescend: (entry) => canAccessPath(accessContext, 'view', repo.id, entry.path, 'directory'),
+      });
+      const entries = tree.entries
+        .filter((entry) => since === null || entry.mtimeMs >= since)
+        .sort((a, b) => b.mtimeMs - a.mtimeMs)
+        .map((entry) => ({ path: entry.path, mtimeMs: entry.mtimeMs, size: entry.size, change: 'modified', viewUrl: buildHref(repo.id, entry.path) }));
+      res.status(200).json({ ok: true, repo: repo.id, managed: repo.managed, since, entries, count: entries.length, truncated: tree.truncated });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
+    }
+  });
+
+  app.get('/api/repos/:repo/files/*', async (req, res) => {
+    const relativePath = req.params[0] || '';
+    const found = resolveReadableRepo(req, res, relativePath, 'file');
+    if (!found) return;
+    const { repo, reader } = found;
+    try {
+      const result = await reader.readFile(repo, relativePath);
+      res.status(200).json({ ok: true, repo: repo.id, managed: repo.managed, ...result, viewUrl: buildHref(repo.id, result.path) });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
+    }
+  });
+
   app.get('/api/managed-repos/:repo/tree', async (req, res) => {
     const accessContext = resolveAccessContext(req);
     const repo = managedRepoStore && managedRepoStore.getRepo(req.params.repo);
@@ -1115,8 +1203,8 @@ function createApp(options = {}) {
   });
 
   app.get('/api/search', async (req, res) => {
-    if (!managedRepoStore || !managedRepoStore.isEnabled()) {
-      managedNotFound(res);
+    if (req.accessContext && req.accessContext.mode === 'denied') {
+      sendAccessError(res, req.accessContext, true);
       return;
     }
     const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
@@ -1131,8 +1219,8 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
     try {
       const result = await searchManagedRepos({
-        store: managedRepoStore,
-        repos: managedRepoStore.listRepos().repos,
+        store: repoResolver.store,
+        repos: repoResolver.listAll(),
         query,
         scope: req.query.scope,
         limit: req.query.limit,
@@ -1146,8 +1234,8 @@ function createApp(options = {}) {
   });
 
   app.get('/api/search/suggest', async (req, res) => {
-    if (!managedRepoStore || !managedRepoStore.isEnabled()) {
-      managedNotFound(res);
+    if (req.accessContext && req.accessContext.mode === 'denied') {
+      sendAccessError(res, req.accessContext, true);
       return;
     }
     const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
@@ -1162,8 +1250,8 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
     try {
       const result = await suggestManagedRepos({
-        store: managedRepoStore,
-        repos: managedRepoStore.listRepos().repos,
+        store: repoResolver.store,
+        repos: repoResolver.listAll(),
         query,
         scope: req.query.scope,
         limit: req.query.limit,

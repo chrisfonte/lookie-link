@@ -220,7 +220,8 @@ async function capabilitiesCommand(auth) {
 
 async function readCommand(auth, target, outputJson) {
   const { repo, relativePath } = parseRepoPath(target);
-  const managed = await request(auth, `/api/managed-repos/${encodeURIComponent(repo)}/files/${encodePath(relativePath)}`);
+  // Generic read route (any served repo); falls back to /asset for binaries.
+  const managed = await request(auth, `/api/repos/${encodeURIComponent(repo)}/files/${encodePath(relativePath)}`);
   if (managed.ok) {
     const payload = await parseJsonResponse(managed);
     formatOutput(outputJson ? payload : payload.content, outputJson);
@@ -301,7 +302,7 @@ async function treeCommand(auth, repo, args) {
     }
   }
   const suffix = query.size ? `?${query}` : '';
-  const response = await request(auth, `/api/managed-repos/${encodeURIComponent(repo)}/tree${suffix}`);
+  const response = await request(auth, `/api/repos/${encodeURIComponent(repo)}/tree${suffix}`);
   formatOutput(await handleApiResponse(response, auth), true);
 }
 
@@ -327,7 +328,7 @@ async function changesCommand(auth, repo, args) {
   }
   if (!since) die(EXIT_USAGE, 'changes requires --since (ISO_TIMESTAMP | UNIX_SECONDS)');
   const query = new URLSearchParams({ since: String(sinceToMs(since)) });
-  const response = await request(auth, `/api/managed-repos/${encodeURIComponent(repo)}/changes?${query}`);
+  const response = await request(auth, `/api/repos/${encodeURIComponent(repo)}/changes?${query}`);
   formatOutput(await handleApiResponse(response, auth), true);
 }
 

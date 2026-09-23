@@ -115,6 +115,10 @@ Create request:
 
 `anchorKind` is `heading`, `yamlKey`, or `lineRange`; line ranges use `#L<start>-L<end>`. Reads accept repeatable `state=open|claimed|resolved`. Updates accept `claim`, `resolve`, `reopen`, `reply`, or `redact`, plus an optional `expectedMtimeMs`; stale updates return `409` with the current document. See [ANNOTATIONS-SPEC.md](ANNOTATIONS-SPEC.md).
 
+## Any served repository: tree, changes, file read, search
+
+Since 2026-09-23 the read half of the repository API is not limited to managed repositories. `GET /api/repos/:repo/tree`, `GET /api/repos/:repo/changes?since=<epoch ms>` and `GET /api/repos/:repo/files/*path` work for every repo the caller can view, managed or plainly mapped, with the same bounds, caller filtering, envelope and `viewUrl` fields; responses carry `managed: true|false`. `.git`, Syncthing state folders and `node_modules` are never listed. `GET /api/search` and `/suggest` cover the union of managed and mapped repos. The `/api/managed-repos/...` read routes remain for managed repos.
+
 ## Managed repositories
 
 Registration is an administrative operation constrained to configured existing allow-roots. Normal content operations use caller scope:
@@ -123,7 +127,7 @@ Registration is an administrative operation constrained to configured existing a
 - Writes require string `content`; optional `expectedMtimeMs` returns `409` on conflict.
 - Deletes are soft by default and return a `trashId`; `?hard=1` deletes immediately.
 - Restore and permanent-trash deletion re-check `write` on the original path.
-- Tree and change responses are bounded and caller-filtered. `changes?since=` expects epoch **milliseconds** (compared against file `mtimeMs`); the CLI accepts ISO-8601 or seconds and converts.
+- Tree and change responses are bounded and caller-filtered (the generic `/api/repos/:repo/...` routes above give the same for mapped repos). `changes?since=` expects epoch **milliseconds** (compared against file `mtimeMs`); the CLI accepts ISO-8601 or seconds and converts.
 - Search requires `q`, supports repeated `scope`, and bounds results, entries, file size, and total bytes. Suggestions match visible paths only.
 
 ## Publishing
