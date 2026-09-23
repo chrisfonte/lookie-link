@@ -274,6 +274,8 @@ const ROUTE_FOR_ENDPOINT = Object.freeze({
   publishCreate: ['post', '/api/publish'],
   publishUpdate: ['post', '/api/publish/:slug'],
   publishRevoke: ['post', '/api/publish/:slug/revoke'],
+  publishList: ['get', '/api/publish'],
+  publishGet: ['get', '/api/publish/:slug'],
 });
 
 const CAPABILITY_ENDPOINTS = Object.freeze({
@@ -289,6 +291,7 @@ const CAPABILITY_ENDPOINTS = Object.freeze({
   search: ['search', 'searchSuggest'],
   repoRead: ['repoTree', 'repoFileRead', 'repoChanges'],
   publish: ['publishCreate', 'publishUpdate', 'publishRevoke'],
+  publishRead: ['publishList', 'publishGet'],
   wallpapers: ['wallpaperImage'],
   appearance: ['appearance', 'appearanceTheme'],
   forms: ['forms', 'formsTemplates', 'formsSubmissions'],

@@ -282,3 +282,137 @@ test('private publish metadata is not exposed and never grants source-repo acces
     await fs.rm(fixture.root, { recursive: true, force: true });
   }
 });
+
+function readRequest(token) {
+  return { headers: { Authorization: `Bearer ${token}` } };
+}
+
+test('GET /api/publish lists publications, filters by state, and 304s on a matching ETag', async () => {
+  const fixture = await makeFixture();
+  const server = await startTestServer(fixture);
+  try {
+    const { token: publishToken } = await createKey(server, { view: true, publish: true });
+    const { token: viewToken } = await createKey(server, { view: true, publish: false });
+
+    const empty = await server.request('/api/publish', readRequest(viewToken));
+    assert.equal(empty.status, 200);
+    const emptyBody = await empty.json();
+    assert.deepEqual(emptyBody.publications, []);
+    assert.equal(emptyBody.count, 0);
+    assert.equal(typeof emptyBody.revision, 'string');
+    assert.equal(typeof emptyBody.generatedAt, 'string');
+    assert.ok(empty.headers.get('etag'));
+
+    await server.request('/api/publish', publishRequest(publishToken, {
+      slug: 'listed-one', files: [{ path: 'index.md', content: 'one' }],
+    }));
+    await server.request('/api/publish', publishRequest(publishToken, {
+      slug: 'listed-two', files: [{ path: 'index.md', content: 'two' }],
+    }));
+
+    const afterCreate = await server.request('/api/publish', readRequest(viewToken));
+    assert.equal(afterCreate.status, 200);
+    const afterCreateBody = await afterCreate.json();
+    assert.equal(afterCreateBody.count, 2);
+    const slugs = afterCreateBody.publications.map((p) => p.slug).sort();
+    assert.deepEqual(slugs, ['listed-one', 'listed-two']);
+    assert.ok(afterCreateBody.publications.every((p) => p.revisions === undefined));
+    assert.notEqual(afterCreateBody.revision, emptyBody.revision);
+
+    await server.request('/api/publish/listed-one/revoke', publishRequest(publishToken, { reason: 'testing filter' }));
+
+    const activeOnly = await server.request('/api/publish?state=active', readRequest(viewToken));
+    const activeBody = await activeOnly.json();
+    assert.deepEqual(activeBody.publications.map((p) => p.slug), ['listed-two']);
+
+    const revokedOnly = await server.request('/api/publish?state=revoked', readRequest(viewToken));
+    const revokedBody = await revokedOnly.json();
+    assert.deepEqual(revokedBody.publications.map((p) => p.slug), ['listed-one']);
+    assert.equal(revokedBody.publications[0].state, 'revoked');
+
+    const currentEtag = revokedOnly.headers.get('etag');
+    const notModified = await server.request('/api/publish?state=revoked', {
+      headers: { Authorization: `Bearer ${viewToken}`, 'If-None-Match': currentEtag },
+    });
+    assert.equal(notModified.status, 304);
+
+    const badState = await server.request('/api/publish?state=nope', readRequest(viewToken));
+    assert.equal(badState.status, 400);
+
+    const unknownParam = await server.request('/api/publish?bogus=1', readRequest(viewToken));
+    assert.equal(unknownParam.status, 400);
+    const unknownParamBody = await unknownParam.json();
+    assert.equal(unknownParamBody.error.code, 'invalid_request');
+
+    // Path-scoped (not whole-repo) credentials cannot list, same as they
+    // cannot publish/update/revoke (canAccessRepo requires a whole-repo scope).
+    const pathScoped = await createKey(
+      server,
+      { view: true, publish: true },
+      { published: { paths: ['listed-two/'] } }
+    );
+    const denied = await server.request('/api/publish', readRequest(pathScoped.token));
+    assert.equal(denied.status, 403);
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('GET /api/publish/:slug returns the record with revision history, ?version, revoked readback, and 404', async () => {
+  const fixture = await makeFixture();
+  const server = await startTestServer(fixture);
+  try {
+    const { token: publishToken } = await createKey(server, { view: true, publish: true });
+    const { token: viewToken } = await createKey(server, { view: true, publish: false });
+
+    await server.request('/api/publish', publishRequest(publishToken, {
+      slug: 'show-me',
+      files: [{ path: 'index.md', content: '# One\n' }],
+      entryPath: 'index.md',
+    }));
+    await server.request('/api/publish/show-me', publishRequest(publishToken, {
+      expectedRevision: 1,
+      files: [{ path: 'index.md', content: '# Two\n' }],
+      entryPath: 'index.md',
+    }));
+
+    const show = await server.request('/api/publish/show-me', readRequest(viewToken));
+    assert.equal(show.status, 200);
+    const showBody = await show.json();
+    assert.equal(showBody.publication.slug, 'show-me');
+    assert.equal(showBody.publication.currentRevision, 2);
+    assert.equal(showBody.publication.revisions.length, 2);
+    assert.equal(showBody.publication.viewUrl, '/view/published/show-me/index.md');
+    assert.equal(showBody.publication.rootViewUrl, '/view/published/show-me');
+    assert.ok(show.headers.get('etag'));
+
+    const withVersion = await server.request('/api/publish/show-me?version=1', readRequest(viewToken));
+    assert.equal(withVersion.status, 200);
+    const withVersionBody = await withVersion.json();
+    assert.equal(withVersionBody.version, 1);
+    assert.equal(withVersionBody.files.revision, 1);
+    assert.equal(withVersionBody.files.entryPath, 'index.md');
+
+    const badVersion = await server.request('/api/publish/show-me?version=99', readRequest(viewToken));
+    assert.equal(badVersion.status, 404);
+
+    const badParam = await server.request('/api/publish/show-me?version=abc', readRequest(viewToken));
+    assert.equal(badParam.status, 400);
+
+    const unknownSlug = await server.request('/api/publish/does-not-exist', readRequest(viewToken));
+    assert.equal(unknownSlug.status, 404);
+    const unknownSlugBody = await unknownSlug.json();
+    assert.equal(unknownSlugBody.error.code, 'not_found');
+
+    await server.request('/api/publish/show-me/revoke', publishRequest(publishToken, { reason: 'done' }));
+    const revokedShow = await server.request('/api/publish/show-me', readRequest(viewToken));
+    assert.equal(revokedShow.status, 200);
+    const revokedBody = await revokedShow.json();
+    assert.equal(revokedBody.publication.state, 'revoked');
+    assert.equal(revokedBody.publication.revokedReason, 'done');
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});

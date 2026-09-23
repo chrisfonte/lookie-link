@@ -207,16 +207,22 @@ test('core CLI commands map to their HTTP endpoints without socket access', asyn
       ['publish', publishFile, '--slug', 'artifact'],
       ['publish', publishFile, '--slug', 'artifact', '--expected-revision', '1'],
       ['publish', 'revoke', 'artifact', '--reason', 'expired'],
+      ['publish', 'list', '--state', 'active'],
+      ['publish', 'show', 'artifact', '--version', '1'],
     ];
     for (const args of commands) await run(args, { env });
     const requests = await item.requests();
     assert.deepEqual(requests.map(({ method }) => method), [
-      'GET', 'GET', 'GET', 'GET', 'GET', 'PUT', 'DELETE', 'GET', 'GET', 'POST', 'POST', 'POST',
+      'GET', 'GET', 'GET', 'GET', 'GET', 'PUT', 'DELETE', 'GET', 'GET', 'POST', 'POST', 'POST', 'GET', 'GET',
     ]);
     assert.equal(new URL(requests[9].url).pathname, '/api/publish');
     assert.equal(new URL(requests[10].url).pathname, '/api/publish/artifact');
     assert.equal(new URL(requests[11].url).pathname, '/api/publish/artifact/revoke');
     assert.equal(JSON.parse(requests[9].body).files[0].encoding, 'base64');
+    assert.equal(new URL(requests[12].url).pathname, '/api/publish');
+    assert.equal(new URL(requests[12].url).searchParams.get('state'), 'active');
+    assert.equal(new URL(requests[13].url).pathname, '/api/publish/artifact');
+    assert.equal(new URL(requests[13].url).searchParams.get('version'), '1');
   } finally {
     await item.close();
   }

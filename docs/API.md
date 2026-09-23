@@ -140,6 +140,8 @@ Updates use the same complete-bundle payload plus a mandatory `expectedRevision`
 
 Readback uses the normal `view`, `asset`, and optional `raw` routes beneath the configured virtual repo. Public metadata containing absolute filesystem paths is rejected; private metadata is never projected. See [PUBLISHING.md](PUBLISHING.md).
 
+`GET /api/publish` and `GET /api/publish/:slug` require whole-repo `view` (not `publish`) on the publish repo, and read what create/update/revoke wrote. Both carry a `revision` that changes whenever any publication changes, and set a weak `ETag`; poll with `If-None-Match` and treat `304` as "nothing changed" instead of re-fetching and diffing.
+
 ## Administrative stores
 
 API-key lifecycle routes require an API-key admin bearer token. Created and rotated secrets are returned once and stored only as hashes. Grant lifecycle routes require a grant admin token; mutation credentials must be bearer tokens. Grant requests also enforce issuer, subject, source-owner, expiry, approval, and cross-company allow-root policy.
