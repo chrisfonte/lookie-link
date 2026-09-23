@@ -65,10 +65,11 @@ const errorState = {
   jsonErrors: false,
 };
 
-function die(code, message) {
+function die(code, message, serverError) {
   if (message) {
     if (errorState.jsonErrors) {
-      process.stdout.write(`${JSON.stringify({ error: message, code })}\n`);
+      // serverError is the server's { code, message, details? } envelope, passed through whole.
+      process.stdout.write(`${JSON.stringify({ error: message, code, ...(serverError ? { serverError } : {}) })}\n`);
     } else {
       process.stderr.write(`lookie-annotations: ${message}\n`);
     }
@@ -127,11 +128,19 @@ function buildAnnotationsUrl(baseUrl, repo, relativePath, states) {
   return url;
 }
 
-function mapHttpFailure(res, label) {
-  if (res.status === 404) die(EXIT_NOT_FOUND, `not found (${label}): HTTP 404`);
-  if (res.status === 401 || res.status === 403) die(EXIT_FORBIDDEN, `forbidden (${label}): HTTP ${res.status}`);
-  if (res.status === 400) die(EXIT_USAGE, `bad request (${label}): HTTP 400`);
-  die(EXIT_TRANSPORT, `HTTP ${res.status} (${label})`);
+function serverErrorOf(json) {
+  const error = json && json.error;
+  if (!error) return null;
+  return typeof error === 'object' ? error : { message: String(error) };
+}
+
+function mapHttpFailure(res, label, json) {
+  const serverError = serverErrorOf(json);
+  const detail = serverError && serverError.message ? `: ${serverError.message}` : '';
+  if (res.status === 404) die(EXIT_NOT_FOUND, `not found (${label}): HTTP 404${detail}`, serverError);
+  if (res.status === 401 || res.status === 403) die(EXIT_FORBIDDEN, `forbidden (${label}): HTTP ${res.status}${detail}`, serverError);
+  if (res.status === 400) die(EXIT_USAGE, `bad request (${label}): HTTP 400${detail}`, serverError);
+  die(EXIT_TRANSPORT, `HTTP ${res.status} (${label})${detail}`, serverError);
 }
 
 async function httpJson(method, url, body, label) {
@@ -153,7 +162,7 @@ async function httpJson(method, url, body, label) {
     if (res.status === 409) {
       return { status: 409, body: json };
     }
-    mapHttpFailure(res, label);
+    mapHttpFailure(res, label, json);
   }
   return { status: res.status, body: json };
 }
