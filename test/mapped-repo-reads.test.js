@@ -114,3 +114,23 @@ test('a token scoped to one folder sees only that folder in tree, changes and se
     assert.equal(whoami.json.endpoints.repoTree, '/api/repos/:repo/tree');
   } finally { s.server.close(); fs.rmSync(f.root, { recursive: true, force: true }); }
 });
+
+test('changes accepts ISO and seconds; search rejects unknown params and takes repo as scope alias', async () => {
+  const f = fixture();
+  const s = await start({ mappings: { docs: f.docs }, accessConfig: {} });
+  try {
+    const iso = await get(s.base + '/api/repos/docs/changes?since=' + encodeURIComponent(new Date(Date.now() - 3600000).toISOString()));
+    assert.equal(iso.status, 200, iso.text);
+    assert.equal(iso.json.entries.some((e) => e.path === 'README.md'), false);
+    const secs = await get(s.base + '/api/repos/docs/changes?since=' + Math.floor((Date.now() - 3600000) / 1000));
+    assert.equal(secs.status, 200);
+    assert.deepEqual(secs.json.entries.map((e) => e.path).sort(), iso.json.entries.map((e) => e.path).sort());
+    const typo = await get(s.base + '/api/search?q=wallpaper&repos=docs');
+    assert.equal(typo.status, 400);
+    assert.equal(typo.json.error.code, 'invalid_request');
+    assert.deepEqual(typo.json.error.details, [{ path: 'repos', message: 'unknown query parameter' }]);
+    const alias = await get(s.base + '/api/search?q=wallpaper&repo=docs');
+    assert.equal(alias.status, 200);
+    assert.equal(alias.json.reposSearched, 1);
+  } finally { s.server.close(); fs.rmSync(f.root, { recursive: true, force: true }); }
+});
