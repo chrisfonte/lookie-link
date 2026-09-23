@@ -416,3 +416,42 @@ test('GET /api/publish/:slug returns the record with revision history, ?version,
     await fs.rm(fixture.root, { recursive: true, force: true });
   }
 });
+
+test('published bundles render: markdown images keep the slug in their /asset src and published HTML embeds', async () => {
+  const fixture = await makeFixture();
+  const server = await startTestServer(fixture);
+  try {
+    const key = await createKey(server, { publish: true, view: true });
+    const token = key.secret || key.token || (key.key && key.key.secret);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4"/></svg>';
+    const create = await server.request('/api/publish', publishRequest(token, {
+      slug: 'render-check',
+      entryPath: 'index.md',
+      files: [
+        { path: 'index.md', content: '# Render\n\n![pic](assets/pic.svg)\n\n[pic link](assets/pic.svg)\n' },
+        { path: 'assets/pic.svg', content: svg },
+        { path: 'page.html', content: '<!doctype html><html><head><title>embedded</title></head><body><p id="x">embedded page</p></body></html>' },
+      ],
+    }));
+    assert.equal(create.status, 201, await create.text());
+    const auth = { headers: { Authorization: `Bearer ${token}` } };
+    const page = await server.request('/view/published/render-check/index.md', auth);
+    assert.equal(page.status, 200);
+    const html = await page.text();
+    assert.ok(html.includes('src="/asset/published/render-check/assets/pic.svg"'), `img src keeps the slug: ${(html.match(/<img[^>]*src="[^"]*pic\.svg"/g) || []).join(' ')}`);
+    assert.ok(!html.includes('src="/asset/published/assets/pic.svg"'), 'slug must not be dropped');
+    assert.ok(html.includes('href="/view/published/render-check/assets/pic.svg"'), `link keeps the slug once: ${(html.match(/<a[^>]*href="[^"]*pic\.svg[^"]*"/g) || []).join(' ')}`);
+    const asset = await server.request('/asset/published/render-check/assets/pic.svg', auth);
+    assert.equal(asset.status, 200);
+    const embed = await server.request('/embed/published/render-check/page.html', auth);
+    const embedText = await embed.text();
+    assert.equal(embed.status, 200, `embed serves published HTML: ${embed.status} ${embedText}`);
+    assert.match(embedText, /embedded page/);
+    const viewHtml = await server.request('/view/published/render-check/page.html', auth);
+    assert.equal(viewHtml.status, 200);
+    assert.match(await viewHtml.text(), /\/embed\/published\/render-check\/page\.html/);
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});

@@ -2079,6 +2079,8 @@ function createApp(options = {}) {
     const html = renderDocumentPage({
       repo,
       repoRoot: rootPath,
+      // Published bundles: the URL path starts with the slug, the root does not.
+      repoRootPrefix: resolvedInput.published ? resolvedInput.published.publication.slug : undefined,
       ...linkResolutionContext(accessContext),
       // Cache the rendered body only for unscoped callers: their link rewriting
       // is identical, so one render serves everyone with full view access.
@@ -2915,9 +2917,11 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
     const repo = req.params.repo;
     const relativePath = req.params[0] || '';
-    const rootPath = mappings[repo];
+    let rootPath = mappings[repo];
 
-    if (!rootPath) {
+    // The published virtual repo is served here too (the /view page of a
+    // published .html embeds /embed/published/...; it was a 404 until 2026-09-23).
+    if (!rootPath && repo !== publishedRepo) {
       res.status(404).type('text/plain').send(`Unknown repository: ${repo}`);
       return;
     }
@@ -2936,7 +2940,17 @@ function createApp(options = {}) {
 
     let resolved;
     try {
-      resolved = await safeResolve(rootPath, relativePath);
+      const published = await resolvePublishedTarget(repo, relativePath, req.query && req.query.version);
+      if (published && published.error) {
+        sendPathError(res, published.error);
+        return;
+      }
+      if (published) {
+        rootPath = published.rootPath;
+        resolved = published.resolved;
+      } else {
+        resolved = await safeResolve(rootPath, relativePath);
+      }
     } catch (error) {
       if (error && error.code === 'EACCES') {
         res.status(403).type('text/plain').send('Invalid path.');
