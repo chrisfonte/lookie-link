@@ -2,6 +2,22 @@
 
 The [capability and route matrix](CAPABILITIES.md) is the authoritative endpoint list, including methods, permissions, feature gates, discovery templates, and source anchors. This document adds payload and workflow details without duplicating that list.
 
+## An agent's first seven requests
+
+Everything below is discoverable from the first request; nothing needs prior knowledge of the host.
+
+| # | Request | Answers |
+|---|---|---|
+| 1 | `GET /.well-known/agent.json` | what this caller may do (`capabilities`), the path templates to use (`endpoints`), `discovery.openapiUrl` / `discovery.apiDocsUrl`, and the appearance `themes` block |
+| 2 | `GET /api/repos` | visible repos with `viewUrl` and `assetUrl` |
+| 3 | `GET /api/appearance` | themes, aliases, picture counts, defaults, `revision`; poll with `If-None-Match` using the `ETag` |
+| 4 | `GET /api/appearance/themes/:slug` | one theme's palettes, glass values and picture ids (aliases resolve) |
+| 5 | `GET /asset/:repo/*path` | the page's bytes with its content type (`/view` is the client-rendered HTML shell) |
+| 6 | `GET /api/annotations/:repo/*path` | the page's annotations, when enabled |
+| 7 | any error | `{ "ok": false, "error": { "code", "message", "details"? } }` on every route |
+
+Tree, changes and search apply to managed repositories only (`capabilities.managedRepos`). The same flow from the CLI: `lookie capabilities`, `lookie repos`, `lookie appearance show`, `lookie read`, `lookie annotations list`, `lookie openapi`.
+
 ## Authentication and authorization
 
 Static tokens, managed API keys, and managed grants resolve to the same `view`, `write`, and `publish` permission model plus repo/path scopes. `edit` remains a legacy alias for `write` in stored credentials.
