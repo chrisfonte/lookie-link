@@ -637,7 +637,10 @@ function createApp(options = {}) {
   const editingEnabled = options.editingEnabled === undefined ? getEditingEnabled() : Boolean(options.editingEnabled);
   const annotationsEnabled = options.annotationsEnabled === undefined ? getAnnotationsEnabled() : Boolean(options.annotationsEnabled);
   const rawHtmlEnabled = options.rawHtmlEnabled === undefined ? getRawHtmlEnabled() : Boolean(options.rawHtmlEnabled);
-  const customThemeCss = options.customThemeCss || '';
+  // `let`, not const: every page reads this at request time, so the theme
+  // watcher can swap in regenerated CSS without a restart.
+  let customThemeCss = options.customThemeCss || '';
+  app.locals.setCustomThemeCss = (css) => { customThemeCss = typeof css === 'string' ? css : ''; };
   if (options.wallpaperCatalog !== undefined) setWallpaperCatalog(options.wallpaperCatalog, options.wallpaperThemes || [], options.wallpaperDefaults || null);
   const rawAccessConfig = options.accessConfig === undefined ? getAccessConfig() : options.accessConfig;
   const rawManagedReposConfig = options.managedReposConfig === undefined ? getManagedReposConfig() : options.managedReposConfig;
@@ -849,7 +852,7 @@ function createApp(options = {}) {
       contexts: options.formsCsrfContexts,
       audit: formsAudit,
       logger,
-      customThemeCss,
+      get customThemeCss() { return customThemeCss; },
     }));
   }
   app.use(express.json({ limit: '2mb' }));
@@ -2798,40 +2801,39 @@ function startServer() {
   const managedReposConfig = getManagedReposConfig();
   const formsConfig = getFormsConfig();
 
-  const customThemes = loadCustomThemes();
-  const customThemeCss = generateCustomThemeCss(customThemes);
-
   const builtInThemes = BUILT_IN_THEMES.map((slug) => ({
     slug,
     label: slug.split('-').map((w) => w[0].toUpperCase() + w.slice(1)).join(' '),
   }));
-  // Aliases (#389) ride along on the canonical entry so the toolbar can reveal
-  // their label too; they are never listed as separate picker entries.
-  const allThemes = [
-    ...builtInThemes,
-    ...customThemes.map((t) => ({ slug: t.slug, label: t.label, aliases: t.aliases || [] })),
-  ];
-  setThemeList(allThemes);
-  // Wallpapers reload live: edit the config's wallpaper keys or drop images
-  // into a folder and the next page load has them, no restart.
+  let customThemes = [];
+  const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss: '', accessConfig, managedReposConfig, formsConfig });
+
+  // Themes and wallpapers reload live: edit a palette, an alias, a wallpaper
+  // key, or drop images into a folder, and the next page load has it. The
+  // watcher covers the config file's directory and every wallpaper folder.
   watchWallpapers({
     fs: require('node:fs'),
     path,
     reload() {
       reloadConfig();
-      const themes = loadCustomThemes();
-      const catalog = loadWallpaperCatalog(themes);
-      setWallpaperCatalog(catalog, themes, getWallpaperDefaults());
-      const folders = themes.flatMap((t) => t.wallpapers ? [t.wallpapers.dark, t.wallpapers.light] : []);
+      customThemes = loadCustomThemes();
+      // Aliases (#389) ride along on the canonical entry so the toolbar can
+      // reveal their label too; they are never listed as separate picker entries.
+      setThemeList([
+        ...builtInThemes,
+        ...customThemes.map((t) => ({ slug: t.slug, label: t.label, aliases: t.aliases || [] })),
+      ]);
+      app.locals.setCustomThemeCss(generateCustomThemeCss(customThemes));
+      const catalog = loadWallpaperCatalog(customThemes);
+      setWallpaperCatalog(catalog, customThemes, getWallpaperDefaults());
+      const folders = customThemes.flatMap((t) => t.wallpapers ? [t.wallpapers.dark, t.wallpapers.light] : []);
       const configPath = getConfigPath();
       return {
         watch: [configPath && path.dirname(configPath), ...folders],
-        summary: `${Object.keys(catalog).length} themes, ${Object.values(catalog).reduce((n, s) => n + s.dark.length + s.light.length, 0)} pictures`,
+        summary: `${customThemes.length} custom themes, ${Object.keys(catalog).length} with wallpapers, ${Object.values(catalog).reduce((n, s) => n + s.dark.length + s.light.length, 0)} pictures`,
       };
     },
   });
-
-  const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss, accessConfig, managedReposConfig, formsConfig });
 
   app.listen(port, '0.0.0.0', () => {
     console.log(`Lookie Link listening on http://${hostname}:${port}`);
