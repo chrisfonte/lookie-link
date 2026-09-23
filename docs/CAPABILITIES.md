@@ -247,6 +247,8 @@ The package also ships compatibility executables `lookie-read` and `lookie-annot
 | `lib/embed-html.js` | Strict UTF-8 HTML decoding, local/cross-repo/wiki URL rewriting, theme and annotation injection, sensitive path/value redaction |
 | `lib/grant-store.js` | Hashed expiring grants, admin lifecycle, owner/issuer/approval/cross-company policy, rotation/revocation/audits, optional active projection |
 | `lib/managed-repo-search.js` | Scope-preserving bounded search and suggestions across allowlisted text formats |
+| `lib/search-query.js` | Query semantics shared by both backends: all terms must match, quoted phrases, literal and case-insensitive |
+| `scripts/search-battery.js` | Naive-user query battery against a running instance (`npm run search:battery -- <url>`); exits non-zero on a silent bad answer |
 | `lib/managed-repo-store.js` | Allow-rooted registry, atomic UTF-8 file CRUD, mtime conflicts, recoverable trash, permanent deletion, bounded tree, symlink containment |
 | `lib/path-utils.js` | Path containment and route builders plus display helpers |
 | `lib/publish-store.js` | Atomic immutable revisions, optimistic update guard, metadata separation, limits, historical resolution, revocation |
