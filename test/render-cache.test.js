@@ -69,3 +69,19 @@ test('the view route serves an unscoped caller from the cache and a scoped calle
     assert.equal(one.body.length, two.body.length);
   } finally { server2.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test('a markdown link to an image is rewritten once, not prefixed twice (mapped and virtual repos)', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lookie-link-once-'));
+  fs.mkdirSync(path.join(root, 'assets'));
+  fs.writeFileSync(path.join(root, 'assets', 'chart.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  const source = '# t\n\n[chart](assets/chart.svg) ![chart](assets/chart.svg) [clip](assets/clip.mp4)\n';
+  try {
+    for (const [repo, repoMappings] of [['docs', { docs: root }], ['published', {}]]) {
+      const html = renderDocumentPage({ repo, repoRoot: root, repoMappings, relativePath: 'README.md', source, parentHref: '/', mtime: 'm', size: 's', customThemeCss: '' });
+      assert.ok(html.includes(`href="/view/${repo}/assets/chart.svg"`), `${repo}: single prefix, got ${(html.match(/href="[^"]*chart\.svg"/g) || []).join(' ')}`);
+      assert.ok(!html.includes(`/view/${repo}/view/`), `${repo}: no doubled prefix`);
+      assert.ok(html.includes(`src="/asset/${repo}/assets/chart.svg"`), `${repo}: image src served from /asset`);
+      assert.ok(!html.includes(`/view/${repo}/view/${repo}/assets/clip.mp4`), `${repo}: video link not doubled`);
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
