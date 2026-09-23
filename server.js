@@ -90,7 +90,7 @@ const {
   configuredDestinationRoots,
 } = require('./lib/forms/destination-adapter');
 const { SubmissionService } = require('./lib/forms/submission-service');
-const { setWallpaperCatalog, resolveWallpaperFile, contentTypeFor: wallpaperContentType, watchWallpapers } = require('./lib/viewer-wallpaper');
+const { setWallpaperCatalog, resolveWallpaperFile, contentTypeFor: wallpaperContentType, watchWallpapers, publicCatalog: publicWallpaperCatalog, currentDefaults: wallpaperDefaultsForDiscovery } = require('./lib/viewer-wallpaper');
 const { createFormsRouter } = require('./lib/forms/routes');
 
 const { version: LOOKIE_LINK_VERSION } = require('./package.json');
@@ -1427,6 +1427,8 @@ function createApp(options = {}) {
     mappings,
     version: LOOKIE_LINK_VERSION,
     themes: getThemeList(),
+    wallpaperCatalog: publicWallpaperCatalog(),
+    wallpaperDefaults: wallpaperDefaultsForDiscovery(),
     baseUrl: inferBaseUrl(req),
     editingEnabled,
     annotationsEnabled,

@@ -29,6 +29,17 @@ Use `Authorization: Bearer <token>` for agents. Read requests also accept `?toke
 
 `GET /api/whoami` reports sanitized caller auth, subject, effective permissions, repo scopes, live capabilities, and authorized endpoint templates. `GET /.well-known/agent.json` wraps the same caller state with schema, version, instance, authentication, and discovery metadata. Their exact fields and capability rules are in [CAPABILITIES.md](CAPABILITIES.md#discovery-field-inventory).
 
+`GET /.well-known/agent.json` is also the appearance API's read side. Its `themes` block lists every installed theme with its aliases and wallpaper picture ids per mode, the five URL parameter names, the image URL template, and the panel-opacity and blur ranges with their configured defaults. Compose a viewer URL from it, for example:
+
+```
+GET /.well-known/agent.json
+→ themes.available[n].id = "carolina-sunset"
+→ themes.available[n].wallpapers.dark[1].id = "mackerel-sky"
+→ /view/docs/today.md?lookie-scheme=carolina-sunset&lookie-theme=dark&lookie-wallpaper=mackerel-sky&lookie-panel=85
+```
+
+Appearance has no write endpoint yet; themes and wallpapers are configured in the server's YAML file and reload live.
+
 Discovery never returns repository roots, home paths, store paths, credentials, token/admin names, grant audit data, or private publish metadata. Administrative APIs are not advertised.
 
 ## Mounted content
