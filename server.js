@@ -16,7 +16,7 @@ const {
   getManagedReposConfig,
   getPublishConfig,
   getFormsConfig,
-  loadCustomThemes, loadWallpaperCatalog, getWallpaperDefaults, reloadConfig, getConfigPath,
+  loadCustomThemes, getBaseConfig, getAppearanceOverlayPath, mergeAppearance, THEME_CSS_PROPERTIES, loadWallpaperCatalog, getWallpaperDefaults, reloadConfig, getConfigPath,
   generateCustomThemeCss,
   BUILT_IN_THEMES,
 } = require('./lib/config');
@@ -84,13 +84,15 @@ const {
   buildAgentDiscoveryDocument,
   buildWhoAmIDocument,
 } = require('./lib/agent-discovery');
+const { buildOpenApiDocument, renderApiDocsPage } = require('./lib/openapi');
 const { TemplateRegistry } = require('./lib/forms/template-registry');
 const {
   DestinationAdapter,
   configuredDestinationRoots,
 } = require('./lib/forms/destination-adapter');
 const { SubmissionService } = require('./lib/forms/submission-service');
-const { setWallpaperCatalog, resolveWallpaperFile, contentTypeFor: wallpaperContentType, watchWallpapers, publicCatalog: publicWallpaperCatalog, currentDefaults: wallpaperDefaultsForDiscovery } = require('./lib/viewer-wallpaper');
+const { setWallpaperCatalog, resolveWallpaperFile, contentTypeFor: wallpaperContentType, watchWallpapers, publicCatalog: publicWallpaperCatalog, currentDefaults: wallpaperDefaultsForDiscovery, currentCatalog: wallpaperCatalogForApi, currentThemes: wallpaperThemesForApi } = require('./lib/viewer-wallpaper');
+const { registerAppearanceRoutes } = require('./lib/appearance-api');
 const { createFormsRouter } = require('./lib/forms/routes');
 const { apiError } = require('./lib/api-error');
 
@@ -629,6 +631,8 @@ function getRouteAvailability(app) {
     publishUpdate: has('post', '/api/publish/:slug'),
     publishRevoke: has('post', '/api/publish/:slug/revoke'),
     wallpaperImage: has('get', '/wallpaper/:slug/:mode/:id'),
+    appearance: has('get', '/api/appearance'),
+    appearanceTheme: has('get', '/api/appearance/themes/:slug'),
   };
 }
 
@@ -1451,6 +1455,30 @@ function createApp(options = {}) {
       return;
     }
     res.status(200).json(buildWhoAmIDocument(optionsForCaller));
+  });
+
+  // OpenAPI 3.1 description + try-it explorer (API review 2026-09-23 item 4).
+  app.get('/openapi.json', (req, res) => {
+    const optionsForCaller = buildDiscoveryOptions(req);
+    if (optionsForCaller.accessContext.mode === 'denied') {
+      sendAccessError(res, optionsForCaller.accessContext, true);
+      return;
+    }
+    res.set('Cache-Control', 'no-cache');
+    res.status(200).json(buildOpenApiDocument({
+      formsEnabled: optionsForCaller.formsEnabled,
+      version: LOOKIE_LINK_VERSION,
+      baseUrl: optionsForCaller.baseUrl,
+    }));
+  });
+
+  app.get('/api/docs', (req, res) => {
+    const accessContext = resolveAccessContext(req);
+    if (accessContext.mode === 'denied') {
+      sendAccessError(res, accessContext, false);
+      return;
+    }
+    res.status(200).type('html').send(renderApiDocsPage({ customThemeCss }));
   });
 
   app.get('/api/repos', (req, res) => {
@@ -2431,6 +2459,36 @@ function createApp(options = {}) {
     }
   });
 
+  // Appearance API (review item 5): pollable read side + admin writes that
+  // land in the server-owned overlay, which the config watcher reloads live.
+  {
+    const overlayPath = options.appearanceOverlayPath !== undefined ? options.appearanceOverlayPath : getAppearanceOverlayPath();
+    const appearanceAccess = rawAccessConfig && typeof rawAccessConfig === 'object' ? rawAccessConfig : {};
+    registerAppearanceRoutes(app, {
+      overlayPath,
+      managedRoot: options.appearanceManagedRoot !== undefined
+        ? options.appearanceManagedRoot
+        : (overlayPath ? path.join(path.dirname(overlayPath), 'wallpapers') : null),
+      // Dedicated tokens if configured; otherwise the grant admin tokens the
+      // operator already splices in, so no new secret is needed to start.
+      adminTokens: (appearanceAccess.appearance && appearanceAccess.appearance.adminTokens)
+        || (appearanceAccess.grants && appearanceAccess.grants.adminTokens) || null,
+      readState: () => ({ themes: wallpaperThemesForApi(), catalog: wallpaperCatalogForApi(), defaults: wallpaperDefaultsForDiscovery() }),
+      validate(overlay) {
+        const warnings = [];
+        const previous = console.warn;
+        console.warn = (...args) => warnings.push(args.join(' '));
+        try { loadCustomThemes(mergeAppearance(getBaseConfig(), overlay)); } finally { console.warn = previous; }
+        return { warnings };
+      },
+      afterWrite: () => { if (typeof app.locals.refreshAppearance === 'function') app.locals.refreshAppearance(); },
+      audit: (type, req, target, metadata) => recordApiKeyAuditEvent(type, req.accessContext || resolveAccessContext(req), target, metadata),
+      resolveAccess: resolveAccessContext,
+      sendAccessError: (res, accessContext) => sendAccessError(res, accessContext, true),
+      themeProperties: THEME_CSS_PROPERTIES,
+    });
+  }
+
   // Viewer-wide wallpapers: ids come from the live catalog scan, so this never
   // maps a request onto an arbitrary path. Revalidate on every use (no-cache +
   // the ETag/Last-Modified that sendFile emits): the catalog reloads live and
@@ -2827,7 +2885,7 @@ function startServer() {
   // Themes and wallpapers reload live: edit a palette, an alias, a wallpaper
   // key, or drop images into a folder, and the next page load has it. The
   // watcher covers the config file's directory and every wallpaper folder.
-  watchWallpapers({
+  const appearanceWatcher = watchWallpapers({
     fs: require('node:fs'),
     path,
     reload() {
@@ -2850,6 +2908,7 @@ function startServer() {
       };
     },
   });
+  app.locals.refreshAppearance = appearanceWatcher.refresh;
 
   app.listen(port, '0.0.0.0', () => {
     console.log(`Lookie Link listening on http://${hostname}:${port}`);

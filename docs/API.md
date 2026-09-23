@@ -42,6 +42,29 @@ Appearance has no write endpoint yet; themes and wallpapers are configured in th
 
 Discovery never returns repository roots, home paths, store paths, credentials, token/admin names, grant audit data, or private publish metadata. Administrative APIs are not advertised.
 
+## Appearance
+
+`GET /api/appearance` is the pollable list of what exists: every theme with its palettes, aliases, picture ids and labels per mode and effective glass values, plus the global defaults, the five URL parameter names and a `revision`. It carries a weak ETag and `Cache-Control: no-cache`, so a poller sends `If-None-Match` and gets `304` until something changes. `GET /api/appearance/themes/:slug` returns one theme; aliases resolve. Neither includes folder paths.
+
+Writes need an appearance admin bearer token and land in a server-owned overlay file beside the operator's config (the operator's YAML is never rewritten; the overlay wins where both set a key; the config watcher reloads the result live):
+
+```http
+PATCH /api/appearance
+Authorization: Bearer <admin token>
+Content-Type: application/json
+
+{ "expectedRevision": 3,
+  "wallpapers": { "blur": 8 },
+  "themes": { "Carolina Sunset": { "dark": { "accent": "#e1886e" }, "wallpapers": { "default": { "dark": "mackerel-sky" } } },
+              "Old Theme": null } }
+```
+
+`expectedRevision` must equal the current `revision` (else `409 revision_conflict` with `currentRevision`). Unknown keys, out-of-range values and anything the theme loader would reject return `400 invalid_request` with `details[]`. `themes.<Name>: null` removes a theme from the overlay. Pictures: `POST /api/appearance/themes/:slug/wallpapers/:mode?name=<id>` with the raw image bytes (`image/jpeg`, `image/png`, `image/webp`) writes the server-managed folder only; a mode whose pictures come from another folder (an Omarchy set) answers `409 folder_not_managed`, and the first upload for a mode adopts the managed folder in the overlay. `DELETE …/wallpapers/:mode/:id` removes a managed picture. Every write records an audit event (`appearance.update`, `appearance.wallpaper.upload`, `appearance.wallpaper.delete`).
+
+## OpenAPI
+
+`GET /openapi.json` returns an OpenAPI 3.1 document for every registered route (forms routes are included only when `forms.enabled` is true), with the shared `Error` envelope, `bearerAuth` and `queryToken` security schemes, and `x-lookie-capability` / `x-lookie-endpoint-key` extensions linking operations to discovery. `GET /api/docs` is a small try-it explorer built from it. Both require only a non-denied caller; a test keeps the document equal to the registered routes and to [CAPABILITIES.md](CAPABILITIES.md).
+
 ## Mounted content
 
 `GET /view/<repo>/<path>` renders a directory or supported file. HTML requests with `?validate=1` return a JSON report describing local asset/navigation references without exposing host paths. Published content additionally accepts `?version=<positive-integer>`.

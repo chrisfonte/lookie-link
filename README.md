@@ -8,6 +8,7 @@ Lookie-Link is a lightweight private-network viewer for local directories. Map a
 - Dedicated image, audio, video, PDF, CSV, and JSON viewers
 - Caller-scoped static tokens, hashed managed API keys, expiring managed grants, and repo/path permissions
 - Caller-safe runtime discovery through `/.well-known/agent.json`, `/api/whoami`, and `/api/repos`
+- OpenAPI 3.1 description at `/openapi.json` with an interactive try-it explorer at `/api/docs`
 - Opt-in editing of existing non-binary files with atomic saves and mtime conflicts
 - Opt-in sidecar annotations with inline viewer UI and heading, YAML-key, or line-range anchors
 - Mutable managed repositories with bounded trees, change lists, scoped search, atomic writes, and recoverable deletion
