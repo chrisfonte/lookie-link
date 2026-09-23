@@ -171,6 +171,21 @@ test('wallpaper watcher rescans after a folder change without a restart', async 
     while (calls < 2 && Date.now() - started < 3000) await new Promise((r) => setTimeout(r, 25));
     assert.equal(calls, 2, 'folder change triggered one rescan');
     assert.equal(wallpaper.publicCatalog().sunset.dark.length, 2);
-    assert.match(seen.at(-1), /Wallpapers reloaded: 2 pictures/);
+    assert.match(seen.at(-1), /Themes reloaded: 2 pictures/);
   } finally { watcher.close(); wallpaper.setWallpaperCatalog({}); }
+});
+
+test('theme CSS swaps live through app.locals.setCustomThemeCss', async () => {
+  const {createApp} = require('../server');
+  const app = createApp({mappings:{}, accessConfig:{}, apiKeyStore:null, grantStore:null, managedRepoStore:null, publishStore:null, editingEnabled:false, annotationsEnabled:false, rawHtmlEnabled:false, customThemeCss:'/* before */'});
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((r) => server.once('listening', r));
+  const base = 'http://127.0.0.1:' + server.address().port;
+  try {
+    assert.match(await (await fetch(base + '/')).text(), /\/\* before \*\//);
+    app.locals.setCustomThemeCss('/* after */');
+    const html = await (await fetch(base + '/')).text();
+    assert.match(html, /\/\* after \*\//);
+    assert.doesNotMatch(html, /\/\* before \*\//);
+  } finally { server.close(); }
 });

@@ -181,7 +181,9 @@ themes:
 
 Changes take effect without a restart. The server watches the config file
 and every wallpaper folder; a saved edit or a new image is picked up within
-about half a second and shows on the next page load. Other config sections
+about half a second and shows on the next page load. This covers the whole
+`themes:` section (palettes, aliases, wallpapers) and the global
+`wallpapers:` block. Server settings such as roots, port, access and forms
 are still read at startup.
 
 A reader's own slider changes, once made, persist in their browser and win
