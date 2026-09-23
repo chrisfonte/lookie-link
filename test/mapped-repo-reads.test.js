@@ -45,7 +45,7 @@ function get(url, headers = {}) {
 
 test('tree, changes, file read and search work on a plainly mapped repo', async () => {
   const f = fixture();
-  const s = await start({ mappings: { docs: f.docs }, accessConfig: {} });
+  const s = await start({ mappings: { docs: f.docs, ghost: path.join(f.root, 'not-synced-here') }, accessConfig: {} });
   try {
     const tree = await get(s.base + '/api/repos/docs/tree?maxDepth=3');
     assert.equal(tree.status, 200, tree.text);
@@ -71,7 +71,8 @@ test('tree, changes, file read and search work on a plainly mapped repo', async 
     const search = await get(s.base + '/api/search?q=wallpaper');
     assert.equal(search.status, 200, search.text);
     assert.deepEqual(search.json.results.map((r) => r.path).sort(), ['README.md', 'notes/a.md', 'notes/deep/b.yaml']);
-    assert.equal(search.json.results.every((r) => r.repo === 'docs'), true);
+    assert.equal(search.json.results.every((r) => r.repo === 'docs'), true, 'an absent mapped root does not fail the search');
+    assert.equal((await get(s.base + '/api/repos/ghost/tree')).status, 404, 'absent root answers 404 per request');
     const suggest = await get(s.base + '/api/search/suggest?q=notes/de');
     assert.equal(suggest.status, 200);
     assert.ok(suggest.json.suggestions.some((x) => x.path === 'notes/deep'));
