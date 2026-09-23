@@ -89,3 +89,14 @@ test('empty theme catalogs clear prior choices and disable cycling', () => {
     assert.equal(t.menu.querySelector('[data-wallpaper-next]').disabled,false);
   } finally { t.dom.window.close(); }
 });
+
+test('URL parameters are relayed to the embedded document once it reports', () => {
+  const dom = new JSDOM('<!doctype html><div class="viewer-toolbar">' + wallpaperControlsHtml() + '</div><iframe data-embedded-html></iframe><script>window.lookieLinkUrl={get:function(k){return {"lookie-wallpaper":"second","lookie-panel":"60"}[k]||null},set:function(){}}</script>' + wallpaperControlsScript(), {runScripts:'dangerously'});
+  try {
+    const win = dom.window, frame = win.document.querySelector('iframe'), sent = [];
+    frame.contentWindow.postMessage = message => sent.push(message);
+    win.dispatchEvent(new win.MessageEvent('message', {source:frame.contentWindow, data:{type:'lookie-link:wallpaper-state', choices:[{id:'first',label:'First'},{id:'second',label:'Second'}], choice:'first', opacity:80, blur:0}}));
+    const set = sent.find(m => m.type === 'lookie-link:set-wallpaper');
+    assert.deepEqual(JSON.parse(JSON.stringify(set)), {type:'lookie-link:set-wallpaper', choice:'second', opacity:60, blur:0});
+  } finally { dom.window.close(); }
+});

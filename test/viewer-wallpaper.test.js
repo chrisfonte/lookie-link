@@ -97,3 +97,27 @@ test('viewer runtime follows the theme, persists picks, and remembers no backgro
     throw error;
   }
 });
+
+test('URL parameters select wallpaper, panel and blur for this page only', () => {
+  const dark = tempSet(['0-sunset-a.jpg', '1-sunset-b.jpg']);
+  wallpaper.setWallpaperCatalog(loadWallpaperCatalog([{slug:'sunset', label:'Sunset', wallpapers:{dark}}]));
+  const {themeScript, setThemeList} = require('../lib/renderer');
+  setThemeList([{slug:'sunset', label:'Sunset'}]);
+  const html = `<!doctype html><html data-color-scheme="sunset"><body>${wallpaper.viewerWallpaperHtml()}<div class="viewer-toolbar">${wallpaperControlsHtml()}</div><a id="l" href="/view/x">x</a>${themeScript()}${wallpaper.viewerWallpaperScript()}</body></html>`;
+  const dom = new JSDOM(html, {runScripts:'dangerously', url:'http://localhost/view/y?lookie-scheme=sunset&lookie-wallpaper=b&lookie-panel=85&lookie-blur=3'});
+  try {
+    const win = dom.window, root = win.document.documentElement;
+    const img = win.document.querySelector('[data-viewer-wallpaper] img');
+    assert.equal(img.getAttribute('src'), '/wallpaper/sunset/dark/b');
+    assert.equal(root.style.getPropertyValue('--wallpaper-panel'), '85%');
+    assert.equal(root.style.getPropertyValue('--wallpaper-blur'), '3px');
+    assert.equal(win.localStorage.getItem('lookie-link-wallpaper'), null, 'URL overrides are not saved');
+    const link = new win.URL(win.document.getElementById('l').href);
+    assert.equal(link.searchParams.get('lookie-wallpaper'), 'b');
+    assert.equal(link.searchParams.get('lookie-panel'), '85');
+    win.document.querySelector('[data-wallpaper-next]').click();
+    assert.equal(img.getAttribute('src'), '/wallpaper/sunset/dark/a');
+    assert.equal(new win.URL(win.location.href).searchParams.get('lookie-wallpaper'), 'a');
+    assert.equal(new win.URL(win.document.getElementById('l').href).searchParams.get('lookie-wallpaper'), 'a');
+  } finally { dom.window.close(); wallpaper.setWallpaperCatalog({}); setThemeList(null); }
+});

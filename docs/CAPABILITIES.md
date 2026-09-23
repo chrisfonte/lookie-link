@@ -263,6 +263,37 @@ restart the server after adding images.
 The embedded-HTML page is the exception: its sandboxed frame is opaque, so
 there the document supplies pictures over the bridge below.
 
+## URL selection (the appearance API)
+
+Appearance is addressable: every appearance control has a query parameter, so
+a caller (a script, a desktop hook, a handoff link) can open any viewer page
+looking exactly one way without touching the reader's saved choices.
+
+| Parameter | Values | Controls |
+| --- | --- | --- |
+| `lookie-scheme` | theme slug or alias | Theme (palette) |
+| `lookie-theme` | `dark`, `light` | Mode |
+| `lookie-wallpaper` | picture id from the theme's set, or `none` | Which picture shows |
+| `lookie-panel` | integer 50–100 | Panel opacity, percent |
+| `lookie-blur` | integer 0–16 | Blur behind the panel, px |
+
+Each parameter is validated on its own; a missing, empty, unknown or repeated
+value falls back to the saved choice. A parameter that is present wins on that
+page. Same-origin links on the page inherit every parameter the URL carried,
+so the selection follows a reader through the viewer, and a control change
+rewrites the address only for keys the URL already carried. Nothing from the
+URL is saved unless the reader then changes a control. Picture ids are the
+labels in the Wallpaper menu, lower-cased and hyphenated, as listed at
+`/wallpaper/<slug>/<mode>/<id>`. Example:
+
+```
+/view/notes/today.md?lookie-scheme=carolina-sunset&lookie-theme=dark&lookie-wallpaper=mackerel-sky&lookie-panel=85&lookie-blur=6
+```
+
+On the embedded-HTML page the same parameters are relayed to the document
+through the bridge below as one `lookie-link:set-wallpaper` message once the
+document has reported its catalog.
+
 ## Embedded wallpaper controls
 
 An embedded HTML document can opt into a Wallpaper menu in the viewer's floating
