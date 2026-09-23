@@ -16,7 +16,7 @@ const {
   getManagedReposConfig,
   getPublishConfig,
   getFormsConfig,
-  loadCustomThemes, getBaseConfig, getAppearanceOverlayPath, mergeAppearance, THEME_CSS_PROPERTIES, loadWallpaperCatalog, getWallpaperDefaults, reloadConfig, getConfigPath,
+  loadCustomThemes, getSearchConfig, getBaseConfig, getAppearanceOverlayPath, mergeAppearance, THEME_CSS_PROPERTIES, loadWallpaperCatalog, getWallpaperDefaults, reloadConfig, getConfigPath,
   generateCustomThemeCss,
   BUILT_IN_THEMES,
 } = require('./lib/config');
@@ -38,6 +38,7 @@ const { ApiKeyStore } = require('./lib/api-key-store');
 const { ManagedRepoStore } = require('./lib/managed-repo-store');
 const { searchManagedRepos, suggestManagedRepos } = require('./lib/managed-repo-search');
 const { createRepoResolver } = require('./lib/repo-reader');
+const { resolveRipgrep, searchWithRipgrep } = require('./lib/search-backend');
 const { PublishStore } = require('./lib/publish-store');
 const {
   safeResolve,
@@ -692,6 +693,10 @@ function createApp(options = {}) {
   // Every served repo (managed or plainly mapped) behind one read-only door
   // (API roadmap R2): tree / changes / file read / search work for all of them.
   const repoResolver = createRepoResolver({ mappings, managedRepoStore });
+  // Search backend (roadmap R8): ripgrep when configured/found, else the walk.
+  const searchConfig = options.searchConfig === undefined ? getSearchConfig() : (options.searchConfig || {});
+  const ripgrepBinary = resolveRipgrep(searchConfig.ripgrep === undefined ? 'auto' : searchConfig.ripgrep);
+  app.locals.searchBackend = ripgrepBinary ? 'ripgrep' : 'walk';
   if (managedRepoStore && managedRepoStore.isEnabled()) {
     for (const repo of managedRepoStore.listRepos().repos) {
       if (!mappings[repo.id]) mappings[repo.id] = repo.rootPath;
@@ -1251,16 +1256,27 @@ function createApp(options = {}) {
     }
     const accessContext = resolveAccessContext(req);
     try {
-      const result = await searchManagedRepos({
-        store: repoResolver.store,
-        repos: repoResolver.listAll(),
-        query,
-        scope: searchScope(req.query),
-        limit: req.query.limit,
-        maxEntries: req.query.maxEntries,
-        canView: (repo, relativePath, type) => canAccessPath(accessContext, 'view', repo, relativePath, type),
-      });
-      res.status(200).json({ ok: true, ...result });
+      const canView = (repo, relativePath, type) => canAccessPath(accessContext, 'view', repo, relativePath, type);
+      const result = ripgrepBinary
+        ? await searchWithRipgrep({
+          binary: ripgrepBinary,
+          repos: repoResolver.listAll(),
+          query,
+          scope: searchScope(req.query),
+          limit: req.query.limit,
+          maxResults: searchConfig.maxResults,
+          canView,
+        })
+        : await searchManagedRepos({
+          store: repoResolver.store,
+          repos: repoResolver.listAll(),
+          query,
+          scope: searchScope(req.query),
+          limit: req.query.limit,
+          maxEntries: req.query.maxEntries,
+          canView,
+        });
+      res.status(200).json({ ok: true, backend: result.backend || 'walk', ...result });
     } catch (error) {
       apiError(res, 500, null, 'Search failed.');
     }

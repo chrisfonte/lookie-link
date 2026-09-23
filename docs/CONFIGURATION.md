@@ -111,6 +111,16 @@ publish:
 
 `areaPath` enables the store unless `enabled` is exactly `false`. The virtual repo ID must not collide with a mounted repository. All limits are positive integers. Enabling the store while leaving `humanDefault: full` permits anonymous publishing, so restricted access is strongly recommended.
 
+## Search
+
+```yaml
+search:
+  ripgrep: auto        # auto (look on the service's PATH) | false | /usr/bin/rg
+  maxResults: 100      # 1-100
+```
+
+With a ripgrep binary available, `/api/search` searches every served repository in one process and is complete (the response says `backend: "ripgrep"`). Without one, the built-in walk is used: complete when scoped to one repo, fair-share sampled across a fleet (`backend: "walk"`, `truncated` says when a slice ran out). `maxEntries` applies to the walk only. The binary must be on the SERVICE's PATH (a shell alias or function does not count) or named explicitly.
+
 ## Custom themes
 
 Lookie-Link ships with Slate, Teal, Nord, Rose Pine, Monokai, Solarized,
