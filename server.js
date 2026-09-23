@@ -16,7 +16,7 @@ const {
   getManagedReposConfig,
   getPublishConfig,
   getFormsConfig,
-  loadCustomThemes, loadWallpaperCatalog, getWallpaperDefaults,
+  loadCustomThemes, loadWallpaperCatalog, getWallpaperDefaults, reloadConfig, getConfigPath,
   generateCustomThemeCss,
   BUILT_IN_THEMES,
 } = require('./lib/config');
@@ -90,7 +90,7 @@ const {
   configuredDestinationRoots,
 } = require('./lib/forms/destination-adapter');
 const { SubmissionService } = require('./lib/forms/submission-service');
-const { setWallpaperCatalog, resolveWallpaperFile, contentTypeFor: wallpaperContentType } = require('./lib/viewer-wallpaper');
+const { setWallpaperCatalog, resolveWallpaperFile, contentTypeFor: wallpaperContentType, watchWallpapers } = require('./lib/viewer-wallpaper');
 const { createFormsRouter } = require('./lib/forms/routes');
 
 const { version: LOOKIE_LINK_VERSION } = require('./package.json');
@@ -2812,7 +2812,24 @@ function startServer() {
     ...customThemes.map((t) => ({ slug: t.slug, label: t.label, aliases: t.aliases || [] })),
   ];
   setThemeList(allThemes);
-  setWallpaperCatalog(loadWallpaperCatalog(customThemes), customThemes, getWallpaperDefaults());
+  // Wallpapers reload live: edit the config's wallpaper keys or drop images
+  // into a folder and the next page load has them, no restart.
+  watchWallpapers({
+    fs: require('node:fs'),
+    path,
+    reload() {
+      reloadConfig();
+      const themes = loadCustomThemes();
+      const catalog = loadWallpaperCatalog(themes);
+      setWallpaperCatalog(catalog, themes, getWallpaperDefaults());
+      const folders = themes.flatMap((t) => t.wallpapers ? [t.wallpapers.dark, t.wallpapers.light] : []);
+      const configPath = getConfigPath();
+      return {
+        watch: [configPath && path.dirname(configPath), ...folders],
+        summary: `${Object.keys(catalog).length} themes, ${Object.values(catalog).reduce((n, s) => n + s.dark.length + s.light.length, 0)} pictures`,
+      };
+    },
+  });
 
   const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss, accessConfig, managedReposConfig, formsConfig });
 
