@@ -10,6 +10,7 @@
   },
   "scripts": {
     "check:skill-packages": "node scripts/generate-skill-packages.js --check",
+    "search:battery": "node scripts/search-battery.js",
     "generate:skill-packages": "node scripts/generate-skill-packages.js",
     "test": "node --test test/*.test.js && npm run test:browser",
     "verify": "node --test test/*.test.js && npm run test:browser && npm run validate:raw-html && npm run check:skill-packages",
