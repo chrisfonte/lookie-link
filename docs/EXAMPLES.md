@@ -70,6 +70,48 @@ curl -s 'http://127.0.0.1:9876/asset/<repo>/README.md' | glow -p -
 curl -s 'http://127.0.0.1:9876/asset/<repo>/README.md' | less
 ```
 
+## Publish a page
+
+Publishing creates immutable revisions under a slug and serves them at
+`/view/published/<slug>/<path>` and `/asset/published/<slug>/<path>`; it does
+not need a managed repository. Files may be markdown, HTML, images or any
+text; relative links and images inside a bundle resolve to the bundle.
+
+```bash
+# Create (revision 1)
+curl -s -X POST -H 'content-type: application/json' \
+  -d '{"slug":"my-page","entryPath":"index.md","files":[{"path":"index.md","content":"# Hello\n\nPublished through the API.\n"}]}' \
+  http://127.0.0.1:9876/api/publish | jq '{ok, slug, revision, viewUrl: .publication.viewUrl}'
+
+# Read it back (raw), and open /view/published/my-page/index.md in a browser
+curl -s http://127.0.0.1:9876/asset/published/my-page/index.md
+
+# Next revision: expectedRevision must match, or the answer is 409 revision_conflict
+curl -s -X POST -H 'content-type: application/json' \
+  -d '{"expectedRevision":1,"entryPath":"index.md","files":[{"path":"index.md","content":"# Hello again\n"}]}' \
+  http://127.0.0.1:9876/api/publish/my-page | jq '{ok, revision, error}'
+
+# Earlier revisions stay readable
+curl -s 'http://127.0.0.1:9876/asset/published/my-page/index.md?version=1'
+
+# What is published, and one record with its history (poll the list with If-None-Match)
+curl -s 'http://127.0.0.1:9876/api/publish?state=active' | jq '{count, revision, slugs: [.publications[].slug]}'
+curl -s http://127.0.0.1:9876/api/publish/my-page | jq '{state: .publication.state, currentRevision: .publication.currentRevision, revisions: [.publication.revisions[].revision]}'
+
+# Revoke: /view and /asset answer 410 afterwards; the record stays readable
+curl -s -X POST -H 'content-type: application/json' -d '{"reason":"done"}' \
+  http://127.0.0.1:9876/api/publish/my-page/revoke | jq .
+```
+
+An HTML bundle works the same way with `"entryPath":"index.html"`; a linked
+`style.css` or image in the bundle resolves relative to the bundle. Always
+keep `error` in your jq filter: a filter like `{ok, revision}` turns a 409
+into a bare `ok: false` with no reason.
+
+The CLI: `lookie publish <file> --slug my-page`, `lookie publish --manifest FILE`,
+`lookie publish list [--state active|revoked]`, `lookie publish show <slug> [--version N]`,
+`lookie publish revoke <slug> --reason TEXT`.
+
 ## Browse and poll
 
 ```bash
