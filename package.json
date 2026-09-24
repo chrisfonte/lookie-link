@@ -14,7 +14,7 @@
     "generate:skill-packages": "node scripts/generate-skill-packages.js",
     "test": "node --test test/*.test.js && npm run test:browser",
     "verify": "node --test test/*.test.js && npm run test:browser && npm run validate:raw-html && npm run check:skill-packages",
-    "test:browser": "node test/browser/forms.spec.mjs",
+    "test:browser": "node test/browser/forms.spec.mjs && node test/browser/embed-annotations.spec.mjs",
     "start": "node server.js",
     "validate:editable": "node scripts/validate-editable-mode.js",
     "validate:raw-html": "node scripts/validate-raw-html.js"

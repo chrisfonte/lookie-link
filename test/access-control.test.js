@@ -460,7 +460,10 @@ test('embed transforms authorized HTML while raw remains exact and bearer creden
     const queryHtml = await queryEmbed.text();
     assert.match(queryHtml, /<base href="\/asset\/alpha\/docs\/">/);
     assert.match(queryHtml, /src="\/asset\/alpha\/docs\/diagram\.png\?token=viewer-token"/);
-    assert.match(queryHtml, /lookie-link-annotations-bootstrap/);
+    // Opaque-origin /embed keeps the gate style but must not ship the network bootstrap.
+    assert.match(queryHtml, /lookie-link-embed-annotation-gate/);
+    assert.doesNotMatch(queryHtml, /lookie-link-annotations-bootstrap/);
+    assert.doesNotMatch(queryHtml, /\/public\/annotations\.js/);
 
     const framedView = await server.request('/view/alpha/docs/landing.htm?token=viewer-token');
     assert.equal(framedView.status, 200);
@@ -481,7 +484,9 @@ test('embed transforms authorized HTML while raw remains exact and bearer creden
     assert.equal(bearerEmbed.status, 200);
     const bearerHtml = await bearerEmbed.text();
     assert.doesNotMatch(bearerHtml, /viewer-token/);
-    assert.match(bearerHtml, /"queryToken":null/);
+    // No annotations bootstrap means no queryToken field to leak either.
+    assert.doesNotMatch(bearerHtml, /lookie-link-annotations-bootstrap/);
+    assert.doesNotMatch(bearerHtml, /queryToken/);
 
     const deniedView = await server.request('/view/beta/notes.md?token=viewer-token');
     const deniedAsset = await server.request('/asset/beta/notes.md?token=viewer-token');

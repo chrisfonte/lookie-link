@@ -131,7 +131,7 @@ Behavior:
 - Local `<img src="./file.png">` references are rewritten through `/asset/<repo>/<path>` so images still load from the repo
 - Heading anchors and TOC generation apply to rendered HTML headings the same way they do for markdown
 - Agents can inspect a local HTML bundle without launching a browser by requesting `/view/<repo>/<path>.html?validate=1`. The JSON response checks stylesheet, script, image/source, and local HTML navigation references, reports missing/unsupported counts, and contains repo-relative URLs only. Reference checks enforce the caller's view scope; unreadable and absent targets use the same not-found result.
-- When raw HTML is enabled, the viewer uses the transformed `/embed` runtime for the rendered pane and exposes separate transformed and byte-preserving `/raw` actions. Both preserve authored scripts and therefore share the trusted-content requirement. `/embed` rewrites local navigation/assets, injects theme synchronization, redacts sensitive host values, and can inject the annotation client; `/raw` returns authored bytes unchanged.
+- When raw HTML is enabled, the viewer uses the transformed `/embed` runtime for the rendered pane and exposes separate transformed and byte-preserving `/raw` actions. Both preserve authored scripts and therefore share the trusted-content requirement. `/embed` rewrites local navigation/assets, injects theme synchronization, redacts sensitive host values, and can inject annotation mount/gate markup (not the network annotation client — the sandboxed frame has an opaque origin, so annotation reads stay on the outer `/view` page for non-embedded documents); `/raw` returns authored bytes unchanged.
 
 ### Table of contents
 
