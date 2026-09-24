@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<!-- File: ~/operations/templates/html-kit/EXAMPLES.html -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ops HTML Kit — component showcase</title>
+<!-- Showcase links the kit (works locally and over Lookie post-2026-06 fix).
+     For a STANDALONE deliverable, inline kit.css into a <style> block instead. -->
+<link rel="stylesheet" href="kit.css">
+</head>
+<body>
+<header class="hero photo" style="--hero-img:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22300%22><rect width=%22800%22 height=%22300%22 fill=%22%23084a61%22/><circle cx=%22650%22 cy=%2280%22 r=%22180%22 fill=%22%231aa2a2%22 opacity=%220.5%22/></svg>')">
+  <div class="wrap">
+    <p class="eyebrow">Component showcase</p>
+    <h1>Ops HTML Kit</h1>
+    <p class="sub">Tokens + components for rich, Lookie-safe HTML deliverables · v1.24</p>
+    <div class="badges"><span class="badge">🎨 Themeable</span><span class="badge">📦 Reusable</span><span class="badge">🛟 Lookie-safe</span></div>
+  </div>
+</header>
+
+<nav class="topnav" aria-label="Showcase navigation"><div class="inner">
+  <a href="EXAMPLES.html" class="active">Showcase</a>
+  <a href="theme-follow-demo.html">Theme Follow Demo</a>
+  <a href="README.md">Docs</a>
+</div></nav>
+
+<div class="wrap">
+  <div class="note-intro">💡 This page uses the <b>coastal</b> theme (default). Scroll to the bottom for the same components under <b>neutral</b>.</div>
+
+  <h2>Callouts &amp; pills</h2>
+  <div class="callout">Default callout — a highlighted aside.</div>
+  <div class="callout info">Info callout.</div>
+  <div class="callout good">Success / good-news callout.</div>
+  <p>Pills: <span class="pill good">GOOD</span> <span class="pill warn">WARN</span> <span class="pill info">INFO</span></p>
+  <p>Rating (v1.11 — venue/vendor/product research): <span class="rating"><span class="stars" aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9734;</span> 4.7 <span class="count">(85 reviews, Google)</span></span></p>
+
+  <h2>Cards &amp; grids</h2>
+  <div class="grid-3">
+    <div class="tile"><h3>Tile A</h3><div class="stat">~$280<small> / unit</small></div><p class="lead">A stat tile with a lead line.</p></div>
+    <div class="tile"><h3>Tile B</h3><div class="stat">8 days</div><p class="lead">Use for budget/metric summaries.</p></div>
+    <div class="tile"><h3>Tile C</h3><div class="stat">Free</div><p class="lead">Three-up responsive grid.</p></div>
+  </div>
+  <div class="grid-2">
+    <div class="card"><h3>Card</h3><p class="lead">A surface for prose, lists, or links.</p>
+      <div class="links"><a class="chip" href="#">📍 Chip link</a><a class="chip go" href="#">🎟️ Action chip</a></div></div>
+    <div class="card"><h3>Tick &amp; todo lists</h3>
+      <ul class="tick"><li>Confirmed item</li><li>Another confirmed item</li></ul>
+      <ul class="todo"><li>Open to-do</li><li>Another to-do</li></ul></div>
+  </div>
+
+  <h2>Destination / chooser cards</h2>
+  <div class="choose">
+    <a href="#"><img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22200%22><rect width=%22400%22 height=%22200%22 fill=%22%230a6c8f%22/></svg>" alt=""><div class="body"><h3>Option One</h3><p>Photo-forward navigation card with a hover lift.</p><span class="tag">Open →</span></div></a>
+    <a href="#"><img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22200%22><rect width=%22400%22 height=%22200%22 fill=%22%231aa2a2%22/></svg>" alt=""><div class="body"><h3>Option Two</h3><p>Use for a hub that links to sub-pages.</p><span class="tag">Open →</span></div></a>
+    <a href="#"><img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22200%22><rect width=%22400%22 height=%22200%22 fill=%22%23e06b4f%22/></svg>" alt=""><div class="body"><h3>Option Three</h3><p>Three-up, responsive.</p><span class="tag">Open →</span></div></a>
+  </div>
+
+  <h2>Comparison table</h2>
+  <table class="budget">
+    <thead><tr><th>Item</th><th class="num">A</th><th class="num">B</th></tr></thead>
+    <tbody>
+      <tr><td>Row one</td><td class="num">$40</td><td class="num">$80</td></tr>
+      <tr class="pick"><td>Highlighted pick row</td><td class="num">$90</td><td class="num">$120</td></tr>
+      <tr class="total"><td>Total</td><td class="num">$130</td><td class="num">$200</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Stack-up (claim vs. record)</h2>
+  <div class="card">
+    <h3>Launch-week forecast vs. what happened</h3>
+    <div class="stackup">
+      <div>
+        <h4>The forecast said</h4>
+        <div class="stackup-claim">"Expect sign-ups to spike on day one, then flatten by midweek."</div>
+        <p><span class="stackup-grade">Direct hit</span> — day-one spike landed; the flatten came Thursday, one day late.</p>
+        <div class="stackup-claim">"Support volume will stay manageable."</div>
+        <p><span class="stackup-grade">Miss</span> — tickets tripled Tuesday. Honest boards list the misses too.</p>
+      </div>
+      <div>
+        <h4>The record says</h4>
+        <div class="stackup-record">Day one: 2,340 sign-ups (3.1× baseline). Thursday: back to 1.2×.</div>
+        <div class="stackup-record">Tuesday: 96 tickets vs. a 30/day norm; queue cleared Friday.</div>
+        <p class="stackup-src">Sources: analytics export · support dashboard weekly</p>
+      </div>
+    </div>
+  </div>
+
+  <h2>Timeline</h2>
+  <ul class="timeline">
+    <li><span class="day">Day 1</span> — <span class="det">Itinerary / sequence / phase step.</span></li>
+    <li><span class="day">Day 2</span> — <span class="det">Each node is a milestone.</span></li>
+    <li><span class="day">Day 3</span> — <span class="det">Last node has no trailing line.</span></li>
+  </ul>
+
+
+  <h2>Data diagrams + research evidence (v1.24)</h2>
+  <p class="lead">One visual argument per <code>.dg</code> card. Semantics ride <code>--sem-bad</code>/<code>--good</code>, never decorative <code>--pop</code>. Bar widths and segment colors are data — set inline per instance.</p>
+
+  <div class="herostats" style="border:1px solid var(--line)">
+    <div class="hs"><div class="hsv"><em>= ?</em></div><div class="hsk">Headline unknown</div><div class="hsd">The finding the reader must not scroll past.</div></div>
+    <div class="hs"><div class="hsv">100%</div><div class="hsk">Neutral big stat</div><div class="hsd">Accent-deep by default.</div></div>
+    <div class="hs"><div class="hsv"><em>$21.94</em></div><div class="hsk">Bad-semantic stat</div><div class="hsd">Wrap in &lt;em&gt; for sem-bad.</div></div>
+    <div class="hs"><div class="hsv">7 days</div><div class="hsk">Fourth stat</div><div class="hsd">Band is 4-up, 2-up on phones.</div></div>
+  </div>
+
+  <div class="dg">
+    <p class="dg-eyebrow">dg-ladder · known vs unknown</p>
+    <p class="dg-title">The price is precise. The allowance is not.</p>
+    <div class="dg-ladder">
+      <div class="lrow"><div class="lname">Top tier <small>(linked)</small></div><div class="lbarwrap"><div class="lbar" style="width:230px"></div><span class="lprice">$300</span></div><div class="llabel"><span class="lwords">"Highest usage"</span><span class="lq">= ?</span></div></div>
+      <div class="lrow"><div class="lname">Mid tier</div><div class="lbarwrap"><div class="lbar lo" style="width:77px"></div><span class="lprice">$100</span></div><div class="llabel"><span class="lwords">"Generous, below top"</span><span class="lq">= ?</span></div></div>
+      <div class="lrow na"><div class="lname">Excluded tier</div><div class="lbarwrap"><div class="lbar lo" style="width:16px;opacity:.4"></div><span class="lprice" style="color:var(--muted)">$20</span></div><div class="llabel"><span class="lwords">Not included</span></div></div>
+    </div>
+  </div>
+
+  <div class="dg">
+    <p class="dg-eyebrow">dg-meters + dg-bridge · distinct constraint families</p>
+    <p class="dg-title">Two meters can coexist without being interchangeable.</p>
+    <div class="dg-meters">
+      <div class="mcol"><p class="mh">Interactive meter</p><div class="mpool hot"><p class="mp">Weekly pool · constrained</p><p class="md">Name the meter, window, and reset state.</p></div><div class="mpool"><p class="mp">Daily pool · available</p><p class="md">A separate observed allowance.</p></div></div>
+      <div class="mcol alt"><p class="mh">Automation meter</p><div class="mpool ghost"><p class="mp">Published amount · unknown</p><p class="md">Unknown stays visible; it is never inferred from the other family.</p></div></div>
+    </div>
+    <div class="dg-bridge"><strong>Reconciliation:</strong> report each meter independently before comparing any usage claim.</div>
+  </div>
+
+  <div class="dg">
+    <p class="dg-eyebrow">dg-timeline · evidence chronology</p>
+    <p class="dg-title">The sequence explains which observation changed the conclusion.</p>
+    <ol class="dg-timeline">
+      <li><span class="td">08:00</span><span class="tdot"><i></i><em></em></span><span class="tb"><strong>Baseline captured.</strong> Meter, plan, and window recorded.</span></li>
+      <li><span class="td">12:15</span><span class="tdot mid"><i></i><em></em></span><span class="tb"><strong>Warning observed.</strong> Same meter, approaching its limit.</span></li>
+      <li><span class="td">14:30</span><span class="tdot end"><i></i></span><span class="tb"><strong>Limit reached.</strong> Adverse semantics use <code>--sem-bad</code>.</span></li>
+    </ol>
+  </div>
+
+  <figure class="evidence-figure">
+    <img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22300%22><rect width=%22800%22 height=%22300%22 fill=%22%23eef3f8%22/><rect x=%2250%22 y=%2250%22 width=%22700%22 height=%22200%22 rx=%2216%22 fill=%22%23ffffff%22 stroke=%22%232f5d8a%22 stroke-width=%223%22/><text x=%2280%22 y=%22125%22 font-family=%22sans-serif%22 font-size=%2228%22 fill=%22%231c2530%22>Source capture placeholder</text><text x=%2280%22 y=%22175%22 font-family=%22sans-serif%22 font-size=%2220%22 fill=%22%235a6675%22>Use the actual evidence image and meaningful alt text.</text></svg>" alt="Demonstration source capture placeholder">
+    <figcaption>Evidence figure caption with source, capture date, and <span class="confidence">confidence: direct observation</span>.</figcaption>
+  </figure>
+
+  <div class="dg">
+    <p class="dg-eyebrow">dg-week + dg-gauge · a measured incident</p>
+    <p class="dg-title">Day one: the whole week, plus overage</p>
+    <div class="dg-week">
+      <div class="wseg" style="flex:0 0 110px;background:var(--accent);color:var(--on-accent)"><p class="wd">Thu</p><p class="wt">Start</p></div>
+      <div class="wseg" style="flex:0 0 110px;background:var(--sem-bad);color:var(--on-accent)"><p class="wd">Fri</p><p class="wt">Incident</p></div>
+      <div class="wseg" style="flex:1 1 160px;background:var(--page-2);border:1px dashed var(--line);color:var(--muted)"><p class="wd">Sat → Wed</p><p class="wt">Idle</p></div>
+      <div class="wseg" style="flex:0 0 110px;background:var(--good);color:var(--on-accent)"><p class="wd">Thu</p><p class="wt">Reset</p></div>
+    </div>
+    <div class="dg-gauge">
+      <div class="gcell"><div class="ghead"><span class="gname">Weekly pool</span><span class="gnum">100% used</span></div><div class="gbar"><div class="gfill" style="width:100%"></div></div><p class="gnote">Fill width is data; fill color is semantics.</p></div>
+      <div class="gcell"><div class="ghead"><span class="gname">Healthy meter</span><span class="gnum" style="color:var(--good)">31% used</span></div><div class="gbar"><div class="gfill" style="width:31%;background:var(--good)"></div></div><p class="gnote">Same anatomy, good semantics.</p></div>
+    </div>
+    <div class="dg-branch"><span class="btag ok">Off</span><div class="bbody"><strong>Safe branch.</strong> dg-branch rows state a decision's outcomes.</div></div>
+    <div class="dg-branch"><span class="btag bad">On</span><div class="bbody hot"><strong>Open-risk branch.</strong> Tag + body colors carry the semantics.</div></div>
+    <p class="dg-note">Diagram note: cite the evidence IDs and state any measurement limit here.</p>
+  </div>
+
+  <div class="dg">
+    <p class="dg-eyebrow">dg-compare · verbatim before/after evidence</p>
+    <p class="dg-title">Same page, two policies</p>
+    <div class="dg-compare">
+      <div class="ccell"><p class="ck before">Captured earlier</p><p class="cq">"The old wording, quoted verbatim."</p><p class="cd">What it granted.</p></div>
+      <div class="ccell after"><p class="ck after">Captured later</p><p class="cq">"The new wording, quoted verbatim."</p><p class="cd">What changed, and what it costs.</p></div>
+    </div>
+  </div>
+
+  <h2 id="gallery-demo">Photo gallery</h2>
+  <p class="lead">A fluid contact sheet: cards resize with the page, and each photo opens full-screen without JavaScript.</p>
+  <div class="gallery gallery-dense" aria-label="Photo gallery demonstration">
+    <figure>
+      <a class="photo-zoom" href="#gallery-photo-a" aria-label="Enlarge blue-water demonstration photo"><img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22><rect width=%22800%22 height=%22600%22 fill=%22%230a6c8f%22/><circle cx=%22610%22 cy=%22145%22 r=%22110%22 fill=%22%23f1bf72%22/><path d=%22M0 390 Q170 310 350 400 T800 370 V600 H0Z%22 fill=%22%231aa2a2%22/></svg>" alt="Graphic blue water beneath a gold sun"></a>
+      <figcaption><b>Fluid card</b><br>Stable 4:3 crop</figcaption>
+    </figure>
+    <figure>
+      <a class="photo-zoom" href="#gallery-photo-b" aria-label="Enlarge coral-coast demonstration photo"><img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22><rect width=%22800%22 height=%22600%22 fill=%22%23f5eadc%22/><path d=%22M0 420 L180 230 L330 390 L520 170 L800 430 V600 H0Z%22 fill=%22%23e06b4f%22/><path d=%22M0 490 Q210 410 410 500 T800 470 V600 H0Z%22 fill=%22%230a6c8f%22/></svg>" alt="Graphic coral coastline over blue water"></a>
+      <figcaption><b>Archival caption</b><br><span class="attr">Source or attribution</span></figcaption>
+    </figure>
+  </div>
+  <a id="gallery-photo-a" class="photo-lightbox" href="#gallery-demo" aria-label="Close enlarged photo"><img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22><rect width=%22800%22 height=%22600%22 fill=%22%230a6c8f%22/><circle cx=%22610%22 cy=%22145%22 r=%22110%22 fill=%22%23f1bf72%22/><path d=%22M0 390 Q170 310 350 400 T800 370 V600 H0Z%22 fill=%22%231aa2a2%22/></svg>" aria-hidden="true"></a>
+  <a id="gallery-photo-b" class="photo-lightbox" href="#gallery-demo" aria-label="Close enlarged photo"><img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22><rect width=%22800%22 height=%22600%22 fill=%22%23f5eadc%22/><path d=%22M0 420 L180 230 L330 390 L520 170 L800 430 V600 H0Z%22 fill=%22%23e06b4f%22/><path d=%22M0 490 Q210 410 410 500 T800 470 V600 H0Z%22 fill=%22%230a6c8f%22/></svg>" aria-hidden="true"></a>
+
+  <h2>Accordion (tap to expand — no JS)</h2>
+  <p class="lead">Native <code>&lt;details class="place" name="..."&gt;</code>; shared <code>name=</code> = exclusive (one open at a time).</p>
+  <details class="place" name="demo"><summary>🏨 First item</summary><div class="pane"><p class="lead">Tap a row to open its pane. Opening another closes this one; tap an open one to close it.</p><div class="links"><a class="chip go" href="#">Action</a><a class="chip" href="#">📍 Link</a></div></div></details>
+  <details class="place" name="demo"><summary>🎣 Second item</summary><div class="pane"><p class="lead">Detail pane content — text, chips, anything.</p></div></details>
+  <details class="place" name="demo"><summary>💡 Third item</summary><div class="pane"><p class="lead">No JavaScript required; works in the Lookie viewer.</p></div></details>
+
+  <h2>Slides (deck layer — no JS)</h2>
+  <p class="lead">One file, three tiers: stacked document here, a scroll-snap deck full-screen (<code>body.deck</code>, landscape), 1280×720 PDF in print. This demo uses a <code>&lt;div class="deck"&gt;</code> wrapper, which styles slides without deck scrolling.</p>
+  <div class="deck" style="border:1px solid var(--line);border-radius:14px;overflow:hidden">
+    <section class="slide slide--cover" style="min-height:340px">
+      <div class="slide-canvas">
+        <p class="eyebrow">Eyebrow · date</p>
+        <h1 style="font-size:2rem">Cover slide</h1>
+        <p class="lead">Layouts: <code>slide--cover</code>, <code>slide--divider</code>, <code>slide--statement</code>, <code>slide--end</code>, or plain <code>slide</code> for content.</p>
+        <div class="badges"><span class="badge">badge</span><span class="badge">badge</span></div>
+      </div>
+    </section>
+    <section class="slide" style="min-height:280px">
+      <div class="slide-canvas">
+        <p class="eyebrow">Section</p>
+        <h2>Content slide</h2>
+        <ul class="tick"><li>Kit components (tiles, callouts, tables) work inside slides</li><li>Space/PageDown advances in real deck mode — native scroll-snap, zero JS</li></ul>
+      </div>
+    </section>
+  </div>
+  <p class="lead" style="margin-top:8px">Deck pages must add their own print block (<code>@media print{ @page{size:1280px 720px;margin:0} }</code>) and export via headless Chromium — see the Presentation row in <code>README.md</code>.</p>
+
+  <h2 style="margin-top:48px">Same components — <span style="color:var(--pop)">neutral</span> theme</h2>
+  <div data-theme="neutral" style="background:var(--page);border:1px solid var(--line);border-radius:14px;padding:4px 18px 18px;margin-top:10px">
+    <div class="callout info">Neutral info callout.</div>
+    <div class="grid-2" style="margin-top:12px">
+      <div class="tile"><h3>Neutral tile</h3><div class="stat">42<small> / set</small></div><p class="lead">Set <code>data-theme="neutral"</code> on any wrapper.</p></div>
+      <div class="card"><h3>Neutral card</h3><p class="lead">All components re-skin from the token block — no markup changes.</p>
+        <div class="links"><a class="chip" href="#">Chip</a><a class="chip go" href="#">Action</a></div></div>
+    </div>
+  </div>
+
+  <h2>Lookie-follow opt-in</h2>
+  <div data-lookie-follow-theme style="background:var(--page);border:1px solid var(--line);border-radius:14px;padding:4px 18px 18px;margin-top:10px">
+    <div class="callout info">This block follows Lookie-Link's injected theme tokens when viewed inside Lookie. Outside Lookie, it uses safe fallback tokens.</div>
+    <div class="grid-2" style="margin-top:12px">
+      <div class="tile"><h3>Viewer-aware tile</h3><div class="stat">Live<small> theme</small></div><p class="lead">Use <code>data-lookie-follow-theme</code> for reports and dashboards.</p></div>
+      <div class="card"><h3>Fixed-brand pages</h3><p class="lead">Omit the attribute when the artifact should keep its own design identity.</p></div>
+    </div>
+  </div>
+
+  <footer>Ops HTML Kit · <code>~/operations/templates/html-kit/</code> · v1.24 (2026-08-27). See <code>README.md</code> for usage, the scenario map, and Lookie-Link notes.</footer>
+</div>
+</body>
+</html>

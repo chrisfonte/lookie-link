@@ -66,8 +66,13 @@ The inventory was checked against the route registrations in [`server.js`](../se
 | Appearance change: `/api/appearance` | `PATCH` | Appearance admin bearer token (`access.appearance.adminTokens`, else `access.grants.adminTokens`) | Admin tokens configured | Merges `wallpapers` / `themes` keys into the server-owned overlay file; `expectedRevision` required (409 `revision_conflict` + `currentRevision`); unknown keys, bad ranges and loader-level rejections return 400 with `details[]`; `themes.<Name>: null` removes a theme; audit `appearance.update`. [`lib/appearance-api.js`](../lib/appearance-api.js) |
 | Wallpaper upload: `/api/appearance/themes/:slug/wallpapers/:mode` | `POST` | Appearance admin bearer token | Admin tokens configured | Raw image body (`image/jpeg`, `image/png`, `image/webp`, ≤24 MB), `?name=` becomes the picture id. Writes only the server-managed folder; a mode fed from another folder returns 409 `folder_not_managed`. First upload adopts the managed folder in the overlay. Audit `appearance.wallpaper.upload`. [`lib/appearance-api.js`](../lib/appearance-api.js) |
 | Wallpaper delete: `/api/appearance/themes/:slug/wallpapers/:mode/:id` | `DELETE` | Appearance admin bearer token | Admin tokens configured | Managed folder only. Audit `appearance.wallpaper.delete`. [`lib/appearance-api.js`](../lib/appearance-api.js) |
+| Kits list: `/api/kits` | `GET` | Non-denied caller (any `view` scope) | At least one kit loaded (`kits.enabled`, default true) | Pollable list of hosted HTML kits (`name`, `label`, `version`, `description`, `stylesheetUrl`, `templates[]`, `examples[]`, `consumes[]`, `source`); `default`, `count`, `revision`; weak ETag, `no-cache`, 304 on `If-None-Match`; unknown query parameters are rejected (400). Never includes folder paths. [`lib/kits.js`](../lib/kits.js) |
+| Kit show: `/api/kits/:name` | `GET` | Non-denied caller | Kits loaded | One kit plus `files[]`; unknown name is `404 not_found`. [`lib/kits.js`](../lib/kits.js) |
+| Kit stylesheet: `/kit/:name/kit.css` | `GET` | Non-denied caller | Kits loaded | `text/css` bytes for the kit stylesheet; `Cache-Control: no-cache` + ETag. [`lib/kits.js`](../lib/kits.js) |
+| Kit stylesheet (versioned): `/kit/:name/v/:version/kit.css` | `GET` | Non-denied caller | Kits loaded | Same bytes when `:version` matches the kit version (`immutable` cache); otherwise `404 not_found`. [`lib/kits.js`](../lib/kits.js) |
+| Kit file: `/kit/:name/files/:file` | `GET` | Non-denied caller | Kits loaded | Listed template/example (html/md) or stylesheet as text; traversal and unlisted names are `404 not_found`. [`lib/kits.js`](../lib/kits.js) |
 | Wallpaper image: `/wallpaper/:slug/:mode/:id` | `GET` | Non-denied caller | Any theme declares `wallpapers` | Serves one image from the live catalog of a theme's configured folder; ids come from the catalog, never from a path. `Cache-Control: no-cache` with ETag revalidation, so a replaced picture shows on the next load. [`server.js`](../server.js) |
-| Transformed HTML: `/embed/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; preserves scripts while rewriting local URLs and injecting theme/annotation integration. Mounted repos only. [`server.js`](../server.js) |
+| Transformed HTML: `/embed/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; preserves scripts while rewriting local URLs and injecting theme sync plus annotation mount/gate markup (not the network annotation client). Mounted repos only. [`server.js`](../server.js) |
 | Verbatim HTML: `/raw/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; unsanitized same-origin content; supports published revisions. [`server.js`](../server.js) |
 | View redirect: `/view` | `GET` | Public redirect | Always | Redirects to `/`; a restricted caller is then challenged there. [`server.js`](../server.js) |
 
@@ -110,6 +115,10 @@ This three-column table is test-checked against `lib/agent-discovery.js` and the
 | `wallpaperImage` | `/wallpaper/:scheme/:mode/:id` | Any theme declares `wallpapers` and the route is registered |
 | `appearance` | `/api/appearance` | Always (non-denied caller) |
 | `appearanceTheme` | `/api/appearance/themes/:slug` | Always (non-denied caller) |
+| `kits` | `/api/kits` | At least one kit is loaded and the kits routes are registered |
+| `kit` | `/api/kits/:name` | Kits capability is available |
+| `kitStylesheet` | `/kit/:name/kit.css` | Kits capability is available |
+| `kitFile` | `/kit/:name/files/:file` | Kits capability is available |
 | `forms` | `/forms` | `forms.enabled` is true |
 | `formsTemplates` | `/api/forms/templates` | `forms.enabled` is true |
 | `formsSubmissions` | `/api/forms/:templateId/submissions` | `forms.enabled` is true |
@@ -137,6 +146,7 @@ Both discovery responses contain these booleans. They are computed from register
 | `publishRead` | Publish store is enabled and caller has whole-repo `view` scope on its virtual repo |
 | `wallpapers` | At least one theme has a picture set and the wallpaper image route is registered |
 | `appearance` | The appearance list route is registered (always); its admin writes are not advertised |
+| `kits` | At least one kit is loaded and the kits list/show routes are registered |
 | `forms` | The forms router is mounted (`forms.enabled: true`); per-template authorization still applies on each forms route |
 
 ## Discovery field inventory
@@ -194,6 +204,9 @@ Neither response includes credentials, token names, repository roots, store path
 | `themes.<name>.wallpapers.default.dark` / `.light`, `.panel_opacity`, `.blur` | Per-theme starting picture and glass overrides |
 | `access.appearance.adminTokens` | Bearer tokens for the appearance write API (same `{ name: { secret \| secretEnv } }` shape as grant admin tokens); when absent, `access.grants.adminTokens` are accepted |
 | `themes.<name>.wallpapers.dark` / `.light` | Folder of images (`.jpg`, `.jpeg`, `.png`, `.webp`, at most 50) painted behind every page while that theme and mode are active. See [CONFIGURATION.md](CONFIGURATION.md#wallpapers) |
+| `kits.enabled` | Boolean; default `true`; when false no kits are loaded |
+| `kits.default` | Advertised default kit name; defaults to the first bundled kit |
+| `kits.folders[]` | Extra kit roots (tilde-expanded); each child folder with a valid `kit.yaml` is a kit; config wins on name clash with bundled kits. See [CONFIGURATION.md](CONFIGURATION.md#kits) |
 
 Configuration file lookup is `LOOKIE_LINK_CONFIG`, then the reader config directory, then the project root. The recognized server environment variables are `LOOKIE_LINK_CONFIG`, `ROOT_MAPPINGS`, `PORT`, `HOSTNAME`, `LOOKIE_LINK_ENABLE_EDITING`, `LOOKIE_LINK_ENABLE_ANNOTATIONS`, and `LOOKIE_LINK_ENABLE_RAW_HTML`. Secret environment-variable names are chosen by each `secretEnv` value.
 
@@ -233,6 +246,9 @@ The `lookie` executable resolves the instance in this order: global `--instance`
 | `lookie appearance set --revision N [--blur N] [--panel N] [--theme-json JSON]` | `PATCH /api/appearance` with `expectedRevision`; `--panel` maps to `wallpapers.panel_opacity`, `--theme-json` to `themes`; `--json-file FILE` supplies a whole body (flags override). Stale revision exits `5` |
 | `lookie appearance upload <slug> <dark\|light> --name ID <file>` | `POST /api/appearance/themes/:slug/wallpapers/:mode?name=ID` with raw bytes; Content-Type from extension (`.jpg`/`.jpeg`/`.png`/`.webp`) |
 | `lookie appearance delete <slug> <dark\|light> <id>` | `DELETE /api/appearance/themes/:slug/wallpapers/:mode/:id` |
+| `lookie kits` | `GET /api/kits` |
+| `lookie kit show <name>` | `GET /api/kits/:name` |
+| `lookie kit file <name> <file>` | `GET /kit/:name/files/:file`; prints raw text |
 | `lookie openapi` | Prints `/openapi.json` |
 | `lookie docs` | Prints the `/api/docs` URL (`--json` wraps it as `{ok,url}`) |
 | `lookie --help`, `lookie --version`, global `--json` | Help, version, and supported JSON output |
@@ -251,8 +267,9 @@ The package also ships compatibility executables `lookie-read` and `lookie-annot
 | `lib/api-key-store.js` | Mode-`0600` YAML/JSON store, hashed one-time keys, create/list/rotate/revoke, credential authentication, redacted audits |
 | `lib/cli-auth.js` | Base-URL normalization, mode-`0600` auth-file read/write, environment/stored resolution, stdin token read |
 | `lib/config.js` | Config search/normalization, repo and server settings, optional store config, built-in/custom themes |
-| `lib/embed-html.js` | Strict UTF-8 HTML decoding, local/cross-repo/wiki URL rewriting, theme and annotation injection, sensitive path/value redaction |
+| `lib/embed-html.js` | Strict UTF-8 HTML decoding, local/cross-repo/wiki URL rewriting, theme injection, annotation mount/gate markup (no network client), sensitive path/value redaction |
 | `lib/grant-store.js` | Hashed expiring grants, admin lifecycle, owner/issuer/approval/cross-company policy, rotation/revocation/audits, optional active projection |
+| `lib/kits.js` | Loads bundled and config-folder HTML kits from `kit.yaml`, serves stylesheet/templates, revision hash, live reload |
 | `lib/managed-repo-search.js` | Scope-preserving bounded search and suggestions across allowlisted text formats |
 | `lib/search-query.js` | Query semantics shared by both backends: all terms must match, quoted phrases, literal and case-insensitive |
 | `scripts/search-battery.js` | Naive-user query battery against a running instance (`npm run search:battery -- <url>`); exits non-zero on a silent bad answer |

@@ -15,7 +15,8 @@ Lookie-Link is a lightweight private-network viewer for local directories. Map a
 - Immutable published revisions with optimistic updates, historical readback, and revocation
 - Opt-in verbatim and transformed HTML execution for trusted content
 - Eleven built-in dark/light themes, including a Codex app-shell palette, plus custom YAML themes
-- A unified `lookie` CLI for authentication, discovery, managed content, trash recovery, search, annotations, appearance, and publishing
+- Hosted HTML kits (bundled Ops kit plus config-folder kits) with list/show, stylesheet, and template file APIs
+- A unified `lookie` CLI for authentication, discovery, managed content, trash recovery, search, annotations, appearance, kits, and publishing
 
 The complete source-checked surface is the [capability and route matrix](docs/CAPABILITIES.md). It is the single authoritative list of routes, auth gates, configuration switches, discovery fields, CLI commands, and stores.
 

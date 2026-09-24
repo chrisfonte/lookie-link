@@ -16,6 +16,7 @@ const {
   getManagedReposConfig,
   getPublishConfig,
   getFormsConfig,
+  getKitsConfig,
   loadCustomThemes, getSearchConfig, getBaseConfig, getAppearanceOverlayPath, mergeAppearance, THEME_CSS_PROPERTIES, loadWallpaperCatalog, getWallpaperDefaults, reloadConfig, getConfigPath,
   generateCustomThemeCss,
   BUILT_IN_THEMES,
@@ -95,6 +96,19 @@ const {
 const { SubmissionService } = require('./lib/forms/submission-service');
 const { setWallpaperCatalog, resolveWallpaperFile, contentTypeFor: wallpaperContentType, watchWallpapers, publicCatalog: publicWallpaperCatalog, currentDefaults: wallpaperDefaultsForDiscovery, currentCatalog: wallpaperCatalogForApi, currentThemes: wallpaperThemesForApi } = require('./lib/viewer-wallpaper');
 const { registerAppearanceRoutes } = require('./lib/appearance-api');
+const {
+  loadKits,
+  listKits,
+  getKit,
+  getKitRecord,
+  readKitFile,
+  kitsRevision,
+  kitsEnabled,
+  defaultKitName,
+  watchKits,
+  contentTypeFor: kitContentType,
+  watchTargets: kitWatchTargets,
+} = require('./lib/kits');
 const { createFormsRouter } = require('./lib/forms/routes');
 const { apiError } = require('./lib/api-error');
 
@@ -664,6 +678,10 @@ function getRouteAvailability(app) {
     wallpaperImage: has('get', '/wallpaper/:slug/:mode/:id'),
     appearance: has('get', '/api/appearance'),
     appearanceTheme: has('get', '/api/appearance/themes/:slug'),
+    kits: has('get', '/api/kits'),
+    kit: has('get', '/api/kits/:name'),
+    kitStylesheet: has('get', '/kit/:name/kit.css'),
+    kitFile: has('get', '/kit/:name/files/:file'),
   };
 }
 
@@ -683,6 +701,16 @@ function createApp(options = {}) {
   const rawManagedReposConfig = options.managedReposConfig === undefined ? getManagedReposConfig() : options.managedReposConfig;
   const rawPublishConfig = options.publishConfig === undefined ? getPublishConfig() : options.publishConfig;
   const formsConfig = options.formsConfig === undefined ? getFormsConfig() : options.formsConfig;
+  const kitsConfig = options.kitsConfig === undefined ? getKitsConfig() : options.kitsConfig;
+  const refreshKits = () => loadKits({
+    folders: kitsConfig.folders || [],
+    bundledRoot: kitsConfig.bundledRoot === undefined ? undefined : kitsConfig.bundledRoot,
+    enabled: kitsConfig.enabled !== false,
+    default: kitsConfig.default,
+    warn: typeof logger.warn === 'function' ? (...args) => logger.warn(...args) : console.warn,
+  });
+  refreshKits();
+  app.locals.refreshKits = refreshKits;
   // Forms only appears when the deployment actually serves them.
   setNavLinks([
     { href: '/', label: 'Files' },
@@ -1715,6 +1743,7 @@ function createApp(options = {}) {
     publishedRepo,
     routeAvailability: getRouteAvailability(app),
     formsEnabled: Boolean(formsConfig && formsConfig.enabled === true),
+    kitsEnabled: kitsEnabled(),
   });
 
   app.get('/.well-known/agent.json', (req, res) => {
@@ -2793,6 +2822,127 @@ function createApp(options = {}) {
     });
   }
 
+  // Hosted HTML kits (read-only): list/show with ETag polling, stylesheet, and
+  // listed template/example files. Any non-denied caller with view access; no
+  // host paths leave the server.
+  {
+    const rejectUnknownKitsParams = (req, res) => {
+      const unknown = Object.keys(req.query);
+      if (!unknown.length) return false;
+      apiError(res, 400, 'invalid_request', `Unknown query parameter${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}. This route accepts no query parameters.`, unknown.map((key) => ({ path: key, message: 'unknown query parameter' })));
+      return true;
+    };
+    const gateKits = (req, res) => {
+      const accessContext = req.accessContext || resolveAccessContext(req);
+      if (accessContext.mode === 'denied') {
+        sendAccessError(res, accessContext, true);
+        return false;
+      }
+      return true;
+    };
+    const sendKitsWithEtag = (req, res, body) => {
+      const revision = kitsRevision();
+      const etag = `W/"kits-${revision}"`;
+      res.set('ETag', etag);
+      res.set('Cache-Control', 'no-cache');
+      if (req.get('if-none-match') === etag) {
+        res.status(304).end();
+        return;
+      }
+      res.status(200).json(body);
+    };
+    const sendKitCss = (req, res, { immutable = false } = {}) => {
+      if (!gateKits(req, res)) return;
+      if (rejectUnknownKitsParams(req, res)) return;
+      const name = String(req.params.name || '');
+      const kit = getKitRecord(name);
+      if (!kit) {
+        apiError(res, 404, 'not_found', `Unknown kit: ${name}`);
+        return;
+      }
+      if (immutable) {
+        const version = String(req.params.version || '');
+        if (version !== kit.version) {
+          apiError(res, 404, 'not_found', `Kit version not found: ${name}@${version}`);
+          return;
+        }
+      }
+      const css = readKitFile(name, kit.stylesheet);
+      if (css === null) {
+        apiError(res, 404, 'not_found', `Kit stylesheet not found: ${name}`);
+        return;
+      }
+      const etag = `W/"kit-css-${name}-${kit.version}-${kitsRevision()}"`;
+      res.set('ETag', etag);
+      res.set('Cache-Control', immutable ? 'public, max-age=31536000, immutable' : 'no-cache');
+      if (req.get('if-none-match') === etag) {
+        res.status(304).end();
+        return;
+      }
+      res.status(200).type(kitContentType(kit.stylesheet)).send(css);
+    };
+
+    app.get('/api/kits', (req, res) => {
+      if (!gateKits(req, res)) return;
+      if (rejectUnknownKitsParams(req, res)) return;
+      const kits = listKits();
+      sendKitsWithEtag(req, res, {
+        ok: true,
+        kits,
+        default: defaultKitName(),
+        count: kits.length,
+        revision: kitsRevision(),
+        generatedAt: new Date().toISOString(),
+      });
+    });
+
+    app.get('/api/kits/:name', (req, res) => {
+      if (!gateKits(req, res)) return;
+      if (rejectUnknownKitsParams(req, res)) return;
+      const name = String(req.params.name || '');
+      const kit = getKit(name);
+      if (!kit) {
+        apiError(res, 404, 'not_found', `Unknown kit: ${name}`);
+        return;
+      }
+      sendKitsWithEtag(req, res, { ok: true, kit, revision: kitsRevision(), generatedAt: new Date().toISOString() });
+    });
+
+    app.get('/kit/:name/kit.css', (req, res) => sendKitCss(req, res, { immutable: false }));
+    app.get('/kit/:name/v/:version/kit.css', (req, res) => sendKitCss(req, res, { immutable: true }));
+
+    app.get('/kit/:name/files/:file', (req, res) => {
+      if (!gateKits(req, res)) return;
+      if (rejectUnknownKitsParams(req, res)) return;
+      const name = String(req.params.name || '');
+      const file = String(req.params.file || '');
+      if (file.includes('..') || file.includes('/') || file.includes('\\')) {
+        apiError(res, 404, 'not_found', 'Kit file not found.');
+        return;
+      }
+      const kit = getKitRecord(name);
+      if (!kit) {
+        apiError(res, 404, 'not_found', `Unknown kit: ${name}`);
+        return;
+      }
+      // Files route serves templates/examples (and other listed text files);
+      // stylesheet has its own URL but is also readable when listed.
+      const lower = file.toLowerCase();
+      const textOk = lower.endsWith('.html') || lower.endsWith('.htm') || lower.endsWith('.md') || lower.endsWith('.css');
+      if (!textOk || !kit.files.includes(file)) {
+        apiError(res, 404, 'not_found', 'Kit file not found.');
+        return;
+      }
+      const body = readKitFile(name, file);
+      if (body === null) {
+        apiError(res, 404, 'not_found', 'Kit file not found.');
+        return;
+      }
+      res.set('Cache-Control', 'no-cache');
+      res.status(200).type(kitContentType(file)).send(body);
+    });
+  }
+
   // Viewer-wide wallpapers: ids come from the live catalog scan, so this never
   // maps a request onto an arbitrary path. Revalidate on every use (no-cache +
   // the ETag/Last-Modified that sendFile emits): the catalog reloads live and
@@ -3216,6 +3366,18 @@ function startServer() {
     },
   });
   app.locals.refreshAppearance = appearanceWatcher.refresh;
+
+  watchKits({
+    fs: require('node:fs'),
+    path,
+    reload() {
+      const result = typeof app.locals.refreshKits === 'function' ? app.locals.refreshKits() : { kits: [], watch: kitWatchTargets() };
+      return {
+        watch: result.watch || kitWatchTargets(),
+        summary: `${(result.kits || listKits()).length} kit(s), default ${defaultKitName() || 'none'}`,
+      };
+    },
+  });
 
   app.listen(port, '0.0.0.0', () => {
     console.log(`Lookie Link listening on http://${hostname}:${port}`);
