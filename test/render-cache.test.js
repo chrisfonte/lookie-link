@@ -36,7 +36,10 @@ test('cache is keyed by annotations flag and query token, and is bounded', () =>
   renderDocumentPage({ ...base, annotationsEnabled: true });
   renderDocumentPage({ ...base, queryToken: 'tok' });
   assert.equal(renderCacheStats().entries, 3);
-  for (let i = 0; i < 320; i++) renderDocumentPage({ ...base, relativePath: `doc-${i}.md` });
+  // Boundedness only needs distinct keys, not big bodies: rendering 320 copies
+  // of the 200-section SOURCE took 35 s and got the file SIGKILLed under the
+  // full suite's memory load (2026-09-24).
+  for (let i = 0; i < 320; i++) renderDocumentPage({ ...base, source: `# small ${i}\n`, relativePath: `doc-${i}.md` });
   assert.ok(renderCacheStats().entries <= 300, 'entry cap holds');
 });
 
