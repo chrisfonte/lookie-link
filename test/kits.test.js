@@ -31,6 +31,11 @@ function request(base, route, { method = 'GET', headers = {} } = {}) {
 }
 
 async function startServer(options = {}) {
+  const managedFolder = options.managedFolder
+    || fs.mkdtempSync(path.join(os.tmpdir(), 'lookie-kits-managed-'));
+  const kitsConfig = options.kitsConfig === undefined
+    ? { enabled: true, managedFolder }
+    : { managedFolder, ...options.kitsConfig };
   const app = createApp({
     mappings: options.mappings || {},
     accessConfig: options.accessConfig === undefined ? {} : options.accessConfig,
@@ -41,16 +46,18 @@ async function startServer(options = {}) {
     editingEnabled: false,
     annotationsEnabled: false,
     rawHtmlEnabled: false,
-    kitsConfig: options.kitsConfig,
+    kitsConfig,
   });
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   return {
     app,
     server,
+    managedFolder,
     base: `http://127.0.0.1:${server.address().port}`,
     async close() {
       await new Promise((resolve) => server.close(resolve));
+      try { fs.rmSync(managedFolder, { recursive: true, force: true }); } catch (_) { /* ignore */ }
     },
   };
 }
@@ -69,6 +76,11 @@ test('GET /api/kits lists the bundled ops kit with version 1.26 and a revision',
     assert.equal(ops.version, '1.26');
     assert.equal(ops.source, 'bundled');
     assert.equal(ops.stylesheetUrl, '/kit/ops/kit.css');
+    assert.equal(ops.pinnedStylesheetUrl, '/kit/ops/v/1.26/kit.css');
+    assert.equal(ops.effectiveVersion, '1.26');
+    assert.deepEqual(ops.caching, { stylesheetUrl: 'no-cache', pinnedStylesheetUrl: 'immutable' });
+    assert.equal(ops.writable, false);
+    assert.equal(ops.overlay, null);
     assert.ok(Array.isArray(ops.consumes) && ops.consumes.includes('--lookie-bg'));
   } finally {
     await s.close();

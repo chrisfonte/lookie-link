@@ -66,11 +66,15 @@ The inventory was checked against the route registrations in [`server.js`](../se
 | Appearance change: `/api/appearance` | `PATCH` | Appearance admin bearer token (`access.appearance.adminTokens`, else `access.grants.adminTokens`) | Admin tokens configured | Merges `wallpapers` / `themes` keys into the server-owned overlay file; `expectedRevision` required (409 `revision_conflict` + `currentRevision`); unknown keys, bad ranges and loader-level rejections return 400 with `details[]`; `themes.<Name>: null` removes a theme; audit `appearance.update`. [`lib/appearance-api.js`](../lib/appearance-api.js) |
 | Wallpaper upload: `/api/appearance/themes/:slug/wallpapers/:mode` | `POST` | Appearance admin bearer token | Admin tokens configured | Raw image body (`image/jpeg`, `image/png`, `image/webp`, ≤24 MB), `?name=` becomes the picture id. Writes only the server-managed folder; a mode fed from another folder returns 409 `folder_not_managed`. First upload adopts the managed folder in the overlay. Audit `appearance.wallpaper.upload`. [`lib/appearance-api.js`](../lib/appearance-api.js) |
 | Wallpaper delete: `/api/appearance/themes/:slug/wallpapers/:mode/:id` | `DELETE` | Appearance admin bearer token | Admin tokens configured | Managed folder only. Audit `appearance.wallpaper.delete`. [`lib/appearance-api.js`](../lib/appearance-api.js) |
-| Kits list: `/api/kits` | `GET` | Non-denied caller (any `view` scope) | At least one kit loaded (`kits.enabled`, default true) | Pollable list of hosted HTML kits (`name`, `label`, `version`, `description`, `stylesheetUrl`, `templates[]`, `examples[]`, `consumes[]`, `source`); `default`, `count`, `revision`; weak ETag, `no-cache`, 304 on `If-None-Match`; unknown query parameters are rejected (400). Never includes folder paths. [`lib/kits.js`](../lib/kits.js) |
+| Kits list: `/api/kits` | `GET` | Non-denied caller (any `view` scope) | At least one kit loaded (`kits.enabled`, default true) | Pollable list of hosted HTML kits (`name`, `label`, `version`, `effectiveVersion`, `description`, `stylesheetUrl`, `pinnedStylesheetUrl`, `caching`, `templates[]`, `examples[]`, `consumes[]`, `source`, `writable`, `overlay`); `default`, `count`, `revision`; weak ETag, `no-cache`, 304 on `If-None-Match`; unknown query parameters are rejected (400). Never includes folder paths. [`lib/kits.js`](../lib/kits.js) |
 | Kit show: `/api/kits/:name` | `GET` | Non-denied caller | Kits loaded | One kit plus `files[]`; unknown name is `404 not_found`. [`lib/kits.js`](../lib/kits.js) |
-| Kit stylesheet: `/kit/:name/kit.css` | `GET` | Non-denied caller | Kits loaded | `text/css` bytes for the kit stylesheet; `Cache-Control: no-cache` + ETag. [`lib/kits.js`](../lib/kits.js) |
-| Kit stylesheet (versioned): `/kit/:name/v/:version/kit.css` | `GET` | Non-denied caller | Kits loaded | Same bytes when `:version` matches the kit version (`immutable` cache); otherwise `404 not_found`. [`lib/kits.js`](../lib/kits.js) |
-| Kit file: `/kit/:name/files/:file` | `GET` | Non-denied caller | Kits loaded | Listed template/example (html/md) or stylesheet as text; traversal and unlisted names are `404 not_found`. [`lib/kits.js`](../lib/kits.js) |
+| Kit create: `/api/kits` | `POST` | Appearance admin bearer (same gate as appearance; no new token class) | Admin tokens configured; `kits.managedFolder` | Create a managed kit (`name` `^[a-z][a-z0-9-]{0,39}$`, `label`, `version`, `stylesheet` CSS text, optional `templates`/`examples` maps); 201 with projection; name clash in any source → 409 `conflict`; bad names/sizes → 400 `invalid_request` with details. [`lib/kits.js`](../lib/kits.js) |
+| Kit file upload: `/api/kits/:name/files/:file` | `PUT` | Appearance admin bearer | Admin tokens; managed kit | Replace/add a listed file (text body or JSON `{content}`); bundled/config → 403 `read_only`. [`lib/kits.js`](../lib/kits.js) |
+| Kit overlay: `/api/kits/:name` | `PATCH` | Appearance admin bearer | Admin tokens | Any kit (incl. bundled): `{expectedRevision, tokens, label?}` writes `<managedFolder>/<name>.overlay.yaml`; stale revision → 409 `revision_conflict` + `currentRevision`; `tokens: {}`/`null` clears overlay. [`lib/kits.js`](../lib/kits.js) |
+| Kit delete: `/api/kits/:name` | `DELETE` | Appearance admin bearer | Admin tokens; managed kit | Removes the managed folder; bundled/config → 403 `read_only`. [`lib/kits.js`](../lib/kits.js) |
+| Kit stylesheet: `/kit/:name/kit.css` | `GET` | Non-denied caller | Kits loaded | `text/css` bytes for the kit stylesheet (base + overlay block when present); `Cache-Control: no-cache` + ETag. [`lib/kits.js`](../lib/kits.js) |
+| Kit stylesheet (versioned): `/kit/:name/v/:version/kit.css` | `GET` | Non-denied caller | Kits loaded | Same bytes when `:version` matches `effectiveVersion` (`immutable` cache); otherwise `404 not_found`. [`lib/kits.js`](../lib/kits.js) |
+| Kit file: `/kit/:name/files/:file` | `GET` | Non-denied caller | Kits loaded | Listed template/example (html/md) or stylesheet as text; traversal and unlisted names are `404 not_found`. Unmatched `/kit/*` paths also use the JSON envelope. [`lib/kits.js`](../lib/kits.js) |
 | Wallpaper image: `/wallpaper/:slug/:mode/:id` | `GET` | Non-denied caller | Any theme declares `wallpapers` | Serves one image from the live catalog of a theme's configured folder; ids come from the catalog, never from a path. `Cache-Control: no-cache` with ETag revalidation, so a replaced picture shows on the next load. [`server.js`](../server.js) |
 | Transformed HTML: `/embed/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; preserves scripts while rewriting local URLs and injecting theme sync plus annotation mount/gate markup (not the network annotation client). Mounted repos only. [`server.js`](../server.js) |
 | Verbatim HTML: `/raw/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; unsanitized same-origin content; supports published revisions. [`server.js`](../server.js) |
@@ -206,7 +210,8 @@ Neither response includes credentials, token names, repository roots, store path
 | `themes.<name>.wallpapers.dark` / `.light` | Folder of images (`.jpg`, `.jpeg`, `.png`, `.webp`, at most 50) painted behind every page while that theme and mode are active. See [CONFIGURATION.md](CONFIGURATION.md#wallpapers) |
 | `kits.enabled` | Boolean; default `true`; when false no kits are loaded |
 | `kits.default` | Advertised default kit name; defaults to the first bundled kit |
-| `kits.folders[]` | Extra kit roots (tilde-expanded); each child folder with a valid `kit.yaml` is a kit; config wins on name clash with bundled kits. See [CONFIGURATION.md](CONFIGURATION.md#kits) |
+| `kits.managedFolder` | Server-managed kit root (default `~/.local/share/lookie-link/kits`, tilde-expanded; created on first admin write). Holds API-created kits and `<name>.overlay.yaml` token overlays. Precedence on name clash: managed → `kits.folders[]` → bundled. See [CONFIGURATION.md](CONFIGURATION.md#kits) |
+| `kits.folders[]` | Extra kit roots (tilde-expanded); each child folder with a valid `kit.yaml` is a kit; config wins on name clash with bundled kits (managed still wins over both). See [CONFIGURATION.md](CONFIGURATION.md#kits) |
 
 Configuration file lookup is `LOOKIE_LINK_CONFIG`, then the reader config directory, then the project root. The recognized server environment variables are `LOOKIE_LINK_CONFIG`, `ROOT_MAPPINGS`, `PORT`, `HOSTNAME`, `LOOKIE_LINK_ENABLE_EDITING`, `LOOKIE_LINK_ENABLE_ANNOTATIONS`, and `LOOKIE_LINK_ENABLE_RAW_HTML`. Secret environment-variable names are chosen by each `secretEnv` value.
 
@@ -249,6 +254,10 @@ The `lookie` executable resolves the instance in this order: global `--instance`
 | `lookie kits` | `GET /api/kits` |
 | `lookie kit show <name>` | `GET /api/kits/:name` |
 | `lookie kit file <name> <file>` | `GET /kit/:name/files/:file`; prints raw text |
+| `lookie kit create --name N --label L --version V --stylesheet FILE [--template FILE]...` | `POST /api/kits` (admin); stylesheet/templates read from disk |
+| `lookie kit upload <name> <file>` | `PUT /api/kits/:name/files/:file` (admin) with `{content}` |
+| `lookie kit set <name> --revision R --token --radius=8px [--token …]` | `PATCH /api/kits/:name` (admin); `--token` value is `--name=value` |
+| `lookie kit delete <name>` | `DELETE /api/kits/:name` (admin; managed only) |
 | `lookie openapi` | Prints `/openapi.json` |
 | `lookie docs` | Prints the `/api/docs` URL (`--json` wraps it as `{ok,url}`) |
 | `lookie --help`, `lookie --version`, global `--json` | Help, version, and supported JSON output |
@@ -269,7 +278,7 @@ The package also ships compatibility executables `lookie-read` and `lookie-annot
 | `lib/config.js` | Config search/normalization, repo and server settings, optional store config, built-in/custom themes |
 | `lib/embed-html.js` | Strict UTF-8 HTML decoding, local/cross-repo/wiki URL rewriting, theme injection, annotation mount/gate markup (no network client), sensitive path/value redaction |
 | `lib/grant-store.js` | Hashed expiring grants, admin lifecycle, owner/issuer/approval/cross-company policy, rotation/revocation/audits, optional active projection |
-| `lib/kits.js` | Loads bundled and config-folder HTML kits from `kit.yaml`, serves stylesheet/templates, revision hash, live reload |
+| `lib/kits.js` | Loads bundled, config-folder, and managed HTML kits from `kit.yaml`; token overlays; stylesheet/templates; admin create/upload/overlay/delete; revision hash; live reload |
 | `lib/managed-repo-search.js` | Scope-preserving bounded search and suggestions across allowlisted text formats |
 | `lib/search-query.js` | Query semantics shared by both backends: all terms must match, quoted phrases, literal and case-insensitive |
 | `scripts/search-battery.js` | Naive-user query battery against a running instance (`npm run search:battery -- <url>`); exits non-zero on a silent bad answer |

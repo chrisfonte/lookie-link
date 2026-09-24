@@ -22,7 +22,8 @@ async function startServer() {
   const docs = path.join(root, 'docs');
   const allowRoot = path.join(root, 'managed');
   const home = path.join(root, 'home');
-  await Promise.all([fs.mkdir(docs), fs.mkdir(allowRoot), fs.mkdir(home)]);
+  const kitsManaged = path.join(root, 'kits-managed');
+  await Promise.all([fs.mkdir(docs), fs.mkdir(allowRoot), fs.mkdir(home), fs.mkdir(kitsManaged)]);
   await fs.writeFile(path.join(docs, 'guide.md'), '# Guide\n\nBody\n');
   const app = createApp({
     mappings: { docs },
@@ -34,6 +35,7 @@ async function startServer() {
       adminTokens: { operator: { secret: MANAGED_ADMIN } },
     },
     accessConfig: { grants: { adminTokens: { t: { secret: ADMIN } } } },
+    kitsConfig: { enabled: true, managedFolder: kitsManaged },
   });
   const server = await new Promise((resolve) => {
     const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
@@ -120,6 +122,46 @@ test('lookie kits / kit show / kit file round-trip the hosted kit API', async (t
 
   const missing = await s.cli(['kit', 'show', 'no-such-kit']);
   assert.equal(missing.code, 4);
+});
+
+test('lookie kit create / set / upload / delete round-trip the admin kit API', async (t) => {
+  const s = await startServer();
+  t.after(() => s.close());
+  const cssPath = path.join(s.root, 'demo.css');
+  const tplPath = path.join(s.root, 'card.html');
+  await fs.writeFile(cssPath, ':root{--demo:1}\n');
+  await fs.writeFile(tplPath, '<html>card</html>\n');
+
+  const created = await s.cli([
+    'kit', 'create',
+    '--name', 'clidemo',
+    '--label', 'CLI Demo',
+    '--version', '0.1.0',
+    '--stylesheet', cssPath,
+    '--template', tplPath,
+  ], { LOOKIE_LINK_TOKEN: ADMIN });
+  assert.equal(created.code, 0, created.stderr);
+  const createdBody = JSON.parse(created.stdout);
+  assert.equal(createdBody.kit.name, 'clidemo');
+  assert.equal(createdBody.kit.source, 'managed');
+
+  const listed = JSON.parse((await s.cli(['kits'])).stdout);
+  const set = await s.cli([
+    'kit', 'set', 'clidemo',
+    '--revision', listed.revision,
+    '--token', '--radius=8px',
+  ], { LOOKIE_LINK_TOKEN: ADMIN });
+  assert.equal(set.code, 0, set.stderr);
+  assert.match(JSON.parse(set.stdout).kit.effectiveVersion, /\+/) ;
+
+  const extra = path.join(s.root, 'extra.html');
+  await fs.writeFile(extra, '<p>extra</p>\n');
+  const uploaded = await s.cli(['kit', 'upload', 'clidemo', extra], { LOOKIE_LINK_TOKEN: ADMIN });
+  assert.equal(uploaded.code, 0, uploaded.stderr);
+
+  const deleted = await s.cli(['kit', 'delete', 'clidemo'], { LOOKIE_LINK_TOKEN: ADMIN });
+  assert.equal(deleted.code, 0, deleted.stderr);
+  assert.equal((await s.cli(['kit', 'show', 'clidemo'])).code, 4);
 });
 
 test('lookie changes accepts ISO --since and sends milliseconds; openapi and docs print', async (t) => {

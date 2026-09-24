@@ -93,11 +93,15 @@ function printUsage(stream = process.stdout) {
     '  kits',
     '  kit show <name>',
     '  kit file <name> <file>',
+    '  kit create --name N --label L --version V --stylesheet FILE [--template FILE]...',
+    '  kit upload <name> <file>',
+    '  kit set <name> --revision R --token --radius=8px [--token …]',
+    '  kit delete <name>',
     '  openapi',
     '  docs',
     '',
     'Tokens are accepted through auth login stdin or LOOKIE_LINK_TOKEN, never URL query parameters.',
-    'Appearance writes use LOOKIE_LINK_ADMIN_TOKEN (falls back to LOOKIE_LINK_TOKEN).',
+    'Appearance and kit writes use LOOKIE_LINK_ADMIN_TOKEN (falls back to LOOKIE_LINK_TOKEN).',
     `Auth file: ${AUTH_PATH}`,
     '',
   ].join('\n'));
@@ -655,6 +659,102 @@ async function kitsCommand(auth) {
   formatOutput(await handleApiResponse(response, auth), true);
 }
 
+async function kitCreateCommand(auth, args) {
+  const admin = { ...auth, token: process.env.LOOKIE_LINK_ADMIN_TOKEN || auth.token };
+  let name;
+  let label;
+  let version;
+  let stylesheetPath;
+  const templatePaths = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--name') { name = optionValue(args, index, arg); index += 1; }
+    else if (arg === '--label') { label = optionValue(args, index, arg); index += 1; }
+    else if (arg === '--version') { version = optionValue(args, index, arg); index += 1; }
+    else if (arg === '--stylesheet') { stylesheetPath = optionValue(args, index, arg); index += 1; }
+    else if (arg === '--template') { templatePaths.push(optionValue(args, index, arg)); index += 1; }
+    else die(EXIT_USAGE, `unknown kit create option: ${arg}`);
+  }
+  if (!name) die(EXIT_USAGE, 'kit create requires --name');
+  if (!label) die(EXIT_USAGE, 'kit create requires --label');
+  if (!version) die(EXIT_USAGE, 'kit create requires --version');
+  if (!stylesheetPath) die(EXIT_USAGE, 'kit create requires --stylesheet FILE');
+  const stylesheet = await fs.readFile(stylesheetPath, 'utf8');
+  const templates = {};
+  for (const filePath of templatePaths) {
+    templates[path.basename(filePath)] = await fs.readFile(filePath, 'utf8');
+  }
+  const response = await request(admin, '/api/kits', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, label, version, stylesheet, ...(Object.keys(templates).length ? { templates } : {}) }),
+  });
+  formatOutput(await handleApiResponse(response, admin), true);
+}
+
+async function kitUploadCommand(auth, args) {
+  const admin = { ...auth, token: process.env.LOOKIE_LINK_ADMIN_TOKEN || auth.token };
+  const name = requireArgument(args[0], 'kit name');
+  const filePath = requireArgument(args[1], 'file');
+  if (args.length > 2) die(EXIT_USAGE, `unknown kit upload option: ${args[2]}`);
+  const content = await fs.readFile(filePath, 'utf8');
+  const file = path.basename(filePath);
+  const response = await request(admin, `/api/kits/${encodeURIComponent(name)}/files/${encodeURIComponent(file)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  formatOutput(await handleApiResponse(response, admin), true);
+}
+
+async function kitSetCommand(auth, args) {
+  const admin = { ...auth, token: process.env.LOOKIE_LINK_ADMIN_TOKEN || auth.token };
+  const name = requireArgument(args[0], 'kit name');
+  let revision;
+  const tokens = {};
+  let label;
+  for (let index = 1; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--revision') {
+      revision = optionValue(args, index, arg);
+      index += 1;
+    } else if (arg === '--label') {
+      label = optionValue(args, index, arg);
+      index += 1;
+    } else if (arg === '--token') {
+      const value = args[index + 1];
+      if (!value) die(EXIT_USAGE, '--token requires --name=value');
+      const match = String(value).match(/^(--[a-z][a-z0-9-]*)=(.*)$/);
+      if (!match) die(EXIT_USAGE, '--token value must look like --radius=8px');
+      tokens[match[1]] = match[2];
+      index += 1;
+    } else {
+      die(EXIT_USAGE, `unknown kit set option: ${arg}`);
+    }
+  }
+  if (revision === undefined) die(EXIT_USAGE, 'kit set requires --revision R (from `lookie kits`)');
+  if (!Object.keys(tokens).length && label === undefined) {
+    die(EXIT_USAGE, 'kit set requires --token --name=value and/or --label');
+  }
+  const body = { expectedRevision: revision };
+  if (Object.keys(tokens).length) body.tokens = tokens;
+  if (label !== undefined) body.label = label;
+  const response = await request(admin, `/api/kits/${encodeURIComponent(name)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  formatOutput(await handleApiResponse(response, admin), true);
+}
+
+async function kitDeleteCommand(auth, args) {
+  const admin = { ...auth, token: process.env.LOOKIE_LINK_ADMIN_TOKEN || auth.token };
+  const name = requireArgument(args[0], 'kit name');
+  if (args.length > 1) die(EXIT_USAGE, `unknown kit delete option: ${args[1]}`);
+  const response = await request(admin, `/api/kits/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  formatOutput(await handleApiResponse(response, admin), true);
+}
+
 async function kitCommand(auth, args) {
   const sub = args[0];
   if (sub === 'show') {
@@ -674,7 +774,11 @@ async function kitCommand(auth, args) {
     const text = await response.text();
     return formatOutput(text, false);
   }
-  return die(EXIT_USAGE, 'kit requires show or file');
+  if (sub === 'create') return kitCreateCommand(auth, args.slice(1));
+  if (sub === 'upload') return kitUploadCommand(auth, args.slice(1));
+  if (sub === 'set') return kitSetCommand(auth, args.slice(1));
+  if (sub === 'delete') return kitDeleteCommand(auth, args.slice(1));
+  return die(EXIT_USAGE, 'kit requires show, file, create, upload, set, or delete');
 }
 
 async function authCommand(args, outputJson) {

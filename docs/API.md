@@ -79,7 +79,17 @@ Content-Type: application/json
 
 ## Kits
 
-Hosted HTML kits expose design-token stylesheets and fillable templates. `GET /api/kits` lists them (`revision`, weak ETag, `304` on `If-None-Match`); `GET /api/kits/:name` returns one kit. Stylesheets live at `/kit/:name/kit.css` (and immutable `/kit/:name/v/:version/kit.css` when the version matches). Templates and examples are plain text at `/kit/:name/files/:file`.
+Hosted HTML kits expose design-token stylesheets and fillable templates. `GET /api/kits` lists them (`revision`, weak ETag, `304` on `If-None-Match`); `GET /api/kits/:name` returns one kit. Each projection includes `stylesheetUrl` (revalidate), `pinnedStylesheetUrl` (`/kit/<name>/v/<effectiveVersion>/kit.css`, immutable), and `caching: { stylesheetUrl: "no-cache", pinnedStylesheetUrl: "immutable" }`, plus `version`, `effectiveVersion` (`<version>` or `<version>+<8-char overlay hash>`), `overlay`, `writable`, and `source` (`bundled` | `config` | `managed`). Stylesheets live at `/kit/:name/kit.css` (and the pinned versioned URL when `:version` matches `effectiveVersion`). Templates and examples are plain text at `/kit/:name/files/:file`. Unmatched paths under `/kit/` return the JSON error envelope (`404 not_found`), not plain text.
+
+Admin writes use the same appearance admin bearer gate (`access.appearance.adminTokens`, else grant admin tokens). `POST /api/kits` creates a managed kit; `PUT /api/kits/:name/files/:file` replaces or adds a file (managed only; bundled/config → `403 read_only`); `PATCH /api/kits/:name` sets a token overlay on any kit (`expectedRevision` from the last list/show; stale → `409 revision_conflict` with `currentRevision`; `tokens: {}` or `null` clears the overlay); `DELETE /api/kits/:name` removes a managed kit.
+
+```bash
+# Patch tokens on the bundled ops kit (admin bearer)
+curl -sS -X PATCH "$BASE/api/kits/ops" \
+  -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedRevision":"'"$REV"'","tokens":{"--radius":"8px"}}'
+```
 
 ## OpenAPI
 

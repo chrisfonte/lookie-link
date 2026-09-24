@@ -263,21 +263,33 @@ change. Drop the alias later once nothing references the old name anymore.
 
 Hosted HTML kits are folders of a stylesheet plus templates/examples that
 agents can list and fetch. The product ships a bundled `ops` kit under
-`kits/ops/`; operators can add more roots:
+`kits/ops/`; operators can add more roots, and the admin API can create kits
+in a server-managed folder:
 
 ```yaml
 kits:
   enabled: true          # default true when any kit exists
   default: ops           # advertised default; used by publish when kit: is omitted (stage 2)
+  managedFolder: ~/.local/share/lookie-link/kits   # API-created kits + <name>.overlay.yaml; created on first write
   folders:               # extra kit roots; each child folder with a kit.yaml is a kit
     - ~/.config/lookie-link/kits
 ```
 
 Each kit folder contains `kit.yaml` (required), `kit.css`, and the HTML/Markdown
-files listed in the manifest. Sources, in precedence order: `kits.folders[]`
-(config) then the bundled `kits/` directory. Same name: config wins. Missing
-folders and invalid manifests are skipped with a console warning; the server
-still starts. Kit folders are watched for live reload like wallpaper folders.
+files listed in the manifest. Sources, in precedence order on name clash:
+`kits.managedFolder` (managed) → `kits.folders[]` (config) → the bundled
+`kits/` directory. Missing folders and invalid manifests are skipped with a
+console warning; the server still starts. Kit folders (including the managed
+folder) are watched for live reload like wallpaper folders; a write through
+the admin API refreshes the catalog immediately without waiting for the
+watcher.
+
+**Token overlays.** `PATCH /api/kits/:name` (same appearance admin bearer gate
+as the appearance API; no new token class) writes
+`<managedFolder>/<name>.overlay.yaml` with a `tokens:` map of CSS custom
+properties. Served `GET /kit/:name/kit.css` appends an overlay block after the
+base stylesheet. `tokens: {}` or `null` clears the overlay file. Overlay and
+managed-folder changes advance the kits catalog `revision`.
 
 ## Server environment variables
 
