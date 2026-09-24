@@ -257,7 +257,7 @@ The `lookie` executable resolves the instance in this order: global `--instance`
 | `lookie kit create --name N --label L --version V --stylesheet FILE [--template FILE]...` | `POST /api/kits` (admin); stylesheet/templates read from disk |
 | `lookie kit upload <name> <file>` | `PUT /api/kits/:name/files/:file` (admin) with `{content}` |
 | `lookie kit set <name> --revision R --token --radius=8px [--token …]` | `PATCH /api/kits/:name` (admin); `--token` value is `--name=value` |
-| `lookie kit delete <name>` | `DELETE /api/kits/:name` (admin; managed only) |
+| `lookie kit delete <name>` | `DELETE /api/kits/:name` (admin; org kits only) |
 | `lookie openapi` | Prints `/openapi.json` |
 | `lookie docs` | Prints the `/api/docs` URL (`--json` wraps it as `{ok,url}`) |
 | `lookie --help`, `lookie --version`, global `--json` | Help, version, and supported JSON output |
