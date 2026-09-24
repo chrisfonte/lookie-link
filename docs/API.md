@@ -97,7 +97,7 @@ curl -sS -X PATCH "$BASE/api/kits/ops" \
 
 ## Mounted content
 
-`GET /view/<repo>/<path>` renders a directory or supported file. HTML requests with `?validate=1` return a JSON report describing local asset/navigation references without exposing host paths. Published content additionally accepts `?version=<positive-integer>`.
+`GET /view/<repo>/<path>` renders a directory or supported file. HTML requests with `?validate=1` return a JSON report describing local asset/navigation references without exposing host paths, plus advisory `kit` and `pageContract` sections (stale-kit / theme-follow / sticky-nav warnings; they never change the status code). Non-HTML targets ignore `validate`. Published content additionally accepts `?version=<positive-integer>`.
 
 `GET /asset/<repo>/<path>` returns only allowlisted image, audio, video, PDF, and text/source extensions with an explicit MIME type. HTML is served as plain text on this route. Unknown extensions return `415`.
 
