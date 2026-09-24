@@ -543,6 +543,151 @@ async function describeLocalReference({ repo, rootPath, rootPrefix, sourceRelati
   return entry;
 }
 
+// Advisory kit/page-contract checks for ?validate=1 (never change HTTP status).
+// Version compare: dotted numeric segments; '+' build metadata is stripped.
+function compareKitVersions(left, right) {
+  const parse = (value) => {
+    if (value === undefined || value === null) return null;
+    const text = String(value).trim();
+    if (!text) return null;
+    const core = text.split('+')[0];
+    const parts = core.split('.').map((part) => {
+      if (part === '' || !/^\d+$/.test(part)) return null;
+      return Number(part);
+    });
+    if (parts.some((part) => part === null)) return null;
+    return parts;
+  };
+  const a = parse(left);
+  const b = parse(right);
+  if (!a || !b) return null;
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i += 1) {
+    const av = a[i] === undefined ? 0 : a[i];
+    const bv = b[i] === undefined ? 0 : b[i];
+    if (av < bv) return -1;
+    if (av > bv) return 1;
+  }
+  return 0;
+}
+
+function collectInlineStyleText(document) {
+  return [...document.querySelectorAll('style')].map((node) => node.textContent || '').join('\n');
+}
+
+function styleLooksLikeUnmarkedKit(text) {
+  if (!text) return false;
+  if (/Ops HTML Kit/i.test(text)) return true;
+  if (/\/\*\s*File:[\s\S]*?kit\.css/i.test(text)) return true;
+  return false;
+}
+
+function analyzeKitPresence(document) {
+  const warnings = [];
+  let detected = null;
+  let source = null;
+
+  const markedStyle = document.querySelector('style[data-kit]');
+  const kitLink = [...document.querySelectorAll('link[rel~="stylesheet"][data-kit], link[rel="stylesheet"][data-kit]')]
+    .find(Boolean) || document.querySelector('link[data-kit]');
+
+  if (markedStyle) {
+    const name = (markedStyle.getAttribute('data-kit') || '').trim() || null;
+    const version = markedStyle.hasAttribute('data-kit-version')
+      ? String(markedStyle.getAttribute('data-kit-version') || '').trim()
+      : null;
+    detected = name ? { name, version: version || null } : null;
+    source = 'inline-style';
+  } else if (kitLink && (kitLink.getAttribute('rel') || '').toLowerCase().includes('stylesheet')) {
+    const nameAttr = kitLink.getAttribute('data-kit');
+    const name = nameAttr && nameAttr !== '' ? String(nameAttr).trim() : null;
+    const version = kitLink.hasAttribute('data-kit-version')
+      ? String(kitLink.getAttribute('data-kit-version') || '').trim()
+      : null;
+    detected = name ? { name, version: version || null } : null;
+    source = 'link';
+    warnings.push('kit-placeholder-not-inlined');
+  } else {
+    const unmarked = [...document.querySelectorAll('style')].find((node) => {
+      if (node.hasAttribute('data-kit')) return false;
+      return styleLooksLikeUnmarkedKit(node.textContent || '');
+    });
+    if (unmarked) {
+      detected = { name: 'ops', version: null };
+      source = 'inline-unmarked';
+      warnings.push('kit-inlined-unmarked');
+    }
+  }
+
+  let current = null;
+  let stale = false;
+  if (detected && detected.name) {
+    const kit = getKit(detected.name);
+    if (!kit) {
+      warnings.push('kit-unknown');
+    } else {
+      current = {
+        name: kit.name,
+        version: kit.version,
+        effectiveVersion: kit.effectiveVersion || kit.version,
+      };
+      if (detected.version == null || detected.version === '') {
+        // Unmarked / missing version: cannot judge freshness.
+      } else {
+        const cmp = compareKitVersions(detected.version, current.version);
+        if (cmp === null) {
+          warnings.push('kit-version-unparsable');
+        } else if (cmp < 0) {
+          stale = true;
+          warnings.push('kit-stale');
+        }
+      }
+    }
+  }
+
+  return { detected, source, current, stale, warnings };
+}
+
+function analyzePageContract(document) {
+  const warnings = [];
+  const root = document.documentElement;
+  const renderAttr = root ? (root.getAttribute('data-lookie-render') || '').trim().toLowerCase() : '';
+  const renderMode = renderAttr === 'viewport' ? 'viewport' : 'content-height';
+
+  const themeFollowNode = document.querySelector('html[data-lookie-follow-theme], body[data-lookie-follow-theme], [data-lookie-follow-theme]');
+  const declared = Boolean(themeFollowNode);
+  const inlineCss = collectInlineStyleText(document);
+  const consumesTokens = /--lookie-/.test(inlineCss);
+  if (declared && !consumesTokens) {
+    warnings.push('theme-follow-inert');
+  }
+
+  const stickyNode = document.querySelector('.topnav, nav[class*="topnav"]');
+  const present = Boolean(stickyNode);
+  let sectionScrollMargin = null;
+  let overflowXHiddenOnAncestor = false;
+  if (present) {
+    sectionScrollMargin = /scroll-margin-top\s*:/.test(inlineCss);
+    if (renderMode !== 'viewport') {
+      warnings.push('sticky-nav-without-viewport-mode');
+    }
+    if (!sectionScrollMargin) {
+      warnings.push('sticky-nav-sections-missing-scroll-margin');
+    }
+    overflowXHiddenOnAncestor = /(html|body)[^{]*\{[^}]*overflow-x\s*:\s*hidden/i.test(inlineCss);
+    if (overflowXHiddenOnAncestor) {
+      warnings.push('overflow-x-hidden-kills-sticky');
+    }
+  }
+
+  return {
+    renderMode,
+    themeFollow: { declared, consumesTokens },
+    stickyNav: { present, sectionScrollMargin, overflowXHiddenOnAncestor },
+    warnings,
+  };
+}
+
 async function buildHtmlRenderValidation({ repo, rootPath, rootPrefix, relativePath, stat, source, rawHtmlEnabled, accessContext }) {
   const dom = new JSDOM(source);
   const { document } = dom.window;
@@ -597,6 +742,9 @@ async function buildHtmlRenderValidation({ repo, rootPath, rootPrefix, relativeP
     ...ref,
   })))).filter(Boolean);
 
+  const kit = analyzeKitPresence(document);
+  const pageContract = analyzePageContract(document);
+
   return {
     ok: true,
     kind: 'html-render-validation',
@@ -616,12 +764,16 @@ async function buildHtmlRenderValidation({ repo, rootPath, rootPrefix, relativeP
     },
     localAssets,
     navigationLinks,
+    kit,
+    pageContract,
     summary: {
       localAssetCount: localAssets.length,
       missingLocalAssetCount: localAssets.filter((entry) => !entry.exists).length,
       unsupportedLocalAssetCount: localAssets.filter((entry) => !entry.supportedAsset).length,
       navigationLinkCount: navigationLinks.length,
       missingNavigationTargetCount: navigationLinks.filter((entry) => !entry.exists).length,
+      kitWarningCount: kit.warnings.length,
+      contractWarningCount: pageContract.warnings.length,
     },
   };
 }
