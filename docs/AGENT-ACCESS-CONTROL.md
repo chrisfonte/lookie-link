@@ -49,7 +49,7 @@ Use `lookie whoami` and `lookie capabilities` before a sensitive workflow. The f
 
 ## Security boundaries
 
-- Network isolation remains required; this is not a public multi-tenant identity service.
+- Network isolation remains required; this is not a public multi-organization identity service.
 - Repository roots, store roots, credentials, private metadata, and internal admin identities must never enter rendered or discovery output.
 - Static scopes do not grant filesystem access outside Lookie-Link.
 - Managed repository and publish stores add symlink/realpath containment to route-level access checks.

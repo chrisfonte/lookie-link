@@ -99,9 +99,11 @@ const {
   loadKits,
   listKits,
   getKit,
+  getDeletedKit,
   getKitRecord,
   readKitFile,
   readKitStylesheet,
+  readKitStylesheetAtVersion,
   kitsRevision,
   kitsEnabled,
   defaultKitName,
@@ -3130,19 +3132,24 @@ function createApp(options = {}) {
         apiError(res, 404, 'not_found', `Unknown kit: ${name}`);
         return;
       }
+      let css = null;
+      let cacheVersion = kit.effectiveVersion;
       if (immutable) {
         const version = String(req.params.version || '');
-        if (version !== kit.effectiveVersion) {
+        css = readKitStylesheetAtVersion(name, version);
+        if (css === null) {
           apiError(res, 404, 'not_found', `Kit version not found: ${name}@${version}`);
           return;
         }
+        cacheVersion = version;
+      } else {
+        css = readKitStylesheet(name);
+        if (css === null) {
+          apiError(res, 404, 'not_found', `Kit stylesheet not found: ${name}`);
+          return;
+        }
       }
-      const css = readKitStylesheet(name);
-      if (css === null) {
-        apiError(res, 404, 'not_found', `Kit stylesheet not found: ${name}`);
-        return;
-      }
-      const etag = `W/"kit-css-${name}-${kit.effectiveVersion}-${kitsRevision()}"`;
+      const etag = `W/"kit-css-${name}-${cacheVersion}-${kitsRevision()}"`;
       res.set('ETag', etag);
       res.set('Cache-Control', immutable ? 'public, max-age=31536000, immutable' : 'no-cache');
       if (req.get('if-none-match') === etag) {
@@ -3172,6 +3179,10 @@ function createApp(options = {}) {
       const name = String(req.params.name || '');
       const kit = getKit(name);
       if (!kit) {
+        if (getDeletedKit(name)) {
+          apiError(res, 410, 'gone', `Kit was deleted: ${name}`);
+          return;
+        }
         apiError(res, 404, 'not_found', `Unknown kit: ${name}`);
         return;
       }

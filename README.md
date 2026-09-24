@@ -62,7 +62,7 @@ Run `lookie --help` for the implemented command grammar. The generated agent pac
 
 ## Network and trust model
 
-Lookie-Link binds for private-network use and is not hardened as a public multi-tenant service. `access.humanDefault` defaults to `full`, preserving unauthenticated browser access. Set it to `restricted` or `none` before enabling a mixed-user instance, then issue least-privilege credentials.
+Lookie-Link binds for private-network use and is not hardened as a public multi-organization service. `access.humanDefault` defaults to `full`, preserving unauthenticated browser access. Set it to `restricted` or `none` before enabling a mixed-user instance, then issue least-privilege credentials.
 
 Read requests may use a bearer header or query token so browser links can remain navigable. Mutations reject query credentials. Agent and CLI usage should always prefer `Authorization: Bearer`.
 

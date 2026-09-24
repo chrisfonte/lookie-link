@@ -207,7 +207,7 @@ async function handleApiResponse(response, auth) {
     ? serverMessage || payload.message
     : `HTTP ${response.status}`;
   if (response.status === 401 || response.status === 403) die(EXIT_AUTH, message, [auth.token]);
-  if (response.status === 404) die(EXIT_NOT_FOUND, message, [auth.token]);
+  if (response.status === 404 || response.status === 410) die(EXIT_NOT_FOUND, message, [auth.token]);
   if (response.status === 409) die(EXIT_CONFLICT, message, [auth.token]);
   die(EXIT_TRANSPORT, message, [auth.token]);
 }
