@@ -259,6 +259,26 @@ Templates that still reference `presentation.theme: harbor-night` keep
 rendering correctly too, so the rename is a config-only, zero-downtime
 change. Drop the alias later once nothing references the old name anymore.
 
+## Kits
+
+Hosted HTML kits are folders of a stylesheet plus templates/examples that
+agents can list and fetch. The product ships a bundled `ops` kit under
+`kits/ops/`; operators can add more roots:
+
+```yaml
+kits:
+  enabled: true          # default true when any kit exists
+  default: ops           # advertised default; used by publish when kit: is omitted (stage 2)
+  folders:               # extra kit roots; each child folder with a kit.yaml is a kit
+    - ~/.config/lookie-link/kits
+```
+
+Each kit folder contains `kit.yaml` (required), `kit.css`, and the HTML/Markdown
+files listed in the manifest. Sources, in precedence order: `kits.folders[]`
+(config) then the bundled `kits/` directory. Same name: config wins. Missing
+folders and invalid manifests are skipped with a console warning; the server
+still starts. Kit folders are watched for live reload like wallpaper folders.
+
 ## Server environment variables
 
 | Variable | Purpose |

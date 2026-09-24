@@ -90,6 +90,9 @@ function printUsage(stream = process.stdout) {
     '  appearance set --revision N [--blur N] [--panel N] [--theme-json JSON] | --json-file FILE',
     '  appearance upload <slug> <dark|light> --name ID <file>',
     '  appearance delete <slug> <dark|light> <id>',
+    '  kits',
+    '  kit show <name>',
+    '  kit file <name> <file>',
     '  openapi',
     '  docs',
     '',
@@ -647,6 +650,33 @@ async function appearanceCommand(auth, args) {
   return die(EXIT_USAGE, 'appearance requires show, set, upload, or delete');
 }
 
+async function kitsCommand(auth) {
+  const response = await request(auth, '/api/kits');
+  formatOutput(await handleApiResponse(response, auth), true);
+}
+
+async function kitCommand(auth, args) {
+  const sub = args[0];
+  if (sub === 'show') {
+    const name = requireArgument(args[1], 'kit name');
+    if (args.length > 2) die(EXIT_USAGE, `unknown kit show option: ${args[2]}`);
+    const response = await request(auth, `/api/kits/${encodeURIComponent(name)}`);
+    return formatOutput(await handleApiResponse(response, auth), true);
+  }
+  if (sub === 'file') {
+    const name = requireArgument(args[1], 'kit name');
+    const file = requireArgument(args[2], 'kit file');
+    if (args.length > 3) die(EXIT_USAGE, `unknown kit file option: ${args[3]}`);
+    const response = await request(auth, `/kit/${encodeURIComponent(name)}/files/${encodeURIComponent(file)}`, {
+      headers: { Accept: '*/*' },
+    });
+    if (!response.ok) await handleApiResponse(response, auth);
+    const text = await response.text();
+    return formatOutput(text, false);
+  }
+  return die(EXIT_USAGE, 'kit requires show or file');
+}
+
 async function authCommand(args, outputJson) {
   const subcommand = args[0];
   if (subcommand === 'status') {
@@ -707,6 +737,8 @@ async function main() {
     case 'annotations': return annotationsCommand(auth, args);
     case 'trash': return trashCommand(auth, args);
     case 'appearance': return appearanceCommand(auth, args);
+    case 'kits': return kitsCommand(auth);
+    case 'kit': return kitCommand(auth, args);
     case 'openapi': {
       const response = await request(auth, '/openapi.json');
       return formatOutput(await handleApiResponse(response, auth), true);

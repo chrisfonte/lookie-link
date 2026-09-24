@@ -77,6 +77,10 @@ Content-Type: application/json
 
 `expectedRevision` must equal the current `revision` (else `409 revision_conflict` with `currentRevision`). Unknown keys, out-of-range values and anything the theme loader would reject return `400 invalid_request` with `details[]`. `themes.<Name>: null` removes a theme from the overlay. Pictures: `POST /api/appearance/themes/:slug/wallpapers/:mode?name=<id>` with the raw image bytes (`image/jpeg`, `image/png`, `image/webp`) writes the server-managed folder only; a mode whose pictures come from another folder (an Omarchy set) answers `409 folder_not_managed`, and the first upload for a mode adopts the managed folder in the overlay. `DELETE …/wallpapers/:mode/:id` removes a managed picture. Every write records an audit event (`appearance.update`, `appearance.wallpaper.upload`, `appearance.wallpaper.delete`).
 
+## Kits
+
+Hosted HTML kits expose design-token stylesheets and fillable templates. `GET /api/kits` lists them (`revision`, weak ETag, `304` on `If-None-Match`); `GET /api/kits/:name` returns one kit. Stylesheets live at `/kit/:name/kit.css` (and immutable `/kit/:name/v/:version/kit.css` when the version matches). Templates and examples are plain text at `/kit/:name/files/:file`.
+
 ## OpenAPI
 
 `GET /openapi.json` returns an OpenAPI 3.1 document for every registered route (forms routes are included only when `forms.enabled` is true), with the shared `Error` envelope, `bearerAuth` and `queryToken` security schemes, and `x-lookie-capability` / `x-lookie-endpoint-key` extensions linking operations to discovery. `GET /api/docs` is a small try-it explorer built from it. Both require only a non-denied caller; a test keeps the document equal to the registered routes and to [CAPABILITIES.md](CAPABILITIES.md).

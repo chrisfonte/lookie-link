@@ -101,6 +101,27 @@ test('lookie appearance show exposes a revision and set PATCHes with expectedRev
   assert.equal(stale.code, 5);
 });
 
+test('lookie kits / kit show / kit file round-trip the hosted kit API', async (t) => {
+  const s = await startServer();
+  t.after(() => s.close());
+  const listed = await s.cli(['kits']);
+  assert.equal(listed.code, 0, listed.stderr);
+  const list = JSON.parse(listed.stdout);
+  assert.equal(list.ok, true);
+  assert.ok(list.kits.some((kit) => kit.name === 'ops' && kit.version === '1.26'));
+
+  const shown = await s.cli(['kit', 'show', 'ops']);
+  assert.equal(shown.code, 0, shown.stderr);
+  assert.equal(JSON.parse(shown.stdout).kit.name, 'ops');
+
+  const file = await s.cli(['kit', 'file', 'ops', 'email-table-template.html']);
+  assert.equal(file.code, 0, file.stderr);
+  assert.match(file.stdout, /<!DOCTYPE html>|<html/i);
+
+  const missing = await s.cli(['kit', 'show', 'no-such-kit']);
+  assert.equal(missing.code, 4);
+});
+
 test('lookie changes accepts ISO --since and sends milliseconds; openapi and docs print', async (t) => {
   const s = await startServer();
   t.after(() => s.close());

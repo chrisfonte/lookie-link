@@ -253,6 +253,10 @@ const ROUTE_FOR_ENDPOINT = Object.freeze({
   repoChanges: ['get', '/api/repos/:repo/changes'],
   repoFileRead: ['get', '/api/repos/:repo/files/*'],
   appearanceTheme: ['get', '/api/appearance/themes/:slug'],
+  kits: ['get', '/api/kits'],
+  kit: ['get', '/api/kits/:name'],
+  kitStylesheet: ['get', '/kit/:name/kit.css'],
+  kitFile: ['get', '/kit/:name/files/:file'],
   forms: ['get', '/forms'],
   formsTemplates: ['get', '/api/forms/templates'],
   formsSubmissions: ['get', '/api/forms/:templateId/submissions'],
@@ -294,6 +298,7 @@ const CAPABILITY_ENDPOINTS = Object.freeze({
   publishRead: ['publishList', 'publishGet'],
   wallpapers: ['wallpaperImage'],
   appearance: ['appearance', 'appearanceTheme'],
+  kits: ['kits', 'kit', 'kitStylesheet', 'kitFile'],
   forms: ['forms', 'formsTemplates', 'formsSubmissions'],
 });
 
