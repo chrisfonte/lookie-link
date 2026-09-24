@@ -73,6 +73,22 @@ curl -X POST http://localhost:9876/api/publish/release-notes \
 
 The `expectedRevision` check and per-slug lock coordinate one Lookie-Link process. Deployments must not run multiple server instances against the same `areaPath`; cross-process locking is not currently provided.
 
+## Kits
+
+Create and update payloads accept an optional `kit` field: a kit name string, or `true` for the configured default kit. When `kit` is set, every `.html`/`.htm` file in the bundle is rewritten at publish time:
+
+1. If the document contains a `<link rel="stylesheet" … data-kit …>` element (any `href`), that element is replaced with an inlined `<style data-kit="<name>" data-kit-version="<version>">…</style>` block holding the current served `kit.css` bytes.
+2. Else if the document already contains `<style data-kit=…>`, it is left alone.
+3. Else the same `<style>` block is inserted into `<head>` immediately after a `<meta charset…>` when present, otherwise at the start of `<head>`; with no `<head>`, the block is prepended to the document.
+
+Non-HTML files are never touched. The stored revision keeps the inlined bytes, so later kit or overlay changes cannot alter published history. The revision record (and the publication / list projections for the current revision) carry `kit: { name, version, revision }` where `revision` is the kits catalog revision at publish time; bundles published without `kit` show `kit: null`. Unknown kit names return `400 invalid_request` with `details: [{ path: "kit", message: "unknown kit: …" }]`; when kits are disabled or none are loaded and `kit` is given, the response is `400 feature_disabled`.
+
+To prepare a page for kit inlining, include a placeholder link such as:
+
+```html
+<link rel="stylesheet" href="kit.css" data-kit>
+```
+
 ## Read Current And Historical Content
 
 - Current rendered entry: `/view/published/release-notes/index.md`

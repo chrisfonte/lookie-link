@@ -138,7 +138,7 @@ Registration is an administrative operation constrained to configured existing a
 
 Publishing requires whole-repo `publish` scope on the configured virtual publish repo. A path-only scope is rejected.
 
-Create payloads contain a non-empty `files` array and may include `slug`, `entryPath`, public `metadata`, and internal `privateMetadata`. File entries default to UTF-8 and may specify `encoding: base64`. Create returns `201` and immutable revision 1.
+Create payloads contain a non-empty `files` array and may include `slug`, `entryPath`, public `metadata`, internal `privateMetadata`, and optional `kit` (a kit name or `true` for the default). When `kit` is set, HTML files in the bundle receive an inlined `<style data-kit data-kit-version>` block at publish time and the revision records `kit: {name,version,revision}`; without `kit`, projections show `kit: null`. Create returns `201` and immutable revision 1.
 
 Updates use the same complete-bundle payload plus a mandatory `expectedRevision`; stale updates return `409` with the safe current projection. Revoke requests require `{ "reason": "..." }`; revoked current and historical reads return `410`.
 

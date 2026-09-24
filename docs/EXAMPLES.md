@@ -83,6 +83,11 @@ curl -s -X POST -H 'content-type: application/json' \
   -d '{"slug":"my-page","entryPath":"index.md","files":[{"path":"index.md","content":"# Hello\n\nPublished through the API.\n"}]}' \
   http://127.0.0.1:9876/api/publish | jq '{ok, slug, revision, viewUrl: .publication.viewUrl}'
 
+# Publish HTML with a kit: placeholder link is replaced by an inlined <style data-kit>
+curl -s -X POST -H 'content-type: application/json' \
+  -d '{"slug":"kit-page","kit":"ops","entryPath":"index.html","files":[{"path":"index.html","content":"<!doctype html><html><head><meta charset=\"utf-8\"><link rel=\"stylesheet\" href=\"kit.css\" data-kit><title>Kit page</title></head><body><h1>Hello</h1></body></html>"}]}' \
+  http://127.0.0.1:9876/api/publish | jq '{ok, slug, kit: .publication.kit, viewUrl: .publication.viewUrl}'
+
 # Read it back (raw), and open /view/published/my-page/index.md in a browser
 curl -s http://127.0.0.1:9876/asset/published/my-page/index.md
 
@@ -109,6 +114,7 @@ keep `error` in your jq filter: a filter like `{ok, revision}` turns a 409
 into a bare `ok: false` with no reason.
 
 The CLI: `lookie publish <file> --slug my-page`, `lookie publish --manifest FILE`,
+`lookie publish <file> --kit ops` (or `--kit default`),
 `lookie publish list [--state active|revoked]`, `lookie publish show <slug> [--version N]`,
 `lookie publish revoke <slug> --reason TEXT`.
 

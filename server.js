@@ -1171,6 +1171,70 @@ function createApp(options = {}) {
     }
   });
 
+  // Optional publish-time kit: name string or true (= configured default).
+  // Resolved here so the store only receives baked CSS + kit metadata.
+  function resolvePublishKit(rawKit) {
+    if (rawKit === undefined || rawKit === null) {
+      return { ok: true, kit: null };
+    }
+    if (!kitsEnabled()) {
+      return {
+        ok: false,
+        code: 'feature_disabled',
+        message: 'Kits are not enabled.',
+        details: [{ path: 'kit', message: 'kits disabled or none loaded' }],
+      };
+    }
+    let name;
+    if (rawKit === true) {
+      name = defaultKitName();
+      if (!name) {
+        return {
+          ok: false,
+          code: 'feature_disabled',
+          message: 'Kits are not enabled.',
+          details: [{ path: 'kit', message: 'kits disabled or none loaded' }],
+        };
+      }
+    } else if (typeof rawKit === 'string' && rawKit.trim()) {
+      name = rawKit.trim();
+    } else {
+      return {
+        ok: false,
+        code: 'invalid_request',
+        message: 'kit must be a kit name or true for the default kit.',
+        details: [{ path: 'kit', message: 'kit name string or true' }],
+      };
+    }
+    const record = getKitRecord(name);
+    if (!record) {
+      return {
+        ok: false,
+        code: 'invalid_request',
+        message: `unknown kit: ${name}`,
+        details: [{ path: 'kit', message: `unknown kit: ${name}` }],
+      };
+    }
+    const css = readKitFile(name, 'kit.css');
+    if (css == null) {
+      return {
+        ok: false,
+        code: 'invalid_request',
+        message: `kit stylesheet unavailable: ${name}`,
+        details: [{ path: 'kit', message: `kit stylesheet unavailable: ${name}` }],
+      };
+    }
+    return {
+      ok: true,
+      kit: {
+        name: record.name,
+        version: record.version,
+        revision: kitsRevision(),
+        css,
+      },
+    };
+  }
+
   app.post('/api/publish', async (req, res) => {
     if (!publishStore || !publishStore.isEnabled()) {
       sendPathJsonError(res, { status: 404, message: 'Publishing is not configured.' });
@@ -1181,8 +1245,16 @@ function createApp(options = {}) {
       sendAccessError(res, accessContext, true);
       return;
     }
+    const kitResolution = resolvePublishKit(req.body && req.body.kit);
+    if (!kitResolution.ok) {
+      apiError(res, 400, kitResolution.code, kitResolution.message, kitResolution.details);
+      return;
+    }
     try {
-      const result = await publishStore.createPublication(req.body || {});
+      const result = await publishStore.createPublication({
+        ...(req.body || {}),
+        kit: kitResolution.kit,
+      });
       const revision = result.publication.revisions.at(-1);
       recordApiKeyAuditEvent('publish.create', accessContext, {
         repo: publishedRepo,
@@ -1393,8 +1465,16 @@ function createApp(options = {}) {
       sendAccessError(res, accessContext, true);
       return;
     }
+    const kitResolution = resolvePublishKit(req.body && req.body.kit);
+    if (!kitResolution.ok) {
+      apiError(res, 400, kitResolution.code, kitResolution.message, kitResolution.details);
+      return;
+    }
     try {
-      const result = await publishStore.updatePublication(req.params.slug, req.body || {});
+      const result = await publishStore.updatePublication(req.params.slug, {
+        ...(req.body || {}),
+        kit: kitResolution.kit,
+      });
       const revision = result.publication.revisions.at(-1);
       recordApiKeyAuditEvent('publish.update', accessContext, {
         repo: publishedRepo,

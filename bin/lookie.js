@@ -72,8 +72,8 @@ function printUsage(stream = process.stdout) {
     '  delete <repo>/<path> [--hard]',
     '  search <query> [--scope REPO]...   (all words must match; "quote" a phrase)',
     '  search suggest <query>',
-    '  publish <file> [--slug SLUG] [--entry-path PATH] [--expected-revision N]',
-    '  publish --manifest FILE [--slug SLUG] [--entry-path PATH] [--expected-revision N]',
+    '  publish <file> [--slug SLUG] [--entry-path PATH] [--expected-revision N] [--kit NAME|default]',
+    '  publish --manifest FILE [--slug SLUG] [--entry-path PATH] [--expected-revision N] [--kit NAME|default]',
     '  publish revoke <slug> --reason TEXT',
     '  publish list [--state active|revoked]',
     '  publish show <slug> [--version N]',
@@ -365,6 +365,7 @@ async function buildPublishPayload(args) {
   let slug;
   let entryPath;
   let expectedRevision;
+  let kit;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (!arg.startsWith('--') && !sourceFile) {
@@ -384,6 +385,10 @@ async function buildPublishPayload(args) {
         die(EXIT_USAGE, '--expected-revision must be a positive integer');
       }
       index += 1;
+    } else if (arg === '--kit') {
+      const value = optionValue(args, index, arg);
+      kit = value === 'default' ? true : value;
+      index += 1;
     } else {
       die(EXIT_USAGE, `unknown publish option: ${arg}`);
     }
@@ -401,6 +406,7 @@ async function buildPublishPayload(args) {
   if (slug) payload.slug = slug;
   if (entryPath) payload.entryPath = entryPath;
   if (expectedRevision !== undefined) payload.expectedRevision = expectedRevision;
+  if (kit !== undefined) payload.kit = kit;
   return payload;
 }
 
