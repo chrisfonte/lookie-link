@@ -1,0 +1,574 @@
+/* File: ~/operations/templates/html-kit/kit.css
+   Ops HTML Kit — reusable design tokens + components for agent-built HTML deliverables.
+   Lookie-safe. v1.24 (2026-08-27).
+
+   USAGE
+   - Inline this file into a <style> block in each page (most reliable everywhere), OR
+     <link rel="stylesheet" href="kit.css"> when served via Lookie-Link (works since the
+     2026-06 asset-MIME fix). See README.md "Lookie-Link notes".
+   - Theme by setting data-theme on <html> or <body>:
+       <body>                       -> coastal (default)
+       <body data-theme="neutral">  -> neutral / business
+       <body data-lookie-follow-theme> -> opt in to Lookie viewer theme tokens
+   - All components read from the design tokens below, so a new theme = a new token block. */
+
+/* ============ DESIGN TOKENS ============ */
+:root,
+[data-theme="coastal"]{
+  --accent:#0a6c8f; --accent-deep:#084a61; --accent-2:#1aa2a2; --pop:#e06b4f;
+  --good:#2e8b57; --warn:#c8821a;
+  --sem-bad:#e06b4f; /* v1.23 semantic "bad/attention" for DATA (see notes at .dg below) */
+  --page:#f4ecd8; --page-2:#fbf7ec; --surface:#ffffff; --surface-2:#e8f4f7;
+  --line:#e4d8b8; --ink:#1d2730; --muted:#5d6b75;
+  --pick:#eafaf0;
+  --on-accent:#ffffff; --on-accent-soft:#e7f1f5; --accent-hover:rgba(255,255,255,.08);
+  --badge-bg:rgba(255,255,255,.16); --badge-line:rgba(255,255,255,.3);
+  --good-bg:#dff3e6; --warn-bg:#fdeede; --info:#2f6bbf; --info-bg:#e2eefb;
+  --callout-bg:#fdf2ef; --success-bg:#eef9f1;
+  --nav-bg:var(--accent-deep); --hero-bg-start:var(--accent); --hero-bg-end:var(--accent-deep); --nav-shadow:0 2px 10px rgba(8,74,97,.25);
+  --shadow-hover:0 10px 26px rgba(8,74,97,.16);
+  --shadow:0 1px 3px rgba(8,74,97,.12),0 6px 18px rgba(8,74,97,.08);
+  --radius:12px;
+}
+[data-theme="neutral"]{
+  --accent:#2f5d8a; --accent-deep:#1f3f5e; --accent-2:#4a7aab; --pop:#c4603f;
+  --good:#2e8b57; --warn:#b9821a;
+  --sem-bad:#c4603f;
+  --page:#eef1f4; --page-2:#f7f9fb; --surface:#ffffff; --surface-2:#eef3f8;
+  --line:#dde3ea; --ink:#1c2530; --muted:#5a6675;
+  --pick:#eef6f0;
+  --on-accent:#ffffff; --on-accent-soft:#e9f1f8; --hero-ink:var(--on-accent); --accent-hover:rgba(255,255,255,.08);
+  --badge-bg:rgba(255,255,255,.16); --badge-line:rgba(255,255,255,.28);
+  --good-bg:#e5f3e9; --warn-bg:#fbefdf; --info:#2f5d8a; --info-bg:#e6eef7;
+  --callout-bg:#fbf0ec; --success-bg:#eef7f1;
+  --nav-bg:var(--accent-deep); --hero-bg-start:var(--accent); --hero-bg-end:var(--accent-deep); --nav-shadow:0 2px 10px rgba(20,40,70,.22);
+  --shadow-hover:0 10px 26px rgba(20,40,70,.14);
+  --shadow:0 1px 3px rgba(20,40,70,.10),0 6px 18px rgba(20,40,70,.07);
+  --radius:10px;
+}
+[data-lookie-follow-theme]{
+  color-scheme: light;
+  --sem-bad:#c4603f; /* v1.23: data semantics stay warm regardless of the viewer scheme */
+  --accent:var(--lookie-link,#2f5d8a); --accent-deep:var(--lookie-accent,#1f3f5e); --accent-2:var(--lookie-link,#4a7aab); --pop:var(--lookie-accent,#c4603f);
+  --page:var(--lookie-bg,#eef1f4); --page-2:var(--lookie-bg-elev,#f7f9fb); --surface:var(--lookie-bg-elev,#ffffff); --surface-2:var(--lookie-bg-code,#eef3f8);
+  --line:var(--lookie-border,#dde3ea); --ink:var(--lookie-text,#1c2530); --muted:var(--lookie-text-soft,#5a6675);
+  --pick:var(--surface-2); --on-accent:#ffffff; --on-accent-soft:#e9f1f8; --hero-ink:var(--ink); --hero-ink-soft:var(--muted);
+  /* v1.21: light theme-follow badges sit on the surface-backed hero (v1.20), where
+     white-alpha chips vanish — tint from the accent and use the hairline instead. */
+  --badge-bg:rgba(255,255,255,.16); --badge-bg:color-mix(in srgb,var(--accent) 8%,var(--surface)); --badge-line:var(--line);
+  --callout-bg:var(--surface-2); --success-bg:var(--surface-2);
+  /* v1.20: theme-follow heroes are surface-backed in light mode too — viewer accent
+     endpoints can be any lightness, so no single ink clears contrast on an accent
+     gradient (github light: 3.07:1 with ink; rose-pine light fails with either ink).
+     Identity carries via the hero rule and accent-colored stats, as in dark mode. */
+  --nav-bg:var(--accent-deep); --hero-bg-start:var(--lookie-bg-elev,#f7f9fb); --hero-bg-end:var(--lookie-bg,#eef1f4); --nav-shadow:0 2px 10px rgba(20,40,70,.22); --shadow-hover:0 10px 26px rgba(20,40,70,.14);
+  --shadow:0 1px 3px rgba(20,40,70,.10),0 6px 18px rgba(20,40,70,.07);
+}
+html[data-lookie-link-theme="dark"] [data-lookie-follow-theme],
+html[data-lookie-link-theme="dark"][data-lookie-follow-theme]{
+  color-scheme: dark;
+  --sem-bad:#e8846b; /* v1.23: warm coral, readable on dark surfaces */
+  --accent:var(--lookie-link,#38bdf8); --accent-deep:var(--lookie-accent,#22c55e); --accent-2:var(--lookie-link,#38bdf8); --pop:var(--lookie-accent,#22c55e);
+  --page:var(--lookie-bg,#111827); --page-2:var(--lookie-bg,#111827); --surface:var(--lookie-bg-elev,#1f2937); --surface-2:var(--lookie-bg-code,#0f172a);
+  --line:var(--lookie-border,#374151); --ink:var(--lookie-text,#e5e7eb); --muted:var(--lookie-text-soft,#9ca3af);
+  --pick:#163426; --pick:color-mix(in srgb,var(--lookie-accent,#22c55e) 14%,var(--surface)); --on-accent:#ffffff; --on-accent-soft:#e5e7eb; --hero-ink:var(--ink); --hero-ink-soft:var(--muted);
+  --badge-bg:rgba(255,255,255,.12); --badge-line:rgba(255,255,255,.22);
+  --good-bg:#1f3a2a; --good-bg:color-mix(in srgb,var(--good) 18%,var(--surface)); --warn-bg:#3a2f1d; --warn-bg:color-mix(in srgb,var(--warn) 18%,var(--surface)); --info-bg:#1f3442; --info-bg:color-mix(in srgb,var(--accent) 18%,var(--surface));
+  --callout-bg:#2b2525; --callout-bg:color-mix(in srgb,var(--pop) 12%,var(--surface)); --success-bg:#182d20; --success-bg:color-mix(in srgb,var(--good) 12%,var(--surface));
+  --nav-bg:var(--lookie-bg-elev,#1f2937); --hero-bg-start:var(--lookie-bg-elev,#1f2937); --hero-bg-end:var(--lookie-bg,#111827); --nav-shadow:0 2px 10px rgba(0,0,0,.35); --shadow-hover:0 10px 26px rgba(0,0,0,.26);
+  --shadow:0 1px 3px rgba(0,0,0,.22),0 6px 18px rgba(0,0,0,.20);
+}
+@media (prefers-color-scheme: dark){
+  [data-theme="auto"]{
+    color-scheme: dark;
+    --sem-bad:#e8846b;
+    --accent:#38bdf8; --accent-deep:#22c55e; --accent-2:#38bdf8; --pop:#22c55e;
+    --page:#111827; --page-2:#111827; --surface:#1f2937; --surface-2:#0f172a;
+    --line:#374151; --ink:#e5e7eb; --muted:#9ca3af;
+    --pick:#163426; --on-accent:#ffffff; --on-accent-soft:#e5e7eb; --hero-ink:var(--ink); --hero-ink-soft:var(--muted);
+    --badge-bg:rgba(255,255,255,.12); --badge-line:rgba(255,255,255,.22);
+    --nav-bg:#1f2937; --hero-bg-start:#1f2937; --hero-bg-end:#111827; --callout-bg:#2b2525; --success-bg:#182d20;
+    --nav-shadow:0 2px 10px rgba(0,0,0,.35); --shadow-hover:0 10px 26px rgba(0,0,0,.26);
+    --shadow:0 1px 3px rgba(0,0,0,.22),0 6px 18px rgba(0,0,0,.20);
+  }
+}
+
+/* ============ BASE ============ */
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  color:var(--ink);background:linear-gradient(180deg,var(--page-2) 0%,var(--page) 100%);padding-bottom:4rem}
+[data-theme],[data-lookie-follow-theme]{color:var(--ink)}
+.wrap{max-width:940px;margin:0 auto;padding:0 20px}
+a{color:var(--accent)}
+h2{font-size:22px;margin:38px 0 12px;color:var(--accent-deep);border-bottom:2px solid var(--line);padding-bottom:6px}
+h3{font-size:16px;margin:18px 0 8px;color:var(--accent-deep)}
+.lead{color:var(--muted);font-size:15px}
+.eyebrow{text-transform:uppercase;letter-spacing:1.5px;font-size:12px;font-weight:700;opacity:.85;margin:0 0 4px}
+
+/* ============ NAV (multi-page bundles) ============ */
+/* topnav v2 (2026-07-31, from the android-agentic-control redesign, adversarially
+   reviewed): ONE non-wrapping ~42px row on an elevated surface with a hairline rule —
+   never the accent slab (it inverted between schemes: loud on light, invisible on
+   dark). Muted labels take the accent on hover. The row scrolls horizontally; the
+   trailing mask fade means a clipped label reads as "there is more", and when the row
+   fits, the fade lands on empty space and cancels itself — no JS. Place BELOW the
+   hero: the title leads, navigation follows. Do not add a brand link (it duplicates
+   the H1) — every link should name a real section, so the nav encodes true structure. */
+.topnav{position:sticky;top:0;z-index:20;background:var(--surface,var(--bg-elev,#1f2937));border-bottom:1px solid var(--line,var(--border,#374151));display:flex;gap:0;flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;-ms-overflow-style:none;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent)}
+.topnav::-webkit-scrollbar{display:none}
+.topnav .inner{display:flex;gap:0;margin:auto;padding:0 12px;max-width:1020px;width:100%}
+.topnav a{color:var(--muted,var(--text-soft,#9ca3af));text-decoration:none;font-size:12px;font-weight:700;letter-spacing:.3px;padding:11px 11px 9px;white-space:nowrap;border-bottom:2px solid transparent;transition:color .12s ease,border-color .12s ease}
+.topnav a:hover,.topnav a:focus-visible{color:var(--accent);border-bottom-color:var(--accent)}
+.topnav a.active{color:var(--accent);border-bottom-color:var(--accent)}
+/* Sticky-nav anchoring (2026-08-13): the sticky topnav overlaps the top ~42px, so a
+   deep-link or in-page jump lands with the target heading hidden UNDER the bar. Every
+   anchored section/heading must reserve that space with scroll-margin-top, or the nav
+   is a trap on click. Applies to the section wrappers the nav links to and to bare
+   anchored headings. :target gets a quiet accent so the landed-on section is obvious. */
+section[id],h2[id],h3[id]{scroll-margin-top:64px}
+section[id]:target>h2,h2[id]:target,h3[id]:target{color:var(--accent)}
+/* GOTCHA (2026-08-13): position:sticky silently dies if ANY ancestor sets
+   overflow-x:hidden — that computes overflow-y to auto and makes the ancestor the
+   scroll container, so top:0 pins to it, not the viewport, and the nav rides away.
+   To suppress horizontal overflow while keeping sticky alive, use overflow-x:clip
+   (no scroll box) on body/wrappers — never overflow-x:hidden above a .topnav.
+   NOTE: neither sticky nor clip helps inside Lookie's content-height iframe (/view),
+   where the OUTER frame scrolls and the document never does — there the persistent
+   nav is Lookie's own native TOC panel, not this in-document bar. */
+
+/* ============ HERO ============ */
+header.hero{position:relative;color:var(--hero-ink,var(--on-accent));padding:40px 0 32px;margin-bottom:22px;overflow:hidden;
+  border-bottom:6px solid var(--pop);background:linear-gradient(135deg,var(--hero-bg-start,var(--accent)) 0%,var(--hero-bg-end,var(--accent-deep)) 100%)}
+header.hero.photo::before{content:"";position:absolute;inset:0;background-size:cover;background-position:center;
+  background-image:var(--hero-img);opacity:.30;z-index:0}
+header.hero .wrap{position:relative;z-index:1}
+header.hero h1{margin:0 0 6px;font-size:30px;letter-spacing:-.4px}
+header.hero .sub{opacity:.94;font-size:16px;margin:0 0 16px}
+.badges{display:flex;flex-wrap:wrap;gap:8px}
+.badge{background:var(--badge-bg);border:1px solid var(--badge-line);padding:5px 12px;border-radius:999px;font-size:13px;font-weight:600}
+
+/* ============ SURFACES ============ */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px;box-shadow:var(--shadow);margin:14px 0}
+.mapframe{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:14px 14px 8px;margin:16px 0}
+.mapframe figcaption{font-size:12.5px;color:var(--muted);text-align:center;margin:2px 0 6px}
+svg{display:block;width:100%;height:auto}
+
+/* ============ TABLES ============ */
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14.5px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--surface-2);color:var(--accent-deep);font-size:12.5px;text-transform:uppercase;letter-spacing:.4px}
+tr:last-child td{border-bottom:none}
+.pick{background:var(--pick)}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.budget tr.total td{font-weight:700;border-top:2px solid var(--line);background:var(--surface-2)}
+/* Wide reference tables: wrap in <div class="table-wrap"> so the table scrolls inside
+   its own container instead of the whole page scrolling sideways on phones (v1.20). */
+.table-wrap{overflow-x:auto;margin:10px 0}
+.table-wrap>table{margin:0}
+
+/* ============ CODE BLOCKS ============ */
+pre{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:12px 0;overflow-x:auto;font-size:13.5px;line-height:1.55}
+
+/* ============ PILLS + CALLOUTS ============ */
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;vertical-align:middle}
+.pill.good{background:var(--good-bg);color:var(--good)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.info{background:var(--info-bg);color:var(--info)}
+.callout{border-left:4px solid var(--pop);background:var(--callout-bg);background:color-mix(in srgb,var(--pop) 8%,var(--surface));padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+.callout.info{border-color:var(--accent);background:var(--surface-2)}
+.callout.good{border-color:var(--good);background:var(--success-bg)}
+.callout.warn{border-color:var(--warn);background:var(--warn-bg)}
+
+/* ============ PHOTOS ============ */
+.gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:12px;margin:14px 0}
+.gallery figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+.gallery img{width:100%;height:170px;object-fit:cover;display:block;background:var(--surface-2)}
+.gallery figcaption{padding:8px 10px;font-size:12px;color:var(--muted)}
+.gallery figcaption b{color:var(--ink);font-size:13px}
+.gallery .attr{font-size:10px;opacity:.7}
+.gallery-dense{grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:10px}
+.gallery-dense figure{border-radius:10px;box-shadow:none}
+.gallery-dense figure>img,.gallery-dense .photo-zoom>img{height:auto;aspect-ratio:4/3}
+.gallery a.photo-zoom{display:block;color:inherit;text-decoration:none;cursor:zoom-in}
+.gallery a.photo-zoom:focus-visible{outline:3px solid var(--focus,var(--accent));outline-offset:-3px}
+/* Script-free Lookie-safe lightbox. Thumbnail href points to #photo-ID; the matching
+   overlay links back to the gallery heading so clicking the stage closes it. */
+.photo-lightbox{position:fixed;inset:0;z-index:1000;display:none;align-items:center;justify-content:center;
+  padding:clamp(12px,3vw,36px);background:rgba(0,0,0,.9);cursor:zoom-out}
+.photo-lightbox:target{display:flex}
+.photo-lightbox img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;
+  border-radius:8px;box-shadow:0 16px 60px rgba(0,0,0,.55)}
+.photo-lightbox::after{content:"×";position:absolute;right:clamp(12px,3vw,36px);top:clamp(12px,3vw,36px);
+  display:grid;place-items:center;width:42px;height:42px;border:1px solid rgba(255,255,255,.45);
+  border-radius:999px;background:rgba(0,0,0,.65);color:#fff;font:400 28px/1 system-ui,sans-serif}
+.photo-lightbox:focus-visible{outline:3px solid #fff;outline-offset:-6px}
+/* v1.18: inside a Lookie embed (html.lookie-embedded, stamped by the embed runtime)
+   the iframe is content-height, so position:fixed covers the whole document instead
+   of the visible viewport. The lightbox becomes an in-flow stage the viewer scrolls
+   to (the runtime translates fragment jumps for the top window, and Escape returns
+   to the stage's close link). Fixed pixel caps, never viewport units — svh/vh
+   resolve against the full-height frame. */
+html.lookie-embedded .photo-lightbox:target{position:relative;inset:auto;z-index:auto;
+  margin:14px 0;padding:16px;max-height:660px;border-radius:12px}
+html.lookie-embedded .photo-lightbox:target img{max-height:600px}
+html.lookie-embedded .photo-lightbox:target::after{right:12px;top:12px}
+/* Defensive display contract for surfaces that inject these controls. Current raw-HTML
+   iframes may inject none; CSS cannot create annotation targets. */
+.lookie-annotate-btn{display:none}
+html.lookie-annotations-active .lookie-annotate-btn{display:inline-flex}
+.banner-photo{width:100%;height:230px;object-fit:cover;border-radius:var(--radius);display:block;border:1px solid var(--line);box-shadow:var(--shadow);margin:10px 0 4px;background:var(--surface-2)}
+
+/* ============ CHIPS / LINK BUTTONS ============ */
+.links{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 2px}
+.chip{display:inline-flex;align-items:center;gap:5px;text-decoration:none;font-size:13px;font-weight:600;
+  padding:6px 11px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--accent)}
+.chip:hover{background:var(--surface-2)}
+.chip.go{color:var(--on-accent);background:var(--pop);border-color:var(--pop)}
+.chip.go:hover{filter:brightness(1.05)}
+
+/* ============ GRIDS: cards / tiles / chooser ============ */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:14px 0}
+.grid-2 .card,.grid-3 .card{margin:0}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px}
+.tile h3{margin-top:0}
+.tile .stat{font-size:22px;font-weight:800;color:var(--accent-deep)}
+.tile .stat small{font-size:12px;color:var(--muted);font-weight:600}
+.tile .label{font-size:12px;text-transform:uppercase;letter-spacing:.45px;color:var(--muted);font-weight:750}
+.tile .note{font-size:13px;color:var(--muted);margin:.25rem 0 0}
+.choose{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:16px 0}
+.choose a{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:14px;
+  overflow:hidden;box-shadow:var(--shadow);text-decoration:none;color:var(--ink);transition:transform .12s,box-shadow .12s}
+.choose a:hover{transform:translateY(-3px);box-shadow:var(--shadow-hover)}
+.choose img{width:100%;height:150px;object-fit:cover;background:var(--surface-2)}
+.choose .body{padding:12px 14px}
+.choose .body h3{margin:0 0 4px;color:var(--accent-deep)}
+.choose .body p{margin:0;font-size:13.5px;color:var(--muted)}
+.choose .tag{display:inline-block;font-size:11px;font-weight:700;color:var(--pop);margin-top:8px}
+
+/* ============ TIMELINE ============ */
+.timeline{list-style:none;padding:0;margin:10px 0}
+.timeline li{position:relative;padding:0 0 16px 26px;border-left:2px solid var(--line);margin-left:8px}
+.timeline li:last-child{border-left-color:transparent}
+.timeline li::before{content:"";position:absolute;left:-7px;top:3px;width:12px;height:12px;border-radius:50%;background:var(--accent);border:2px solid var(--surface);box-shadow:0 0 0 1px var(--accent)}
+.timeline .day{font-weight:700;color:var(--accent-deep)}
+.timeline .det{color:var(--muted);font-size:14px}
+
+/* ============ LISTS ============ */
+ul.todo{list-style:none;padding:0}
+ul.todo li{padding:7px 0 7px 28px;position:relative;border-bottom:1px dashed var(--line)}
+ul.todo li::before{content:"\2610";position:absolute;left:4px;top:6px;color:var(--pop);font-size:16px}
+ul.tick{list-style:none;padding:0}
+ul.tick li{padding:5px 0 5px 26px;position:relative}
+ul.tick li::before{content:"\2713";position:absolute;left:4px;top:5px;color:var(--good);font-weight:800}
+
+/* ============ RESEARCH PACKETS / DECISION BRIEFS ============ */
+.signal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:14px 0}
+.signal{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;box-shadow:var(--shadow)}
+.signal strong{display:block;color:var(--accent-deep);font-size:14px;margin-bottom:2px}
+.signal span{display:block;color:var(--muted);font-size:13px;line-height:1.45}
+.scorebar{display:grid;grid-template-columns:150px 1fr 42px;gap:10px;align-items:center;margin:8px 0;font-size:14px}
+.scorebar .track{height:9px;border-radius:999px;background:var(--surface-2);overflow:hidden;border:1px solid var(--line)}
+.scorebar .fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent-2),var(--accent))}
+.scorebar .val{text-align:right;font-weight:800;color:var(--accent-deep);font-variant-numeric:tabular-nums}
+.evidence-list{display:grid;gap:9px;margin:12px 0}
+.evidence{border:1px solid var(--line);background:var(--surface);border-radius:var(--radius);padding:11px 13px;box-shadow:var(--shadow)}
+.evidence .src-title{font-weight:800;color:var(--accent-deep)}
+.evidence .src-note{font-size:13px;color:var(--muted);margin-top:2px}
+.risk-matrix{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:12px 0}
+.risk{border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);padding:12px 14px;box-shadow:var(--shadow)}
+.risk h3{margin:0 0 4px}.risk p{margin:0;color:var(--muted);font-size:13.5px}
+.risk.high{border-left:4px solid var(--pop)}.risk.medium{border-left:4px solid var(--warn)}.risk.low{border-left:4px solid var(--good)}
+/* Inline confidence language stays visually subordinate to the claim it qualifies.
+   .conf is the legacy alias retained for research pages promoted before v1.24. */
+.confidence,.conf{font-size:12.5px;color:var(--muted);font-style:italic;line-height:1.55}
+/* Evidence images are claims' source material, not decorative cards. Use a semantic
+   <figure> so the caption and its confidence/source language travel with the image. */
+figure.evidence-figure{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px;box-shadow:var(--shadow);margin:14px 0}
+.evidence-figure img{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.evidence-figure figcaption{margin:8px 0 0;font-size:12.5px;color:var(--muted);font-style:italic;line-height:1.55}
+
+/* ============ ACCORDION (tap-to-expand; native <details>, NO JavaScript — Lookie-safe) ============ */
+/* Each item: <details class="place" name="GROUP"><summary>Title</summary><div class="pane">…</div></details>
+   A shared name= makes the group exclusive (one open at a time; click an open one to close it). */
+details.place{border:1px solid var(--line);border-radius:10px;margin:8px 0;background:var(--surface);box-shadow:var(--shadow)}
+details.place>summary{cursor:pointer;padding:11px 14px;font-weight:700;color:var(--accent);list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px}
+details.place>summary::-webkit-details-marker{display:none}
+details.place>summary::after{content:"\25B8";color:var(--muted);font-weight:400}
+details.place[open]>summary::after{content:"\25BE"}
+details.place[open]>summary{border-bottom:1px solid var(--line)}
+details.place .pane{padding:10px 14px 12px}
+details.place .pane p{margin:0 0 8px}
+
+/* ============ RATING (review stars for venue/vendor/product research) ============ */
+/* <span class="rating"><span class="stars" aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9734;</span> 4.7 <span class="count">(85 reviews, Google)</span></span>
+   Keep the numeric value as plain text beside the stars so the rating stays searchable/agent-readable. */
+.rating{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:800;color:var(--accent-deep);white-space:nowrap}
+.rating .stars{color:var(--warn);letter-spacing:1.5px;font-size:14px}
+.rating .count{color:var(--muted);font-weight:600;white-space:normal}
+
+/* ============ SLIDES (deck layer — NO JavaScript; document/deck/PDF from one file) ============ */
+/* Usage: <body class="deck"> with one <section class="slide slide--{cover|divider|statement|end}">
+   per slide, content inside <div class="slide-canvas">. Three tiers:
+   - document (default): stacked slides; min() cap because auto-sized iframes (Lookie) explode
+     100svh and push centered content off-screen — never use uncapped viewport units here.
+   - deck (landscape >=700px): root scroll-snap; Space/PageDown advance natively; 16:9 canvas
+     sized to fit either axis, type in cqi so the composition scales like an image.
+   - print/PDF: the PAGE must add its own tiny print block — @page cannot be scoped in this
+     shared file or it would resize printing for every kit page:
+       @media print{ @page{size:1280px 720px;margin:0} }
+     Export with headless Chromium --print-to-pdf (the print dialog re-letterboxes).
+   A wrapper <div class="deck"> gives slide styling without deck scrolling (for demos/embeds). */
+body.deck{padding-bottom:0}
+.deck .slide{min-height:min(100svh,640px);display:grid;place-items:center;padding:32px 20px}
+.deck .slide-canvas{width:100%;max-width:820px}
+.deck-hint{position:fixed;right:14px;bottom:12px;z-index:30;font-size:12px;color:var(--muted);
+  background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 12px;box-shadow:var(--shadow);opacity:.85}
+.deck .slide .eyebrow{color:var(--pop);font-size:.8rem;margin:0 0 .5em}
+.deck .slide h1{font-size:2.4rem;line-height:1.08;letter-spacing:-.02em;color:var(--accent-deep);margin:0 0 .35em}
+.deck .slide h2{font-size:1.9rem;line-height:1.12;letter-spacing:-.015em;color:var(--accent-deep);border-bottom:none;padding-bottom:0;margin:0 0 .55em}
+.deck .slide p.lead{font-size:1.1rem;color:var(--muted);margin:0 0 1em}
+.deck .slide li{margin:.35em 0}
+.deck .slide--statement .statement{font-size:1.9rem;line-height:1.25;font-weight:750;color:var(--accent-deep);letter-spacing:-.015em;margin:0}
+.deck .slide--statement .attrib{color:var(--muted);margin-top:1em;font-size:1rem}
+.deck .slide--cover,.deck .slide--divider,.deck .slide--end{color:var(--hero-ink,var(--on-accent));
+  background:linear-gradient(135deg,var(--hero-bg-start,var(--accent)) 0%,var(--hero-bg-end,var(--accent-deep)) 100%)}
+.deck .slide--cover h1,.deck .slide--divider h2,.deck .slide--end h2{color:var(--hero-ink,var(--on-accent))}
+.deck .slide--cover .eyebrow,.deck .slide--divider .eyebrow,.deck .slide--end .eyebrow,
+.deck .slide--cover p.lead,.deck .slide--divider p.lead,.deck .slide--end p.lead{color:var(--hero-ink-soft,var(--on-accent-soft))}
+.deck .slide--divider .secno{font-size:5rem;font-weight:800;line-height:1;opacity:.35;display:block;margin-bottom:.1em}
+.deck aside.notes{display:none}
+@media (min-width:700px) and (orientation:landscape){
+  html:has(body.deck){scroll-snap-type:y mandatory;scroll-behavior:smooth}
+  body.deck .slide{scroll-snap-align:start;scroll-snap-stop:always;height:100svh;min-height:0;padding:0}
+  body.deck .slide-canvas{aspect-ratio:16/9;width:min(94vw,calc(94svh * 16 / 9));max-width:none;
+    container-type:inline-size;display:flex;flex-direction:column;justify-content:center;padding:0 5cqi}
+  body.deck .slide .eyebrow{font-size:1.5cqi}
+  body.deck .slide h1{font-size:6.5cqi}
+  body.deck .slide h2{font-size:4.5cqi}
+  body.deck .slide p.lead{font-size:2.2cqi}
+  body.deck .slide p,body.deck .slide li,body.deck .slide td{font-size:2.1cqi}
+  body.deck .slide li{margin:.5cqi 0}
+  body.deck .slide--statement .statement{font-size:4.2cqi}
+  body.deck .slide--statement .attrib{font-size:1.9cqi}
+  body.deck .slide--divider .secno{font-size:14cqi}
+  body.deck .badge{font-size:1.6cqi;padding:.5cqi 1.2cqi}
+  body.deck .tile{padding:1.6cqi 1.8cqi;border-radius:1cqi}
+  body.deck .tile .stat{font-size:3.2cqi}
+  body.deck .tile .stat small{font-size:1.4cqi}
+  body.deck .tile .label{font-size:1.3cqi}
+  body.deck .tile .note{font-size:1.6cqi}
+  body.deck .grid-2,body.deck .grid-3{gap:1.4cqi}
+  body.deck .callout{font-size:1.9cqi;padding:1.2cqi 1.6cqi}
+  body.deck .pill{font-size:1.4cqi;padding:.25cqi 1cqi}
+  body.deck ul.tick li{padding:.5cqi 0 .5cqi 3cqi}
+  body.deck th,body.deck td{padding:.7cqi .8cqi}
+}
+@media (prefers-reduced-motion: reduce){ html:has(body.deck){scroll-behavior:auto} }
+@media print{
+  html:has(body.deck){scroll-snap-type:none}
+  body.deck{background:var(--page-2)}
+  body.deck .deck-hint,body.deck .topnav{display:none}
+  body.deck .slide{width:1280px;height:720px;min-height:0;break-after:page;break-inside:avoid;overflow:hidden;padding:0;display:grid;place-items:center}
+  body.deck .slide:last-child{break-after:auto}
+  body.deck .slide-canvas{width:1280px;height:720px;max-width:none;container-type:inline-size;
+    display:flex;flex-direction:column;justify-content:center;padding:0 64px}
+  body.deck .slide .eyebrow{font-size:19px}
+  body.deck .slide h1{font-size:83px}
+  body.deck .slide h2{font-size:58px}
+  body.deck .slide p.lead{font-size:28px}
+  body.deck .slide p,body.deck .slide li,body.deck .slide td{font-size:27px}
+  body.deck .slide--statement .statement{font-size:54px}
+  body.deck .slide--statement .attrib{font-size:24px}
+  body.deck .slide--divider .secno{font-size:180px}
+  body.deck .badge{font-size:20px;padding:6px 15px}
+  body.deck .tile .stat{font-size:41px}
+  body.deck .tile .stat small{font-size:18px}
+  body.deck .tile .label{font-size:17px}
+  body.deck .tile .note{font-size:20px}
+  body.deck .callout{font-size:24px}
+  body.deck .pill{font-size:18px}
+  body.deck{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+}
+
+/* ============ MISC ============ */
+.note-intro{border-left:4px solid var(--accent);background:var(--surface-2);padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+.backlink{display:inline-block;margin:18px 0 0;font-weight:600;font-size:14px}
+.src{font-size:13px;color:var(--muted)}
+footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+.est{font-size:11px;color:var(--warn);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+@media(max-width:760px){.grid-2,.grid-3{grid-template-columns:1fr}}
+
+/* ============ STACK-UP (claim vs. record) — v1.15 ============ */
+/* Two-voice comparison: quoted claims/forecasts on the left border-accent,
+   what-actually-happened on the pop accent. Grade markers are plain text
+   (e.g. direct hit / partial / miss) so the pattern stays JS-free and
+   screen-reader friendly. Collapses to one column on narrow screens. */
+.stackup{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:14px 0}
+@media(max-width:760px){.stackup{grid-template-columns:1fr}}
+.stackup h4{margin:0 0 6px}
+.stackup-claim{border-left:4px solid var(--accent-2);padding:8px 12px;margin:8px 0;background:var(--surface-2);border-radius:0 8px 8px 0;font-style:italic}
+.stackup-record{border-left:4px solid var(--pop);padding:8px 12px;margin:8px 0;background:var(--callout-bg);border-radius:0 8px 8px 0}
+.stackup-grade{font-weight:700}
+.stackup-src{font-size:.85em;color:var(--muted)}
+
+
+/* ---- Lookie scheme-follow (v1.17, 2026-07-29) ----
+   Promoted from the per-page <style id="scheme-follow-fix"> blocks (cruise gallery / venue catalog).
+   Provides --lookie-* variable sets per viewer scheme+theme so pages with data-lookie-follow-theme
+   render correctly under every Lookie scheme without carrying a private copy of this block.
+   Page-specific brand schemes (carnival-vista etc.) remain page-scoped; only generic viewer schemes here. */
+html[data-lookie-link-scheme="slate"][data-lookie-link-theme="dark"],html[data-lookie-link-scheme="slate"][data-lookie-link-theme="dark"] :root{--lookie-bg:#0c0e10;--lookie-bg-elev:#111416;--lookie-bg-code:#161a1e;--lookie-text:#c3d8e2;--lookie-text-soft:#8da0b0;--lookie-accent:#b5cad4;--lookie-border:#42494f;--lookie-link:#8fc0d4}
+html[data-lookie-link-scheme="slate"][data-lookie-link-theme="light"],html[data-lookie-link-scheme="slate"][data-lookie-link-theme="light"] :root{--lookie-bg:#f4f6f8;--lookie-bg-elev:#ffffff;--lookie-bg-code:#edf1f5;--lookie-text:#1a2630;--lookie-text-soft:#5a6b78;--lookie-accent:#3a7a92;--lookie-border:#d0dae3;--lookie-link:#1f6d8a}
+html[data-lookie-link-scheme="teal"][data-lookie-link-theme="dark"],html[data-lookie-link-scheme="teal"][data-lookie-link-theme="dark"] :root{--lookie-bg:#0f1419;--lookie-bg-elev:#172029;--lookie-bg-code:#111922;--lookie-text:#dce4ee;--lookie-text-soft:#9fb0c2;--lookie-accent:#55d0b3;--lookie-border:#2a3a49;--lookie-link:#9bd7ff}
+html[data-lookie-link-scheme="teal"][data-lookie-link-theme="light"],html[data-lookie-link-scheme="teal"][data-lookie-link-theme="light"] :root{--lookie-bg:#ecfdf5;--lookie-bg-elev:#ffffff;--lookie-bg-code:#d1fae5;--lookie-text:#064e3b;--lookie-text-soft:#047857;--lookie-accent:#059669;--lookie-border:#a7f3d0;--lookie-link:#0d9488}
+html[data-lookie-link-scheme="nord"][data-lookie-link-theme="dark"],html[data-lookie-link-scheme="nord"][data-lookie-link-theme="dark"] :root{--lookie-bg:#2e3440;--lookie-bg-elev:#3b4252;--lookie-bg-code:#2e3440;--lookie-text:#eceff4;--lookie-text-soft:#d8dee9;--lookie-accent:#88c0d0;--lookie-border:#4c566a;--lookie-link:#81a1c1}
+html[data-lookie-link-scheme="nord"][data-lookie-link-theme="light"],html[data-lookie-link-scheme="nord"][data-lookie-link-theme="light"] :root{--lookie-bg:#eceff4;--lookie-bg-elev:#ffffff;--lookie-bg-code:#e5e9f0;--lookie-text:#2e3440;--lookie-text-soft:#4c566a;--lookie-accent:#5e81ac;--lookie-border:#d8dee9;--lookie-link:#5e81ac}
+html[data-lookie-link-scheme="rose-pine"][data-lookie-link-theme="dark"],html[data-lookie-link-scheme="rose-pine"][data-lookie-link-theme="dark"] :root{--lookie-bg:#191724;--lookie-bg-elev:#1f1d2e;--lookie-bg-code:#26233a;--lookie-text:#e0def4;--lookie-text-soft:#908caa;--lookie-accent:#c4a7e7;--lookie-border:#393552;--lookie-link:#9ccfd8}
+html[data-lookie-link-scheme="rose-pine"][data-lookie-link-theme="light"],html[data-lookie-link-scheme="rose-pine"][data-lookie-link-theme="light"] :root{--lookie-bg:#faf4ed;--lookie-bg-elev:#fffaf3;--lookie-bg-code:#f2e9e1;--lookie-text:#575279;--lookie-text-soft:#797593;--lookie-accent:#907aa9;--lookie-border:#dfdad9;--lookie-link:#56949f}
+html[data-lookie-link-scheme="monokai"][data-lookie-link-theme="dark"],html[data-lookie-link-scheme="monokai"][data-lookie-link-theme="dark"] :root{--lookie-bg:#272822;--lookie-bg-elev:#2d2e27;--lookie-bg-code:#1e1f1a;--lookie-text:#f8f8f2;--lookie-text-soft:#a6a78a;--lookie-accent:#a6e22e;--lookie-border:#49483e;--lookie-link:#66d9ef}
+html[data-lookie-link-scheme="monokai"][data-lookie-link-theme="light"],html[data-lookie-link-scheme="monokai"][data-lookie-link-theme="light"] :root{--lookie-bg:#fdfdf6;--lookie-bg-elev:#ffffff;--lookie-bg-code:#f5f5ec;--lookie-text:#272822;--lookie-text-soft:#6e7066;--lookie-accent:#4d7a0f;--lookie-border:#e0e0d0;--lookie-link:#0b7e8a}
+html[data-lookie-link-scheme="solarized"][data-lookie-link-theme="dark"],html[data-lookie-link-scheme="solarized"][data-lookie-link-theme="dark"] :root{--lookie-bg:#002b36;--lookie-bg-elev:#073642;--lookie-bg-code:#002028;--lookie-text:#839496;--lookie-text-soft:#657b83;--lookie-accent:#2aa198;--lookie-border:#586e75;--lookie-link:#268bd2}
+html[data-lookie-link-scheme="solarized"][data-lookie-link-theme="light"],html[data-lookie-link-scheme="solarized"][data-lookie-link-theme="light"] :root{--lookie-bg:#fdf6e3;--lookie-bg-elev:#eee8d5;--lookie-bg-code:#f5efdc;--lookie-text:#657b83;--lookie-text-soft:#93a1a1;--lookie-accent:#2aa198;--lookie-border:#d3cbab;--lookie-link:#268bd2}
+html[data-lookie-link-scheme="github"][data-lookie-link-theme="dark"],html[data-lookie-link-scheme="github"][data-lookie-link-theme="dark"] :root{--lookie-bg:#0d1117;--lookie-bg-elev:#161b22;--lookie-bg-code:#1c2128;--lookie-text:#e6edf3;--lookie-text-soft:#8b949e;--lookie-accent:#58a6ff;--lookie-border:#30363d;--lookie-link:#58a6ff}
+html[data-lookie-link-scheme="github"][data-lookie-link-theme="light"],html[data-lookie-link-scheme="github"][data-lookie-link-theme="light"] :root{--lookie-bg:#ffffff;--lookie-bg-elev:#f6f8fa;--lookie-bg-code:#f6f8fa;--lookie-text:#1f2328;--lookie-text-soft:#656d76;--lookie-accent:#0969da;--lookie-border:#d0d7de;--lookie-link:#0969da}
+html[data-lookie-link-scheme="ember"][data-lookie-link-theme="dark"],html[data-lookie-link-scheme="ember"][data-lookie-link-theme="dark"] :root{--lookie-bg:#1a1008;--lookie-bg-elev:#221810;--lookie-bg-code:#160e06;--lookie-text:#f0dcc8;--lookie-text-soft:#b89a78;--lookie-accent:#e8943a;--lookie-border:#3d2e1a;--lookie-link:#f0a850}
+html[data-lookie-link-scheme="ember"][data-lookie-link-theme="light"],html[data-lookie-link-scheme="ember"][data-lookie-link-theme="light"] :root{--lookie-bg:#fdf6ee;--lookie-bg-elev:#ffffff;--lookie-bg-code:#f8efe2;--lookie-text:#3d2200;--lookie-text-soft:#8a6530;--lookie-accent:#c06a10;--lookie-border:#e8d5bb;--lookie-link:#b05800}
+html[data-lookie-link-scheme="noir"][data-lookie-link-theme="dark"],html[data-lookie-link-scheme="noir"][data-lookie-link-theme="dark"] :root{--lookie-bg:#000000;--lookie-bg-elev:#0a0a0a;--lookie-bg-code:#050505;--lookie-text:#f0f0f0;--lookie-text-soft:#888888;--lookie-accent:#ffffff;--lookie-border:#2a2a2a;--lookie-link:#cccccc}
+html[data-lookie-link-scheme="noir"][data-lookie-link-theme="light"],html[data-lookie-link-scheme="noir"][data-lookie-link-theme="light"] :root{--lookie-bg:#ffffff;--lookie-bg-elev:#fafafa;--lookie-bg-code:#f0f0f0;--lookie-text:#0a0a0a;--lookie-text-soft:#666666;--lookie-accent:#000000;--lookie-border:#d0d0d0;--lookie-link:#333333}
+html[data-lookie-link-scheme="indigo"][data-lookie-link-theme="dark"],html[data-lookie-link-scheme="indigo"][data-lookie-link-theme="dark"] :root{--lookie-bg:#12101e;--lookie-bg-elev:#1a1730;--lookie-bg-code:#0e0c18;--lookie-text:#d8d0f0;--lookie-text-soft:#9088b8;--lookie-accent:#a78bfa;--lookie-border:#302a50;--lookie-link:#c4b5fd}
+html[data-lookie-link-scheme="indigo"][data-lookie-link-theme="light"],html[data-lookie-link-scheme="indigo"][data-lookie-link-theme="light"] :root{--lookie-bg:#f5f3ff;--lookie-bg-elev:#ffffff;--lookie-bg-code:#ede9fe;--lookie-text:#1e1b4b;--lookie-text-soft:#6366a0;--lookie-accent:#6d28d9;--lookie-border:#ddd6fe;--lookie-link:#4f46e5}
+html[data-lookie-link-scheme="fireflies"][data-lookie-link-theme="dark"],html[data-lookie-link-scheme="fireflies"][data-lookie-link-theme="dark"] :root{--lookie-bg:#081220;--lookie-bg-elev:#132333;--lookie-bg-code:#0e1c2a;--lookie-text:#f2f6f0;--lookie-text-soft:#9fb0bd;--lookie-accent:#bfd22b;--lookie-border:#24384c;--lookie-link:#ddf24b}
+html[data-lookie-link-scheme="fireflies"][data-lookie-link-theme="light"],html[data-lookie-link-scheme="fireflies"][data-lookie-link-theme="light"] :root{--lookie-bg:#ffffff;--lookie-bg-elev:#ecf2e6;--lookie-bg-code:#eef3ea;--lookie-text:#14202b;--lookie-text-soft:#4c5b66;--lookie-accent:#75820a;--lookie-border:#d3ddd0;--lookie-link:#55660a}
+html[data-lookie-link-scheme="folly-beach"][data-lookie-link-theme="dark"],html[data-lookie-link-scheme="folly-beach"][data-lookie-link-theme="dark"] :root{--lookie-bg:#0b161b;--lookie-bg-elev:#12212a;--lookie-bg-code:#0e1b22;--lookie-text:#d3e8e3;--lookie-text-soft:#93b1ad;--lookie-accent:#9fdcc8;--lookie-border:#2f4750;--lookie-link:#82ccda}
+html[data-lookie-link-scheme="folly-beach"][data-lookie-link-theme="light"],html[data-lookie-link-scheme="folly-beach"][data-lookie-link-theme="light"] :root{--lookie-bg:#f6f0e2;--lookie-bg-elev:#fffdf6;--lookie-bg-code:#eee5d2;--lookie-text:#20363b;--lookie-text-soft:#526458;--lookie-accent:#20666e;--lookie-border:#dbcfb4;--lookie-link:#155f6d}
+
+
+/* pending state (2026-07-31, from the venue sparse/pending doctrine): a value the
+   source YAML does not yet record renders as an HONEST pending marker — never a
+   fake price, count, or date. Pair with a short reason ("awaiting receipt"). */
+.pending{display:inline-block;font-size:12px;font-weight:600;letter-spacing:.2px;color:var(--muted,var(--text-soft,#9ca3af));border:1px dashed var(--line,var(--border,#4b5563));border-radius:999px;padding:2px 10px;font-style:italic}
+
+
+/* ============ DATA DIAGRAMS + HERO STAT BAND (v1.23, 2026-08-21) ============ */
+/* Promoted from the grok-bot-usage-limits research package after screenshot
+   verification in Lookie light AND dark. THE RULE THAT MOTIVATED THIS BLOCK:
+   data semantics must never ride decorative tokens. Theme-follow remaps --pop
+   to the VIEWER's accent (github dark: green), which silently inverted a
+   "100% burned" gauge into success-green. Anything that MEANS bad/over/exhausted
+   uses var(--sem-bad) (pinned warm in every theme block above); anything that
+   MEANS good uses var(--good). Decorative flair keeps using --pop. */
+
+/* .dg — diagram card: an eyebrow + title + one visual argument per card. */
+.dg{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:24px 26px;margin:22px 0}
+.dg .dg-eyebrow{text-transform:uppercase;letter-spacing:1px;font-size:11px;font-weight:800;color:var(--muted);margin:0 0 4px}
+.dg .dg-title{font-size:21px;font-weight:850;color:var(--accent-deep);margin:0 0 16px;line-height:1.2;letter-spacing:-.3px}
+.dg .dg-note{font-size:12.5px;color:var(--muted);font-style:italic;margin:10px 0 0}
+
+/* .dg-ladder — known-vs-unknown comparison rows: label | scaled bar+value | qualitative
+   label (+ optional big "?" via .lq). Bars: width is data — set inline, scaled to the max. */
+.dg-ladder{display:flex;flex-direction:column;gap:8px}
+.dg-ladder .lrow{display:flex;gap:12px;align-items:center;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:9px 12px;flex-wrap:wrap}
+.dg-ladder .lrow.na{border-style:dashed;background:var(--page-2)}
+.dg-ladder .lname{width:200px;font-weight:700;font-size:13.5px}
+.dg-ladder .lname small{color:var(--muted);font-weight:600}
+.dg-ladder .lbarwrap{width:250px;display:flex;align-items:center;gap:8px}
+.dg-ladder .lbar{height:15px;border-radius:999px;background:linear-gradient(90deg,var(--accent-deep),var(--accent))}
+.dg-ladder .lbar.lo{background:linear-gradient(90deg,var(--accent),var(--accent-2));opacity:.7}
+.dg-ladder .lprice{font-size:13px;font-weight:800;color:var(--accent-deep)}
+.dg-ladder .llabel{flex-grow:1;display:flex;align-items:center;gap:8px;min-width:240px}
+.dg-ladder .lwords{font-size:12.5px;font-weight:700;color:var(--warn)}
+.dg-ladder .lq{font-size:17px;font-weight:900;color:var(--sem-bad)}
+.dg-ladder .lrow.na .lname,.dg-ladder .lrow.na .lwords{color:var(--muted)}
+
+/* .dg-flow — left-to-right process boxes with inline-SVG arrows (.farrow uses
+   currentColor, so it themes for free). Add .hot to the box that carries the risk. */
+.dg-flow{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap}
+.dg-flow .fbox{flex:1 1 180px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:11px 13px}
+.dg-flow .fbox.hot{border:2px solid var(--warn);background:color-mix(in srgb,var(--warn) 8%,var(--surface))}
+.dg-flow .fk{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 2px}
+.dg-flow .fbox.hot .fk{color:var(--warn)}
+.dg-flow .fv{font-size:14.5px;font-weight:700;margin:0 0 3px}
+.dg-flow .fd{font-size:12.5px;color:var(--muted);margin:0}
+.dg-flow .farrow{display:flex;align-items:center;color:var(--muted);flex:0 0 auto}
+
+/* .dg-branch — a decision's outcomes as tag + body rows (Off/On, Yes/No). Tag color
+   states the SEMANTIC of taking that branch: .ok (safe) / .bad (open risk). */
+.dg-branch{display:flex;gap:10px;align-items:center;margin-top:10px}
+.dg-branch .btag{flex:0 0 52px;font-size:11.5px;font-weight:800;text-align:center;border-radius:999px;padding:3px 0;border:1px solid}
+.dg-branch .btag.ok,.dg-branch .btag.no{color:var(--good);border-color:var(--good)}
+.dg-branch .btag.bad,.dg-branch .btag.yes{color:var(--sem-bad);border-color:var(--sem-bad)}
+.dg-branch .bbody{flex-grow:1;border-radius:8px;padding:10px 13px;font-size:13.5px;border:1px solid var(--line);background:var(--surface-2)}
+.dg-branch .bbody.hot{border-color:var(--sem-bad);background:color-mix(in srgb,var(--sem-bad) 8%,var(--surface))}
+
+/* .dg-week — a horizontal span-of-time strip: colored segments = phases. Segment
+   background is data (inline style): var(--accent) start, var(--sem-bad) burn/incident,
+   var(--good) resolution, var(--page-2)+dashed border for idle/waiting spans. */
+.dg-week{display:flex;gap:3px;min-height:58px;margin:4px 0 6px;flex-wrap:wrap}
+.dg-week .wseg{padding:8px 10px;display:flex;flex-direction:column;justify-content:center}
+.dg-week .wseg:first-child{border-radius:10px 0 0 10px}
+.dg-week .wseg:last-child{border-radius:0 10px 10px 0}
+.dg-week .wd{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;opacity:.85;margin:0}
+.dg-week .wt{font-size:12.5px;font-weight:800;margin:0}
+
+/* .dg-gauge — labeled meters: name + number, bar, one-line note. Fill width is data
+   (inline style); fill color is semantic (var(--sem-bad) for over/exhausted,
+   var(--warn) mid, var(--good) healthy). */
+.dg-gauge{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+.dg-gauge .gcell{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:11px 13px}
+.dg-gauge .ghead{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.dg-gauge .gname{font-size:13px;font-weight:800}
+.dg-gauge .gnum{font-size:13.5px;font-weight:900;color:var(--sem-bad)}
+.dg-gauge .gbar{height:12px;background:var(--page-2);border:1px solid var(--line);border-radius:999px;overflow:hidden;margin:7px 0 5px}
+.dg-gauge .gfill{height:100%;background:var(--sem-bad)}
+.dg-gauge .gnote{font-size:12px;color:var(--muted);margin:0}
+
+/* .dg-compare — verbatim before/after evidence cards (policy changes, page rewrites).
+   .after marks the changed state with the semantic-bad border. */
+.dg-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+.dg-compare .ccell{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.dg-compare .ccell.after{border-color:var(--sem-bad)}
+.dg-compare .ck{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px}
+.dg-compare .ck.before{color:var(--good)}
+.dg-compare .ck.after,.dg-compare .ck.aftert{color:var(--sem-bad)}
+.dg-compare .cq{font-size:14px;font-weight:700;font-style:italic;line-height:1.45;margin:0 0 5px}
+.dg-compare .cd{font-size:12.5px;color:var(--muted);margin:0}
+
+/* .dg-meters — two or more distinct usage pools. Each column is one meter family;
+   .hot marks the pool currently constraining the account, .ghost an unknown pool. */
+.dg-meters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.dg-meters .mcol{border:2px solid var(--accent);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:9px;background:var(--surface)}
+.dg-meters .mcol.alt{border-color:var(--accent-2)}
+.dg-meters .mh{font-size:12.5px;font-weight:800;color:var(--accent-deep);text-transform:uppercase;letter-spacing:.5px;margin:0}
+.dg-meters .mpool{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:9px 12px}
+.dg-meters .mpool.hot{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,var(--surface))}
+.dg-meters .mpool.ghost{border-style:dashed}
+.dg-meters .mp{font-size:13px;font-weight:700;margin:0}
+.dg-meters .md{font-size:12px;color:var(--muted);margin:2px 0 0}
+
+/* .dg-bridge — short reconciliation between diagrams or evidence sets. */
+.dg-bridge{display:flex;align-items:center;gap:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:11px 14px;margin-top:12px;font-size:13.5px}
+
+/* .dg-timeline — compact evidence chronology. Dot colors are semantic; use .mid for
+   warning and .end for the adverse/limit event. .dg-tl is the v1.23 legacy alias. */
+.dg-timeline,.dg-tl{margin:0;padding:0;list-style:none}
+.dg-timeline li,.dg-tl li{display:flex;gap:12px;margin:0}
+.dg-timeline .td,.dg-tl .td{flex:0 0 78px;text-align:right;font-size:12px;font-weight:800;color:var(--muted);padding-top:2px}
+.dg-timeline .tdot,.dg-tl .tdot{flex:0 0 14px;display:flex;flex-direction:column;align-items:center}
+.dg-timeline .tdot i,.dg-tl .tdot i{width:11px;height:11px;border-radius:999px;background:var(--accent);margin-top:4px;flex:0 0 auto}
+.dg-timeline .tdot.mid i,.dg-tl .tdot.mid i{background:var(--warn)}
+.dg-timeline .tdot.end i,.dg-tl .tdot.end i{background:var(--sem-bad)}
+.dg-timeline .tdot em,.dg-tl .tdot em{width:2px;flex-grow:1;background:var(--line)}
+.dg-timeline .tb,.dg-tl .tb{padding-bottom:14px;font-size:13.5px}
+
+/* .herostats — findings-before-scroll: a stat band directly under the hero (inside
+   <header class="hero">, hero gets padding-bottom:0). Surface-backed cells per the
+   v1.20 hero-contrast contract, so it works on every viewer scheme. Numbers that
+   carry bad semantics wrap in <em> (styled sem-bad); neutral stats stay accent-deep. */
+.herostats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border-top:1px solid var(--line);margin-top:28px}
+.herostats .hs{background:var(--surface);padding:16px 20px 18px}
+.herostats .hsv{font-size:29px;font-weight:900;color:var(--accent-deep);letter-spacing:-.5px;line-height:1.05}
+.herostats .hsv em{font-style:normal;color:var(--sem-bad)}
+.herostats .hsk{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-top:5px}
+.herostats .hsd{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.45}
+@media(max-width:760px){.dg-gauge,.dg-compare,.dg-meters{grid-template-columns:1fr}.herostats{grid-template-columns:repeat(2,minmax(0,1fr))}.dg-ladder .lname,.dg-ladder .lbarwrap{width:auto}}
