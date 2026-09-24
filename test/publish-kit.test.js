@@ -35,6 +35,7 @@ async function startTestServer(fixture, options = {}) {
         storePath: fixture.apiKeyStorePath,
         adminTokens: { operator: { secret: ADMIN_TOKEN } },
       },
+      ...(options.accessExtra || {}),
     },
     publishConfig: { areaPath: fixture.publishArea },
     kitsConfig: options.kitsConfig,
@@ -288,6 +289,43 @@ test('publish without kit projects kit: null', async () => {
     assert.equal(created.status, 201);
     const body = await created.json();
     assert.equal(body.publication.kit, null);
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('a revision published under an admin token overlay bakes the overlay in; earlier revisions stay frozen', async () => {
+  const fixture = await makeFixture();
+  const managedFolder = path.join(fixture.root, 'managed-kits');
+  const server = await startTestServer(fixture, { kitsConfig: { managedFolder }, accessExtra: { appearance: { adminTokens: { ops: { secret: ADMIN_TOKEN } } } } });
+  try {
+    const { token } = await createKey(server);
+    const admin = { Authorization: `Bearer ${ADMIN_TOKEN}`, 'Content-Type': 'application/json' };
+    const first = await server.request('/api/publish', publishRequest(token, { slug: 'overlay-kit', kit: 'ops', entryPath: 'index.html', files: [{ path: 'index.html', content: PLACEHOLDER_HTML }] }));
+    assert.equal(first.status, 201);
+    const rev1Before = await (await server.request('/raw/published/overlay-kit/index.html', { headers: { Authorization: `Bearer ${token}` } })).text();
+    assert.ok(!rev1Before.includes('lookie-link kit overlay'), 'no overlay yet');
+    const catalogResponse = await server.request('/api/kits', { headers: { Authorization: `Bearer ${token}` } });
+    const catalogText = await catalogResponse.text();
+    assert.equal(catalogResponse.status, 200, catalogText);
+    const catalog = JSON.parse(catalogText);
+    const patch = await server.request('/api/kits/ops', { method: 'PATCH', headers: admin, body: JSON.stringify({ expectedRevision: catalog.revision, tokens: { '--radius': '3px' } }) });
+    const patchText = await patch.text();
+    assert.equal(patch.status, 200, patchText);
+    const effective = JSON.parse(patchText).kit.effectiveVersion;
+    assert.match(effective, /^1\.26\+[0-9a-f]{8}$/);
+    const rev1After = await (await server.request('/raw/published/overlay-kit/index.html?version=1', { headers: { Authorization: `Bearer ${token}` } })).text();
+    assert.equal(rev1After, rev1Before, 'revision 1 bytes are frozen');
+    const second = await server.request('/api/publish/overlay-kit', publishRequest(token, { expectedRevision: 1, kit: 'ops', entryPath: 'index.html', files: [{ path: 'index.html', content: PLACEHOLDER_HTML }] }));
+    const secondText = await second.text();
+    assert.equal(second.status, 200, secondText);
+    const body = JSON.parse(secondText);
+    assert.equal(body.publication.kit.version, effective, 'revision 2 records the effective version');
+    assert.equal(body.publication.revisions[0].kit.version, '1.26', 'revision 1 keeps its version');
+    const rev2 = await (await server.request('/raw/published/overlay-kit/index.html', { headers: { Authorization: `Bearer ${token}` } })).text();
+    assert.ok(rev2.includes('lookie-link kit overlay') && rev2.includes('--radius:3px'), 'overlay baked into revision 2');
+    assert.ok(rev2.includes(`data-kit-version="${effective}"`), 'style block carries the effective version');
   } finally {
     await server.close();
     await fs.rm(fixture.root, { recursive: true, force: true });
