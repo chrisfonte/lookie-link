@@ -112,17 +112,21 @@ test('POST /api/kits creates a managed kit; conflict / validation / upload / del
     });
     assert.equal(created.status, 201, created.text);
     assert.equal(created.json.kit.name, 'demo');
-    assert.equal(created.json.kit.source, 'managed');
+    assert.equal(created.json.kit.source, 'org');
+    assert.equal(created.json.kit.scope, 'org');
+    assert.equal(created.json.kit.org, 'default');
+    assert.equal(created.json.kit.currentVersion, 1);
     assert.equal(created.json.kit.writable, true);
     assert.equal(created.json.kit.stylesheetUrl, '/kit/demo/kit.css');
-    assert.equal(created.json.kit.pinnedStylesheetUrl, '/kit/demo/v/0.1.0/kit.css');
+    assert.equal(created.json.kit.effectiveVersion, '0.1.0@1');
+    assert.equal(created.json.kit.pinnedStylesheetUrl, '/kit/demo/v/0.1.0%401/kit.css');
     assert.deepEqual(created.json.kit.caching, {
       stylesheetUrl: 'no-cache',
       pinnedStylesheetUrl: 'immutable',
     });
 
     const listed = await request(s.base, '/api/kits');
-    assert.ok(listed.json.kits.some((kit) => kit.name === 'demo' && kit.source === 'managed'));
+    assert.ok(listed.json.kits.some((kit) => kit.name === 'demo' && kit.source === 'org' && kit.scope === 'org'));
 
     const css = await request(s.base, '/kit/demo/kit.css');
     assert.equal(css.status, 200);
@@ -185,6 +189,8 @@ test('POST /api/kits creates a managed kit; conflict / validation / upload / del
       ...json({ content: '<p>more</p>\n' }),
     });
     assert.equal(upload.status, 200, upload.text);
+    assert.equal(upload.json.kit.currentVersion, 2);
+    assert.equal(upload.json.kit.effectiveVersion, '0.1.0@2');
     assert.ok(upload.json.kit.files.some((f) => f.file === 'more.html'));
 
     const deleted = await request(s.base, '/api/kits/demo', {
@@ -193,7 +199,8 @@ test('POST /api/kits creates a managed kit; conflict / validation / upload / del
     });
     assert.equal(deleted.status, 200);
     const gone = await request(s.base, '/api/kits/demo');
-    assert.equal(gone.status, 404);
+    assert.equal(gone.status, 410);
+    assert.equal(gone.json.error.code, 'gone');
 
     const deleteBundled = await request(s.base, '/api/kits/ops', {
       method: 'DELETE',
@@ -211,7 +218,9 @@ test('POST /api/kits creates a managed kit; conflict / validation / upload / del
         stylesheet: ':root{--demo:2}\n',
       }),
     });
-    assert.equal(recreate.status, 201, recreate.text);
+    assert.equal(recreate.status, 409);
+    assert.equal(recreate.json.error.code, 'conflict');
+    assert.match(recreate.json.error.message, /kit was deleted; restore is not supported yet/);
   } finally {
     await s.close();
   }

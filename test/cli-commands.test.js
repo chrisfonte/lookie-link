@@ -143,7 +143,8 @@ test('lookie kit create / set / upload / delete round-trip the admin kit API', a
   assert.equal(created.code, 0, created.stderr);
   const createdBody = JSON.parse(created.stdout);
   assert.equal(createdBody.kit.name, 'clidemo');
-  assert.equal(createdBody.kit.source, 'managed');
+  assert.equal(createdBody.kit.source, 'org');
+  assert.equal(createdBody.kit.scope, 'org');
 
   const listed = JSON.parse((await s.cli(['kits'])).stdout);
   const set = await s.cli([

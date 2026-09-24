@@ -263,33 +263,62 @@ change. Drop the alias later once nothing references the old name anymore.
 
 Hosted HTML kits are folders of a stylesheet plus templates/examples that
 agents can list and fetch. The product ships a bundled `ops` kit under
-`kits/ops/`; operators can add more roots, and the admin API can create kits
-in a server-managed folder:
+`kits/ops/`; operators can add more roots, and the admin API writes org-scoped
+kits under `kits.managedFolder` (the key name is unchanged; its meaning is the
+org-scoped kits root):
 
 ```yaml
 kits:
   enabled: true          # default true when any kit exists
-  default: ops           # advertised default; used by publish when kit: is omitted (stage 2)
-  managedFolder: ~/.local/share/lookie-link/kits   # API-created kits + <name>.overlay.yaml; created on first write
+  default: ops           # advertised default; used by publish when kit: is omitted
+  managedFolder: ~/.local/share/lookie-link/kits   # org kits + overlays (+ optional _shared); created on first write
   folders:               # extra kit roots; each child folder with a kit.yaml is a kit
     - ~/.config/lookie-link/kits
 ```
 
-Each kit folder contains `kit.yaml` (required), `kit.css`, and the HTML/Markdown
-files listed in the manifest. Sources, in precedence order on name clash:
-`kits.managedFolder` (managed) → `kits.folders[]` (config) → the bundled
-`kits/` directory. Missing folders and invalid manifests are skipped with a
-console warning; the server still starts. Kit folders (including the managed
-folder) are watched for live reload like wallpaper folders; a write through
-the admin API refreshes the catalog immediately without waiting for the
-watcher.
+On-disk layout under `managedFolder`:
+
+```
+<managedFolder>/
+  _shared/<name>/...                         # operator-curated kits (read-only via API)
+  orgs/<org>/kits/<name>/kit.yaml            # record (name, label, version, description,
+                                             #   currentVersion, createdAt, updatedAt, deletedAt)
+  orgs/<org>/kits/<name>/versions/<n>/...    # immutable snapshot (kit.css + listed files + manifest)
+  orgs/<org>/overlays/<name>.overlay.yaml    # org token overlay on any visible kit
+```
+
+R15a has exactly one org, `default`. Every admin write goes to `orgs/default/`.
+Reads merge bundled → `kits.folders[]` / `_shared` → `orgs/default`. Name-clash
+precedence: **org > shared > bundled** (`kits.folders[]` and `_shared` share the
+shared tier; later load wins within the tier). Bundled and shared kits are never
+written by the API (`403 read_only`); overlays on them are allowed and stored
+under the org.
+
+**Versions.** `POST /api/kits` creates `versions/1`. `PUT /api/kits/:name/files/:file`
+writes a full `versions/<n+1>` snapshot (copy of the previous version plus the
+change) and bumps `currentVersion`. Nothing under `versions/` is modified in
+place. `DELETE /api/kits/:name` sets `deletedAt` (tombstone): the kit disappears
+from the list, `GET /api/kits/:name` returns `410 gone`, and version directories
+stay on disk. Creating the same name again returns `409 conflict` ("kit was
+deleted; restore is not supported yet").
+
+**Migration.** On load, a pre-R15a flat kit at `<managedFolder>/<name>/kit.yaml`
+or overlay at `<managedFolder>/<name>.overlay.yaml` is moved once into
+`orgs/default/…` (idempotent; one log line per moved item; source removed only
+after a byte-equal copy).
+
+Each kit folder / snapshot contains `kit.yaml` (required), `kit.css`, and the
+HTML/Markdown files listed in the manifest. Missing folders and invalid
+manifests are skipped with a console warning; the server still starts. Kit
+folders (including the managed root) are watched for live reload like wallpaper
+folders; a write through the admin API refreshes the catalog immediately.
 
 **Token overlays.** `PATCH /api/kits/:name` (same appearance admin bearer gate
 as the appearance API; no new token class) writes
-`<managedFolder>/<name>.overlay.yaml` with a `tokens:` map of CSS custom
-properties. Served `GET /kit/:name/kit.css` appends an overlay block after the
-base stylesheet. `tokens: {}` or `null` clears the overlay file. Overlay and
-managed-folder changes advance the kits catalog `revision`.
+`<managedFolder>/orgs/default/overlays/<name>.overlay.yaml` with a `tokens:` map
+of CSS custom properties. Served `GET /kit/:name/kit.css` appends an overlay
+block after the base stylesheet. `tokens: {}` or `null` clears the overlay file.
+Overlay and managed-folder changes advance the kits catalog `revision`.
 
 ## Server environment variables
 
