@@ -1221,7 +1221,11 @@ function createApp(options = {}) {
         details: [{ path: 'kit', message: `unknown kit: ${name}` }],
       };
     }
-    const css = readKitFile(name, 'kit.css');
+    // The SERVED stylesheet (base + any admin token overlay), so a revision
+    // published under an overlay bakes it in; the revision records the
+    // effective version (e.g. 1.26+7c8bc0d7). Found 2026-09-24: the first cut
+    // inlined the base file and a revision published during an overlay lost it.
+    const css = readKitStylesheet(name);
     if (css == null) {
       return {
         ok: false,
@@ -1234,7 +1238,8 @@ function createApp(options = {}) {
       ok: true,
       kit: {
         name: record.name,
-        version: record.version,
+        version: record.effectiveVersion || record.version,
+        baseVersion: record.version,
         revision: kitsRevision(),
         css,
       },
