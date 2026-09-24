@@ -307,3 +307,17 @@ test('markdown target ignores validate=1 (no kit/pageContract keys)', async () =
     await fs.rm(fixture.root, { recursive: true, force: true });
   }
 });
+
+test('the meta form of the render-mode hint counts as viewport, like the embed runtime', async (t) => {
+  const repoRoot = await makeMappedRepo(t, {
+    'page.html': [
+      '<!doctype html><html><head><meta name="lookie-render" content="viewport">',
+      '<style>section{scroll-margin-top:3rem}</style>',
+      '</head><body><nav class="topnav"><a href="#a">A</a></nav><section id="a">A</section></body></html>',
+    ].join(''),
+  });
+  const app = createApp({ mappings: { docs: repoRoot } });
+  const response = await requestValidation(app, 'docs/page.html');
+  assert.equal(response.body.pageContract.renderMode, 'viewport');
+  assert.ok(!response.body.pageContract.warnings.includes('sticky-nav-without-viewport-mode'));
+});

@@ -71,8 +71,7 @@ const {
   renderAnnotationMarkdown,
   setThemeList,
   getThemeList,
-  setNavLinks,
-} = require('./lib/renderer');
+  setNavLinks, detectRenderMode } = require('./lib/renderer');
 const {
   readAnnotationDocument,
   filterAnnotationsByState,
@@ -648,11 +647,12 @@ function analyzeKitPresence(document) {
   return { detected, source, current, stale, warnings };
 }
 
-function analyzePageContract(document) {
+function analyzePageContract(document, source) {
   const warnings = [];
   const root = document.documentElement;
-  const renderAttr = root ? (root.getAttribute('data-lookie-render') || '').trim().toLowerCase() : '';
-  const renderMode = renderAttr === 'viewport' ? 'viewport' : 'content-height';
+  // Same detector the embed runtime uses: the root attribute OR
+  // <meta name="lookie-render" content="viewport"> (lane E asked; both count).
+  const renderMode = detectRenderMode(source) === 'viewport' ? 'viewport' : 'content-height';
 
   const themeFollowNode = document.querySelector('html[data-lookie-follow-theme], body[data-lookie-follow-theme], [data-lookie-follow-theme]');
   const declared = Boolean(themeFollowNode);
@@ -743,7 +743,7 @@ async function buildHtmlRenderValidation({ repo, rootPath, rootPrefix, relativeP
   })))).filter(Boolean);
 
   const kit = analyzeKitPresence(document);
-  const pageContract = analyzePageContract(document);
+  const pageContract = analyzePageContract(document, source);
 
   return {
     ok: true,
