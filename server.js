@@ -95,19 +95,24 @@ const {
 } = require('./lib/forms/destination-adapter');
 const { SubmissionService } = require('./lib/forms/submission-service');
 const { setWallpaperCatalog, resolveWallpaperFile, contentTypeFor: wallpaperContentType, watchWallpapers, publicCatalog: publicWallpaperCatalog, currentDefaults: wallpaperDefaultsForDiscovery, currentCatalog: wallpaperCatalogForApi, currentThemes: wallpaperThemesForApi } = require('./lib/viewer-wallpaper');
-const { registerAppearanceRoutes } = require('./lib/appearance-api');
+const { registerAppearanceRoutes, resolveAdminTokens, extractBearer, constantTimeEqual } = require('./lib/appearance-api');
 const {
   loadKits,
   listKits,
   getKit,
   getKitRecord,
   readKitFile,
+  readKitStylesheet,
   kitsRevision,
   kitsEnabled,
   defaultKitName,
   watchKits,
   contentTypeFor: kitContentType,
   watchTargets: kitWatchTargets,
+  createManagedKit,
+  writeManagedFile,
+  deleteManagedKit,
+  patchKitOverlay,
 } = require('./lib/kits');
 const { createFormsRouter } = require('./lib/forms/routes');
 const { apiError } = require('./lib/api-error');
@@ -704,6 +709,7 @@ function createApp(options = {}) {
   const kitsConfig = options.kitsConfig === undefined ? getKitsConfig() : options.kitsConfig;
   const refreshKits = () => loadKits({
     folders: kitsConfig.folders || [],
+    managedFolder: kitsConfig.managedFolder === undefined ? null : kitsConfig.managedFolder,
     bundledRoot: kitsConfig.bundledRoot === undefined ? undefined : kitsConfig.bundledRoot,
     enabled: kitsConfig.enabled !== false,
     default: kitsConfig.default,
@@ -2902,9 +2908,9 @@ function createApp(options = {}) {
     });
   }
 
-  // Hosted HTML kits (read-only): list/show with ETag polling, stylesheet, and
-  // listed template/example files. Any non-denied caller with view access; no
-  // host paths leave the server.
+  // Hosted HTML kits: list/show with ETag polling, stylesheet (plus token overlay),
+  // listed template/example files, and admin create/upload/overlay/delete (same
+  // appearance admin bearer gate; no new token class).
   {
     const rejectUnknownKitsParams = (req, res) => {
       const unknown = Object.keys(req.query);
@@ -2919,6 +2925,33 @@ function createApp(options = {}) {
         return false;
       }
       return true;
+    };
+    const appearanceAccess = rawAccessConfig && typeof rawAccessConfig === 'object' ? rawAccessConfig : {};
+    const kitAdminTokens = resolveAdminTokens(
+      (appearanceAccess.appearance && appearanceAccess.appearance.adminTokens)
+      || (appearanceAccess.grants && appearanceAccess.grants.adminTokens)
+      || null
+    );
+    const requireKitAdmin = (req, res) => {
+      if (!kitAdminTokens.length) {
+        apiError(res, 404, 'feature_disabled', 'Kit admin tokens are not configured.');
+        return false;
+      }
+      const secret = extractBearer(req);
+      if (!secret) {
+        apiError(res, 401, 'unauthenticated', 'Kit admin authentication required.');
+        return false;
+      }
+      const admin = kitAdminTokens.find((token) => constantTimeEqual(token.secret, secret));
+      if (!admin) {
+        apiError(res, 403, 'forbidden', 'Invalid kit admin token.');
+        return false;
+      }
+      req.kitAdmin = admin.name;
+      return true;
+    };
+    const refreshKitsNow = () => {
+      if (typeof app.locals.refreshKits === 'function') app.locals.refreshKits();
     };
     const sendKitsWithEtag = (req, res, body) => {
       const revision = kitsRevision();
@@ -2942,17 +2975,17 @@ function createApp(options = {}) {
       }
       if (immutable) {
         const version = String(req.params.version || '');
-        if (version !== kit.version) {
+        if (version !== kit.effectiveVersion) {
           apiError(res, 404, 'not_found', `Kit version not found: ${name}@${version}`);
           return;
         }
       }
-      const css = readKitFile(name, kit.stylesheet);
+      const css = readKitStylesheet(name);
       if (css === null) {
         apiError(res, 404, 'not_found', `Kit stylesheet not found: ${name}`);
         return;
       }
-      const etag = `W/"kit-css-${name}-${kit.version}-${kitsRevision()}"`;
+      const etag = `W/"kit-css-${name}-${kit.effectiveVersion}-${kitsRevision()}"`;
       res.set('ETag', etag);
       res.set('Cache-Control', immutable ? 'public, max-age=31536000, immutable' : 'no-cache');
       if (req.get('if-none-match') === etag) {
@@ -2986,6 +3019,139 @@ function createApp(options = {}) {
         return;
       }
       sendKitsWithEtag(req, res, { ok: true, kit, revision: kitsRevision(), generatedAt: new Date().toISOString() });
+    });
+
+    app.post('/api/kits', express.json({ limit: '2mb' }), (req, res) => {
+      if (!requireKitAdmin(req, res)) return;
+      try {
+        const name = createManagedKit(req.body);
+        refreshKitsNow();
+        const kit = getKit(name);
+        res.status(201).json({ ok: true, kit, revision: kitsRevision(), generatedAt: new Date().toISOString() });
+      } catch (error) {
+        if (error.code === 'EINVALID') {
+          apiError(res, 400, 'invalid_request', error.message, error.details || null);
+          return;
+        }
+        if (error.code === 'ECONFLICT') {
+          apiError(res, 409, 'conflict', error.message);
+          return;
+        }
+        if (error.code === 'EFEATURE') {
+          apiError(res, 404, 'feature_disabled', error.message);
+          return;
+        }
+        logger.error('Failed to create kit', { error });
+        apiError(res, 500, 'internal_error', 'Failed to create kit.');
+      }
+    });
+
+    app.put('/api/kits/:name/files/:file', express.text({ type: '*/*', limit: '1mb' }), (req, res) => {
+      if (!requireKitAdmin(req, res)) return;
+      const name = String(req.params.name || '');
+      const file = String(req.params.file || '');
+      let content = null;
+      if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)
+        && typeof req.body.content === 'string') {
+        // Global express.json already parsed application/json.
+        content = req.body.content;
+      } else {
+        const raw = typeof req.body === 'string' ? req.body
+          : (Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '');
+        const type = (req.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        if (type === 'application/json') {
+          try {
+            const parsed = JSON.parse(raw || '{}');
+            if (parsed && typeof parsed.content === 'string') content = parsed.content;
+            else {
+              apiError(res, 400, 'invalid_request', 'JSON body must be { content: string }.', [{ path: 'content', message: 'required string' }]);
+              return;
+            }
+          } catch (error) {
+            apiError(res, 400, 'invalid_request', `Invalid JSON: ${error.message}`);
+            return;
+          }
+        } else {
+          content = raw;
+        }
+      }
+      try {
+        writeManagedFile(name, file, content);
+        refreshKitsNow();
+        const kit = getKit(name);
+        res.status(200).json({ ok: true, kit, revision: kitsRevision(), generatedAt: new Date().toISOString() });
+      } catch (error) {
+        if (error.code === 'ENOTFOUND') {
+          apiError(res, 404, 'not_found', error.message);
+          return;
+        }
+        if (error.code === 'EREADONLY') {
+          apiError(res, 403, 'read_only', error.message);
+          return;
+        }
+        if (error.code === 'EINVALID') {
+          apiError(res, 400, 'invalid_request', error.message, error.details || null);
+          return;
+        }
+        logger.error('Failed to upload kit file', { error });
+        apiError(res, 500, 'internal_error', 'Failed to upload kit file.');
+      }
+    });
+
+    app.patch('/api/kits/:name', express.json({ limit: '256kb' }), (req, res) => {
+      if (!requireKitAdmin(req, res)) return;
+      const name = String(req.params.name || '');
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      try {
+        patchKitOverlay(name, {
+          expectedRevision: body.expectedRevision,
+          tokens: body.tokens,
+          label: body.label,
+        });
+        refreshKitsNow();
+        const kit = getKit(name);
+        res.status(200).json({ ok: true, kit, revision: kitsRevision(), generatedAt: new Date().toISOString() });
+      } catch (error) {
+        if (error.code === 'ENOTFOUND') {
+          apiError(res, 404, 'not_found', error.message);
+          return;
+        }
+        if (error.code === 'EREVISION') {
+          apiError(res, 409, 'revision_conflict', error.message, null, { currentRevision: error.currentRevision });
+          return;
+        }
+        if (error.code === 'EINVALID') {
+          apiError(res, 400, 'invalid_request', error.message, error.details || null);
+          return;
+        }
+        if (error.code === 'EFEATURE') {
+          apiError(res, 404, 'feature_disabled', error.message);
+          return;
+        }
+        logger.error('Failed to patch kit overlay', { error });
+        apiError(res, 500, 'internal_error', 'Failed to patch kit.');
+      }
+    });
+
+    app.delete('/api/kits/:name', (req, res) => {
+      if (!requireKitAdmin(req, res)) return;
+      const name = String(req.params.name || '');
+      try {
+        deleteManagedKit(name);
+        refreshKitsNow();
+        res.status(200).json({ ok: true, deleted: name, revision: kitsRevision(), generatedAt: new Date().toISOString() });
+      } catch (error) {
+        if (error.code === 'ENOTFOUND') {
+          apiError(res, 404, 'not_found', error.message);
+          return;
+        }
+        if (error.code === 'EREADONLY') {
+          apiError(res, 403, 'read_only', error.message);
+          return;
+        }
+        logger.error('Failed to delete kit', { error });
+        apiError(res, 500, 'internal_error', 'Failed to delete kit.');
+      }
     });
 
     app.get('/kit/:name/kit.css', (req, res) => sendKitCss(req, res, { immutable: false }));
@@ -3379,8 +3545,11 @@ function createApp(options = {}) {
   });
 
   // Fallbacks answer in the JSON error envelope for API callers and keep
-  // text/plain for browsers and asset requests.
+  // text/plain for browsers and asset requests. Every /kit/ path uses the
+  // envelope so unmatched kit URLs (e.g. /kit/ops/package.json) never fall
+  // through to the plain-text 404.
   const wantsJsonError = (req) => req.path.startsWith('/api/')
+    || req.path.startsWith('/kit/')
     || req.path.startsWith('/.well-known/')
     || req.accepts(['text/plain', 'text/html', 'application/json']) === 'application/json';
   const sendFallbackError = (req, res, status, message) => {
