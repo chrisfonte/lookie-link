@@ -1,15 +1,18 @@
 <!DOCTYPE html>
-<!-- File: ~/operations/templates/html-kit/research-packet-template.html
-     Findings-first research packet scaffold — Ops HTML Kit v1.24.
+<!-- File: kits/ops/research-packet-template.html (Lookie-Link, Ops HTML Kit v1.26)
+     Findings-first research packet scaffold.
      Replace every [pending] marker with sourced content or preserve it as an honest
-     .pending value. Inline the complete kit.css before standalone publication. -->
+     .pending value. The stylesheet link below is a publish placeholder: publishing the
+     bundle with "kit": "ops" inlines the served kit.css in its place (scroll-margin for
+     anchored sections comes with it). For a standalone file, inline kit.css yourself as
+     <style data-kit="ops" data-kit-version="1.26">. Replace or remove the alternate link. -->
 <html lang="en" data-lookie-follow-theme data-lookie-render="viewport">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>[Research question] — research packet</title>
   <link rel="alternate" type="application/x-yaml" href="[research-slug].yaml">
-  <link rel="stylesheet" href="kit.css">
+  <link rel="stylesheet" href="kit.css" data-kit>
 </head>
 <body>
   <header class="hero" style="padding-bottom:0">

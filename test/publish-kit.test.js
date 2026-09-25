@@ -152,7 +152,7 @@ test('publish with kit:ops inlines stylesheet, replaces placeholder link, and pr
   }
 });
 
-test('publish leaves pre-inlined style data-kit alone and kit:true uses the default', async () => {
+test('publish replaces a pre-inlined marked style block with the current kit and kit:true uses the default', async () => {
   const fixture = await makeFixture();
   const server = await startTestServer(fixture);
   try {
@@ -167,7 +167,11 @@ test('publish leaves pre-inlined style data-kit alone and kit:true uses the defa
     const preRaw = await server.request('/raw/published/pre-inlined/index.html', {
       headers: { Authorization: `Bearer ${token}` },
     });
-    assert.equal(await preRaw.text(), PREINLINED_HTML);
+    const preText = await preRaw.text();
+    assert.notEqual(preText, PREINLINED_HTML, 'the marked block is replaced, not left alone');
+    assert.ok(preText.includes('data-kit="ops" data-kit-version="1.26"'), 'replaced with the current kit');
+    assert.equal((preText.match(/<style\b[^>]*data-kit/g) || []).length, 1, 'exactly one marked block');
+    assert.ok(!preText.includes('old-kit-marker'), 'stale bytes gone');
 
     const withDefault = await server.request('/api/publish', publishRequest(token, {
       slug: 'default-kit',
@@ -326,6 +330,29 @@ test('a revision published under an admin token overlay bakes the overlay in; ea
     const rev2 = await (await server.request('/raw/published/overlay-kit/index.html', { headers: { Authorization: `Bearer ${token}` } })).text();
     assert.ok(rev2.includes('lookie-link kit overlay') && rev2.includes('--radius:3px'), 'overlay baked into revision 2');
     assert.ok(rev2.includes(`data-kit-version="${effective}"`), 'style block carries the effective version');
+  } finally {
+    await server.close();
+    await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('the bundled research template publishes with kit:ops into a page with zero kit and sticky-nav warnings', async () => {
+  const fixture = await makeFixture();
+  const server = await startTestServer(fixture);
+  try {
+    const { token } = await createKey(server);
+    const template = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'kits', 'ops', 'research-packet-template.html'), 'utf8');
+    assert.match(template, /<link rel="stylesheet" href="kit.css" data-kit>/, 'the bundled template carries the publish placeholder');
+    const created = await server.request('/api/publish', publishRequest(token, { slug: 'template-check', kit: 'ops', entryPath: 'index.html', files: [{ path: 'index.html', content: template }] }));
+    assert.equal(created.status, 201, await created.text());
+    const report = await (await server.request('/view/published/template-check/index.html?validate=1', { headers: { Authorization: `Bearer ${token}` } })).json();
+    assert.deepEqual(report.kit.warnings, [], `kit warnings: ${JSON.stringify(report.kit)}`);
+    assert.equal(report.kit.detected.name, 'ops');
+    const contract = report.pageContract.warnings.filter((w) => w.startsWith('sticky-nav') || w === 'overflow-x-hidden-kills-sticky' || w === 'theme-follow-inert');
+    assert.deepEqual(contract, [], `contract warnings: ${JSON.stringify(report.pageContract)}`);
+    const raw = await (await server.request('/raw/published/template-check/index.html', { headers: { Authorization: `Bearer ${token}` } })).text();
+    const outsideStyles = raw.replace(/<style\b[\s\S]*?<\/style>/gi, '');
+    assert.equal((outsideStyles.match(/<link[^>]*stylesheet/g) || []).length, 0, 'no stylesheet link left dangling (kit.css comments inside <style> do not count)');
   } finally {
     await server.close();
     await fs.rm(fixture.root, { recursive: true, force: true });
