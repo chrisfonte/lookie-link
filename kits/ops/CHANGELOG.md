@@ -8,6 +8,8 @@ Status: Active
 
 All notable changes to the Ops HTML Kit.
 
+- **2026-09-24 (bundled copy, no token change):** research-packet-template.html carries `data-kit` on its stylesheet link so publishing with `kit` replaces it (it used to dangle beside a second inlined block); header names the bundled home and v1.26.
+
 ## v1.26 (2026-09-19)
 
 - Documentation only; `kit.css` unchanged. Three README changes from two same-day build sessions:
