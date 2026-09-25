@@ -125,6 +125,8 @@ With a ripgrep binary available, `/api/search` searches every served repository 
 
 ## Custom themes
 
+> **Live-reloadable values (contributors).** Theme CSS, wallpapers, appearance and kits change at runtime without a restart. Any code that renders chrome must read them per request (the server hands out live getters); never copy one into a local at construction. `test/live-theme-every-page.test.js` sets theme CSS after startup and requires every HTML page family to carry it: add new page families to its `PAGES` list. (2026-09-25: the Trackers router copied it once and shipped every Trackers page without custom-theme tokens.)
+
 Lookie-Link ships with Slate, Teal, Nord, Rose Pine, Monokai, Solarized,
 GitHub, Ember, Noir, Indigo, and Codex. The Codex theme is a research-based
 interpretation of the Codex desktop app's neutral shell and blue interaction
