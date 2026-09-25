@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — House standards routing
+
+- AGENTS.md now points at the house standards router and the review-termination doctrine (§46.7 — terminal ACCEPT, findings versus blockers, two-round cap) rather than leaving each lane to improvise its own review procedure.
+
+## Unreleased — Dependency declaration baseline
+
+- Added `SECURITY.md` with the project's reporting posture, supported-version
+  policy, and runtime security boundaries.
+
 ## Unreleased — Codex desktop theme
 
 - Added Codex as an eleventh built-in theme, with dark and light variants based
@@ -38,7 +47,7 @@
 ## 2026-07-30 — Unreleased — Public/private product-information boundary
 
 - Removed product-planning packages, historical build prompts, product research,
-  and the Paperclip organizational grant workflow from the current public tree.
+  and the internal issue-tracker grant workflow from the current public tree.
   Their prior publication remains truthfully recorded in Git history and older
   changelog entries; no history rewrite was performed.
 - Kept source, tests, generated skill packages, examples, and implemented
@@ -112,7 +121,7 @@
 - Added `GET /api/repos` JSON discovery endpoint so agents can enumerate served repos at runtime. It now returns opaque repo/view/asset identifiers and is filtered by the same access-control logic as the home page.
 - Added `bin/lookie-read.js` CLI shim (`lookie-read <repo>/<path>`) declared in `package.json#bin`. Encapsulates discovery, local-fallback, HTTP fetch with Range, and `LOOKIE_LINK_TOKEN` auth.
 - Extended `/asset/<repo>/<path>` mime allowlist to cover text/source extensions (markdown, yaml, json, sh/py/js/ts/go/rs/c/cpp/etc.) so the read shim can fetch source files. Source-code and HTML extensions are served as `text/plain; charset=utf-8` to prevent browser auto-rendering. Unknown extensions still return `415`.
-- Added `scripts/lookie-link-config-audit.sh` + `scripts/lookie-link-config-audit-cron.sh` and `scripts/launchd/com.lookie-link.config-audit.plist` to enumerate configured operations directories, classify them (served / worktree-skip / placeholder-skip / missing), and post deltas to Paperclip.
+- Added `scripts/lookie-link-config-audit.sh` + `scripts/lookie-link-config-audit-cron.sh` and `scripts/launchd/com.lookie-link.config-audit.plist` to enumerate configured operations directories, classify them (served / worktree-skip / placeholder-skip / missing), and post deltas to the internal issue tracker.
 - Added test coverage for `/api/repos` in `scripts/validate-editable-mode.js`.
 - Documented repository discovery and agent file-reference conventions in the public API and shim documentation.
 
@@ -139,7 +148,7 @@
 - Added audio playback support for `.m4a`, `.mp3`, `.wav`, `.ogg`, `.oga`, `.opus`, `.flac`, `.aac`
 - Browsing an audio file directly renders a dedicated player page with controls and a download link
 - Markdown links to audio files (e.g. NotebookLM `.m4a` overviews) get an inline `<audio>` player with the original link caption
-- Inline player also triggers for fully-qualified `http(s)://<host>:9876/view/<repo>/<path>.<audio-ext>` URLs — the Paperclip-style labeled-link form — not just `./relative` and `~/repo` paths
+- Inline player also triggers for fully-qualified `http(s)://<host>:9876/view/<repo>/<path>.<audio-ext>` URLs — the internal tracker's labeled-link form convention — not just `./relative` and `~/repo` paths
 - `/asset/<repo>/<path>` route serves audio with correct MIME types and Range requests for seeking
 - Audio files are excluded from editable mode (binary)
 - Documented in `docs/FEATURES.md` (new Audio Playback section).

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<!-- File: ~/operations/templates/html-kit/theme-follow-demo.html -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ops HTML Kit - Lookie Theme Follow Demo</title>
+<link rel="stylesheet" href="kit.css">
+</head>
+<body>
+<nav class="topnav">
+  <a href="theme-follow-demo.html" class="brand">Ops HTML Kit</a>
+  <a href="EXAMPLES.html">Showcase</a>
+  <a href="theme-follow-demo.html" class="active">Theme Follow Demo</a>
+  <a href="README.md">Docs</a>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Lookie-Link theme bridge</p>
+    <h1>Fixed design beside viewer-following HTML</h1>
+    <p class="sub">Use the Lookie toolbar to switch dark/light mode or color scheme. Only the opt-in panel follows the viewer.</p>
+    <div class="badges">
+      <span class="badge">External kit.css</span>
+      <span class="badge">Theme tokens</span>
+      <span class="badge">No page script</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="note-intro">
+    This page is intentionally split into fixed and viewer-following regions. The Lookie-follow panel reads the CSS variables Lookie injects into trusted raw HTML.
+  </div>
+
+  <h2>Fixed artifact identity</h2>
+  <div class="grid-2">
+    <section class="tile" data-theme="coastal">
+      <h3>Coastal default</h3>
+      <div class="stat">Fixed<small> brand</small></div>
+      <p class="lead">Use this pattern for travel plans, identity pieces, visual stories, or anything whose design should stay stable.</p>
+      <div class="links"><a class="chip" href="EXAMPLES.html">Open showcase</a></div>
+    </section>
+    <section class="tile" data-theme="neutral">
+      <h3>Neutral override</h3>
+      <div class="stat">Fixed<small> report</small></div>
+      <p class="lead">Use explicit themes when the artifact needs a predictable exported look in email, PDF, or a normal browser.</p>
+      <div class="links"><a class="chip" href="README.md">Read kit docs</a></div>
+    </section>
+  </div>
+
+  <h2>Viewer-following region</h2>
+  <section data-lookie-follow-theme style="background:var(--page);border:1px solid var(--line);border-radius:14px;padding:18px;margin-top:10px">
+    <div class="callout info">This panel opts into Lookie-Link's injected theme tokens. Change the viewer theme and this block should change with it.</div>
+    <div class="grid-3">
+      <div class="tile">
+        <h3>Theme source</h3>
+        <div class="stat">Lookie<small> vars</small></div>
+        <p class="lead">Reads <code>--lookie-bg</code>, <code>--lookie-text</code>, <code>--lookie-link</code>, and related tokens.</p>
+      </div>
+      <div class="tile">
+        <h3>Opt-in only</h3>
+        <div class="stat">Local<small> choice</small></div>
+        <p class="lead">Agents add <code>data-lookie-follow-theme</code> only when human-visible utility is better than fixed branding.</p>
+      </div>
+      <div class="tile">
+        <h3>Script-free</h3>
+        <div class="stat">CSS<small> bridge</small></div>
+        <p class="lead">Works with Lookie-safe HTML because the bridge is attributes and CSS variables, not page JavaScript.</p>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Region</th><th>Expected behavior</th></tr></thead>
+      <tbody>
+        <tr><td>Fixed panels above</td><td>Keep their own kit theme.</td></tr>
+        <tr class="pick"><td>This panel</td><td>Follows Lookie dark/light and color-scheme tokens.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>Ops HTML Kit theme-follow demo. Relative CSS, relative HTML links, and Lookie theme hooks are all exercised here.</footer>
+</main>
+</body>
+</html>

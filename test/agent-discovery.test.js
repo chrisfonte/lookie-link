@@ -156,7 +156,7 @@ test('discovery reflects scoped caller identity and omits unauthorized repos, ro
     assert.equal(whoami.capabilities.annotationWrite, false);
     assert.equal(whoami.capabilities.publish, false);
     assert.equal(whoami.capabilities.managedRepos, false);
-    assert.equal(whoami.capabilities.search, false);
+    assert.equal(whoami.capabilities.search, true);
     assert.equal(Object.hasOwn(whoami.endpoints, 'save'), false);
     assert.equal(Object.hasOwn(whoami.endpoints, 'annotationCreate'), false);
     assert.equal(Object.hasOwn(whoami.endpoints, 'publishCreate'), false);
@@ -183,6 +183,7 @@ test('discovery reflects scoped caller identity and omits unauthorized repos, ro
     assert.equal(reposResponse.status, 200);
     const repos = await reposResponse.json();
     assert.deepEqual(repos, {
+      ok: true,
       repos: [{ repo: 'docs', viewUrl: '/view/docs/', assetUrl: '/asset/docs/' }],
       count: 1,
     });
@@ -246,6 +247,19 @@ const ROUTE_FOR_ENDPOINT = Object.freeze({
   repos: ['get', '/api/repos'],
   view: ['get', '/view/*'],
   assetRead: ['get', '/asset/:repo/*'],
+  wallpaperImage: ['get', '/wallpaper/:slug/:mode/:id'],
+  appearance: ['get', '/api/appearance'],
+  repoTree: ['get', '/api/repos/:repo/tree'],
+  repoChanges: ['get', '/api/repos/:repo/changes'],
+  repoFileRead: ['get', '/api/repos/:repo/files/*'],
+  appearanceTheme: ['get', '/api/appearance/themes/:slug'],
+  kits: ['get', '/api/kits'],
+  kit: ['get', '/api/kits/:name'],
+  kitStylesheet: ['get', '/kit/:name/kit.css'],
+  kitFile: ['get', '/kit/:name/files/:file'],
+  forms: ['get', '/forms'],
+  formsTemplates: ['get', '/api/forms/templates'],
+  formsSubmissions: ['get', '/api/forms/:templateId/submissions'],
   edit: ['get', '/edit/*'],
   save: ['post', '/api/save/*'],
   preview: ['post', '/api/preview/*'],
@@ -264,6 +278,8 @@ const ROUTE_FOR_ENDPOINT = Object.freeze({
   publishCreate: ['post', '/api/publish'],
   publishUpdate: ['post', '/api/publish/:slug'],
   publishRevoke: ['post', '/api/publish/:slug/revoke'],
+  publishList: ['get', '/api/publish'],
+  publishGet: ['get', '/api/publish/:slug'],
 });
 
 const CAPABILITY_ENDPOINTS = Object.freeze({
@@ -277,15 +293,29 @@ const CAPABILITY_ENDPOINTS = Object.freeze({
   embeddedHtml: ['embeddedHtml'],
   managedRepos: ['managedRepoList', 'managedFileRead', 'managedTree', 'managedChanges'],
   search: ['search', 'searchSuggest'],
+  repoRead: ['repoTree', 'repoFileRead', 'repoChanges'],
   publish: ['publishCreate', 'publishUpdate', 'publishRevoke'],
+  publishRead: ['publishList', 'publishGet'],
+  wallpapers: ['wallpaperImage'],
+  appearance: ['appearance', 'appearanceTheme'],
+  kits: ['kits', 'kit', 'kitStylesheet', 'kitFile'],
+  forms: ['forms', 'formsTemplates', 'formsSubmissions'],
 });
 
-function registeredRoutes(app) {
-  return app._router.stack
-    .filter((layer) => layer.route)
-    .flatMap((layer) => Object.keys(layer.route.methods || {})
-      .filter((method) => layer.route.methods[method])
-      .map((method) => `${method}:${layer.route.path}`));
+// App-level routes only by default (the authoritative matrix covers those).
+// includeRouters walks mounted routers too (the forms router), for checks
+// that must see every route a caller can actually reach.
+function registeredRoutes(app, { includeRouters = false } = {}) {
+  const fromStack = (stack) => stack.flatMap((layer) => {
+    if (layer.route) {
+      return Object.keys(layer.route.methods || {})
+        .filter((method) => layer.route.methods[method])
+        .map((method) => `${method}:${layer.route.path}`);
+    }
+    if (includeRouters && layer.handle && Array.isArray(layer.handle.stack)) return fromStack(layer.handle.stack);
+    return [];
+  });
+  return fromStack(app._router.stack);
 }
 
 async function documentedEndpointTemplates() {
@@ -391,7 +421,7 @@ test('discovery matrix agrees across caller class, route availability, repo disc
           editing: false,
           annotationWrite: false,
           managedRepos: false,
-          search: false,
+          search: true,
           publish: false,
         },
       },
@@ -427,6 +457,9 @@ test('discovery matrix agrees across caller class, route availability, repo disc
       }
 
       assert.deepEqual(agentResult.body.capabilities, whoamiResult.body.capabilities);
+      assert.deepEqual(agentResult.body.themes, whoamiResult.body.themes, 'themes block identical in both documents');
+      assert.deepEqual(Object.keys(whoamiResult.body.themes.parameters).sort(), ['blur', 'mode', 'panelOpacity', 'scheme', 'wallpaper']);
+      assert.equal(whoamiResult.body.themes.wallpapers.imageUrl, '/wallpaper/:scheme/:mode/:id');
       assert.deepEqual(agentResult.body.endpoints, whoamiResult.body.endpoints);
       assert.deepEqual(agentResult.body.caller.repoScopes, whoamiResult.body.repoScopes);
       const scopeRepos = whoamiResult.body.repoScopes.map((entry) => entry.repo).sort();
@@ -447,7 +480,7 @@ test('discovery matrix agrees across caller class, route availability, repo disc
         }
       }
 
-      const routes = new Set(registeredRoutes(callerCase.server.app));
+      const routes = new Set(registeredRoutes(callerCase.server.app, { includeRouters: true }));
       for (const [endpointKey, template] of Object.entries(whoamiResult.body.endpoints)) {
         assert.equal(docs.get(endpointKey), template, `docs template for ${endpointKey}`);
         const [method, routePath] = ROUTE_FOR_ENDPOINT[endpointKey];

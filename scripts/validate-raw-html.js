@@ -27,8 +27,6 @@ const { createApp } = require('../server');
 const CURRENT_ANNOTATION_SELECTORS = [
   '[data-annotations-mount]',
   '[data-annotate-trigger]',
-  '[data-annotations-stale]',
-  '[data-annotations-toggle]',
   '[data-rendered-view]',
 ];
 
@@ -183,7 +181,10 @@ async function run() {
       assert.match(embedResp.text, /id="lookie-link-embed-theme"/, '/embed injects theme tokens');
       assert.match(embedResp.text, /data-lookie-link-theme="light"/, '/embed accepts the framed theme mode');
       assert.match(embedResp.text, /data-lookie-link-scheme="teal"/, '/embed accepts the framed color scheme');
-      assert.match(embedResp.text, /lookie-link-annotations-bootstrap/, '/embed mounts annotations when enabled');
+      // Opaque-origin frame: gate + mounts only — no network annotations client.
+      assert.match(embedResp.text, /lookie-link-embed-annotation-gate/, '/embed injects the annotation gate when enabled');
+      assert.doesNotMatch(embedResp.text, /lookie-link-annotations-bootstrap/, '/embed must not ship the annotations network bootstrap');
+      assert.doesNotMatch(embedResp.text, /\/public\/annotations\.js/, '/embed must not load the annotations client');
       const embedDocument = new JSDOM(embedResp.text).window.document;
       for (const selector of CURRENT_ANNOTATION_SELECTORS) {
         assert.ok(embedDocument.querySelector(selector), `/embed must emit current annotation selector ${selector}`);

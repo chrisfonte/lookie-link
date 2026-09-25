@@ -75,7 +75,7 @@ test('tree route uniformly hides trash starts from a root-scoped viewer', async 
       accessContext: rootScopedViewer(setup.repo.id),
     }, res);
     assert.equal(res.statusCode, 404);
-    assert.deepEqual(res.body, { ok: false, error: 'Not found.' });
+    assert.deepEqual(res.body, { ok: false, error: { code: 'not_found', message: 'Not found.' } });
     assert.equal(JSON.stringify(res.body).includes(deleted.trashId), false);
     assert.equal(JSON.stringify(res.body).includes('metadata'), false);
   }
@@ -114,8 +114,8 @@ test('unauthorized trash mutations do not read metadata or reveal existence', as
     assert.deepEqual(
       responses.map((res) => ({ status: res.statusCode, body: res.body })),
       [
-        { status: 404, body: { ok: false, error: 'Not found.' } },
-        { status: 404, body: { ok: false, error: 'Not found.' } },
+        { status: 404, body: { ok: false, error: { code: 'not_found', message: 'Not found.' } } },
+        { status: 404, body: { ok: false, error: { code: 'not_found', message: 'Not found.' } } },
       ]
     );
   }

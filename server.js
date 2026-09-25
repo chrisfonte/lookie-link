@@ -16,7 +16,8 @@ const {
   getManagedReposConfig,
   getPublishConfig,
   getFormsConfig,
-  loadCustomThemes,
+  getKitsConfig,
+  loadCustomThemes, getSearchConfig, getBaseConfig, getAppearanceOverlayPath, mergeAppearance, THEME_CSS_PROPERTIES, loadWallpaperCatalog, getWallpaperDefaults, reloadConfig, getConfigPath,
   generateCustomThemeCss,
   BUILT_IN_THEMES,
 } = require('./lib/config');
@@ -37,6 +38,8 @@ const {
 const { ApiKeyStore } = require('./lib/api-key-store');
 const { ManagedRepoStore } = require('./lib/managed-repo-store');
 const { searchManagedRepos, suggestManagedRepos } = require('./lib/managed-repo-search');
+const { createRepoResolver } = require('./lib/repo-reader');
+const { resolveRipgrep, searchWithRipgrep } = require('./lib/search-backend');
 const { PublishStore } = require('./lib/publish-store');
 const {
   safeResolve,
@@ -67,8 +70,8 @@ const {
   renderPreviewHtml,
   renderAnnotationMarkdown,
   setThemeList,
-  setNavLinks,
-} = require('./lib/renderer');
+  getThemeList,
+  setNavLinks, detectRenderMode } = require('./lib/renderer');
 const {
   readAnnotationDocument,
   filterAnnotationsByState,
@@ -83,13 +86,37 @@ const {
   buildAgentDiscoveryDocument,
   buildWhoAmIDocument,
 } = require('./lib/agent-discovery');
+const { buildOpenApiDocument, renderApiDocsPage } = require('./lib/openapi');
 const { TemplateRegistry } = require('./lib/forms/template-registry');
 const {
   DestinationAdapter,
   configuredDestinationRoots,
 } = require('./lib/forms/destination-adapter');
 const { SubmissionService } = require('./lib/forms/submission-service');
+const { setWallpaperCatalog, resolveWallpaperFile, contentTypeFor: wallpaperContentType, watchWallpapers, publicCatalog: publicWallpaperCatalog, currentDefaults: wallpaperDefaultsForDiscovery, currentCatalog: wallpaperCatalogForApi, currentThemes: wallpaperThemesForApi } = require('./lib/viewer-wallpaper');
+const { registerAppearanceRoutes, resolveAdminTokens, extractBearer, constantTimeEqual } = require('./lib/appearance-api');
+const {
+  loadKits,
+  listKits,
+  getKit,
+  getDeletedKit,
+  getKitRecord,
+  readKitFile,
+  readKitStylesheet,
+  readKitStylesheetAtVersion,
+  kitsRevision,
+  kitsEnabled,
+  defaultKitName,
+  watchKits,
+  contentTypeFor: kitContentType,
+  watchTargets: kitWatchTargets,
+  createManagedKit,
+  writeManagedFile,
+  deleteManagedKit,
+  patchKitOverlay,
+} = require('./lib/kits');
 const { createFormsRouter } = require('./lib/forms/routes');
+const { apiError } = require('./lib/api-error');
 
 const { version: LOOKIE_LINK_VERSION } = require('./package.json');
 
@@ -299,12 +326,12 @@ function sendPathError(res, error) {
 }
 
 function sendPathJsonError(res, error) {
-  res.status(error.status).json({ ok: false, error: error.message });
+  apiError(res, error.status, null, error.message);
 }
 
 function sendAccessError(res, accessContext, asJson = false) {
   if (asJson) {
-    res.status(accessContext.denialStatus).json({ ok: false, error: accessContext.denialMessage });
+    apiError(res, accessContext.denialStatus, null, accessContext.denialMessage);
     return;
   }
 
@@ -347,8 +374,26 @@ function parseBooleanQuery(value) {
   return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
+// `since` for change listings: epoch milliseconds, epoch seconds (< 1e12), or
+// an ISO-8601 timestamp. Independent-agent trial 2026-09-23: an agent given an
+// ISO time had to convert it by hand; the server should take what people have.
+function parseSince(raw) {
+  if (raw == null || raw === '') return { since: null };
+  const text = String(raw).trim();
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    // Seconds vs milliseconds: 1e11 ms is 1973-03-03 and 1e11 s is the year
+    // 5138, so anything below 1e11 can only be seconds. (The first cut used
+    // 1e12 and turned a millisecond value for 2000-01-01 into the year 31969.)
+    const n = Number(text);
+    return { since: n < 1e11 ? Math.round(n * 1000) : Math.round(n) };
+  }
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) return { since: parsed };
+  return { error: 'since must be epoch milliseconds, epoch seconds, or an ISO-8601 timestamp.' };
+}
+
 function managedNotFound(res) {
-  res.status(404).json({ ok: false, error: 'Not found.' });
+  apiError(res, 404, null, 'Not found.');
 }
 
 function publicManagedRepo(repo) {
@@ -463,8 +508,12 @@ function buildReferenceDescription({ repo, normalized, tag, attr, kind, accessCo
   return entry;
 }
 
-async function describeLocalReference({ repo, rootPath, sourceRelativePath, tag, attr, value, kind, accessContext }) {
+async function describeLocalReference({ repo, rootPath, rootPrefix, sourceRelativePath, tag, attr, value, kind, accessContext }) {
   const normalized = normalizeLocalReference(sourceRelativePath, value);
+  // A published bundle's URL path starts with the slug; its revision folder does not.
+  const diskPath = rootPrefix && normalized && normalized.path && (normalized.path === rootPrefix || normalized.path.startsWith(rootPrefix + '/'))
+    ? normalized.path.slice(rootPrefix.length + 1)
+    : (normalized && normalized.path);
   if (!normalized) {
     return null;
   }
@@ -472,7 +521,7 @@ async function describeLocalReference({ repo, rootPath, sourceRelativePath, tag,
   const entry = buildReferenceDescription({ repo, normalized, tag, attr, kind, accessContext });
   let stat;
   try {
-    const absolutePath = await safeResolve(rootPath, normalized.path);
+    const absolutePath = await safeResolve(rootPath, diskPath);
     stat = await fs.stat(absolutePath);
   } catch (_error) {
     entry.error = 'not_found';
@@ -495,7 +544,153 @@ async function describeLocalReference({ repo, rootPath, sourceRelativePath, tag,
   return entry;
 }
 
-async function buildHtmlRenderValidation({ repo, rootPath, relativePath, stat, source, rawHtmlEnabled, accessContext }) {
+// Advisory kit/page-contract checks for ?validate=1 (never change HTTP status).
+// Version compare: dotted numeric segments; '+' build metadata is stripped.
+function compareKitVersions(left, right) {
+  const parse = (value) => {
+    if (value === undefined || value === null) return null;
+    const text = String(value).trim();
+    if (!text) return null;
+    const core = text.split('+')[0];
+    const parts = core.split('.').map((part) => {
+      if (part === '' || !/^\d+$/.test(part)) return null;
+      return Number(part);
+    });
+    if (parts.some((part) => part === null)) return null;
+    return parts;
+  };
+  const a = parse(left);
+  const b = parse(right);
+  if (!a || !b) return null;
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i += 1) {
+    const av = a[i] === undefined ? 0 : a[i];
+    const bv = b[i] === undefined ? 0 : b[i];
+    if (av < bv) return -1;
+    if (av > bv) return 1;
+  }
+  return 0;
+}
+
+function collectInlineStyleText(document) {
+  return [...document.querySelectorAll('style')].map((node) => node.textContent || '').join('\n');
+}
+
+function styleLooksLikeUnmarkedKit(text) {
+  if (!text) return false;
+  if (/Ops HTML Kit/i.test(text)) return true;
+  if (/\/\*\s*File:[\s\S]*?kit\.css/i.test(text)) return true;
+  return false;
+}
+
+function analyzeKitPresence(document) {
+  const warnings = [];
+  let detected = null;
+  let source = null;
+
+  const markedStyle = document.querySelector('style[data-kit]');
+  const kitLink = [...document.querySelectorAll('link[rel~="stylesheet"][data-kit], link[rel="stylesheet"][data-kit]')]
+    .find(Boolean) || document.querySelector('link[data-kit]');
+
+  if (markedStyle) {
+    const name = (markedStyle.getAttribute('data-kit') || '').trim() || null;
+    const version = markedStyle.hasAttribute('data-kit-version')
+      ? String(markedStyle.getAttribute('data-kit-version') || '').trim()
+      : null;
+    detected = name ? { name, version: version || null } : null;
+    source = 'inline-style';
+  } else if (kitLink && (kitLink.getAttribute('rel') || '').toLowerCase().includes('stylesheet')) {
+    const nameAttr = kitLink.getAttribute('data-kit');
+    const name = nameAttr && nameAttr !== '' ? String(nameAttr).trim() : null;
+    const version = kitLink.hasAttribute('data-kit-version')
+      ? String(kitLink.getAttribute('data-kit-version') || '').trim()
+      : null;
+    detected = name ? { name, version: version || null } : null;
+    source = 'link';
+    warnings.push('kit-placeholder-not-inlined');
+  } else {
+    const unmarked = [...document.querySelectorAll('style')].find((node) => {
+      if (node.hasAttribute('data-kit')) return false;
+      return styleLooksLikeUnmarkedKit(node.textContent || '');
+    });
+    if (unmarked) {
+      detected = { name: 'ops', version: null };
+      source = 'inline-unmarked';
+      warnings.push('kit-inlined-unmarked');
+    }
+  }
+
+  let current = null;
+  let stale = false;
+  if (detected && detected.name) {
+    const kit = getKit(detected.name);
+    if (!kit) {
+      warnings.push('kit-unknown');
+    } else {
+      current = {
+        name: kit.name,
+        version: kit.version,
+        effectiveVersion: kit.effectiveVersion || kit.version,
+      };
+      if (detected.version == null || detected.version === '') {
+        // Unmarked / missing version: cannot judge freshness.
+      } else {
+        const cmp = compareKitVersions(detected.version, current.version);
+        if (cmp === null) {
+          warnings.push('kit-version-unparsable');
+        } else if (cmp < 0) {
+          stale = true;
+          warnings.push('kit-stale');
+        }
+      }
+    }
+  }
+
+  return { detected, source, current, stale, warnings };
+}
+
+function analyzePageContract(document, source) {
+  const warnings = [];
+  const root = document.documentElement;
+  // Same detector the embed runtime uses: the root attribute OR
+  // <meta name="lookie-render" content="viewport"> (lane E asked; both count).
+  const renderMode = detectRenderMode(source) === 'viewport' ? 'viewport' : 'content-height';
+
+  const themeFollowNode = document.querySelector('html[data-lookie-follow-theme], body[data-lookie-follow-theme], [data-lookie-follow-theme]');
+  const declared = Boolean(themeFollowNode);
+  const inlineCss = collectInlineStyleText(document);
+  const consumesTokens = /--lookie-/.test(inlineCss);
+  if (declared && !consumesTokens) {
+    warnings.push('theme-follow-inert');
+  }
+
+  const stickyNode = document.querySelector('.topnav, nav[class*="topnav"]');
+  const present = Boolean(stickyNode);
+  let sectionScrollMargin = null;
+  let overflowXHiddenOnAncestor = false;
+  if (present) {
+    sectionScrollMargin = /scroll-margin-top\s*:/.test(inlineCss);
+    if (renderMode !== 'viewport') {
+      warnings.push('sticky-nav-without-viewport-mode');
+    }
+    if (!sectionScrollMargin) {
+      warnings.push('sticky-nav-sections-missing-scroll-margin');
+    }
+    overflowXHiddenOnAncestor = /(html|body)[^{]*\{[^}]*overflow-x\s*:\s*hidden/i.test(inlineCss);
+    if (overflowXHiddenOnAncestor) {
+      warnings.push('overflow-x-hidden-kills-sticky');
+    }
+  }
+
+  return {
+    renderMode,
+    themeFollow: { declared, consumesTokens },
+    stickyNav: { present, sectionScrollMargin, overflowXHiddenOnAncestor },
+    warnings,
+  };
+}
+
+async function buildHtmlRenderValidation({ repo, rootPath, rootPrefix, relativePath, stat, source, rawHtmlEnabled, accessContext }) {
   const dom = new JSDOM(source);
   const { document } = dom.window;
   const assetRefs = [];
@@ -533,6 +728,7 @@ async function buildHtmlRenderValidation({ repo, rootPath, relativePath, stat, s
   });
 
   const localAssets = (await Promise.all(assetRefs.map((ref) => describeLocalReference({
+    rootPrefix,
     repo,
     rootPath,
     sourceRelativePath: relativePath,
@@ -540,12 +736,16 @@ async function buildHtmlRenderValidation({ repo, rootPath, relativePath, stat, s
     ...ref,
   })))).filter(Boolean);
   const navigationLinks = (await Promise.all(documentRefs.map((ref) => describeLocalReference({
+    rootPrefix,
     repo,
     rootPath,
     sourceRelativePath: relativePath,
     accessContext,
     ...ref,
   })))).filter(Boolean);
+
+  const kit = analyzeKitPresence(document);
+  const pageContract = analyzePageContract(document, source);
 
   return {
     ok: true,
@@ -566,22 +766,26 @@ async function buildHtmlRenderValidation({ repo, rootPath, relativePath, stat, s
     },
     localAssets,
     navigationLinks,
+    kit,
+    pageContract,
     summary: {
       localAssetCount: localAssets.length,
       missingLocalAssetCount: localAssets.filter((entry) => !entry.exists).length,
       unsupportedLocalAssetCount: localAssets.filter((entry) => !entry.supportedAsset).length,
       navigationLinkCount: navigationLinks.length,
       missingNavigationTargetCount: navigationLinks.filter((entry) => !entry.exists).length,
+      kitWarningCount: kit.warnings.length,
+      contractWarningCount: pageContract.warnings.length,
     },
   };
 }
 
 function sendGrantJsonError(res, status, error) {
-  res.status(status).json({ ok: false, error });
+  apiError(res, status, null, error);
 }
 
 function sendApiKeyJsonError(res, status, error) {
-  res.status(status).json({ ok: false, error });
+  apiError(res, status, null, error);
 }
 
 function inferBaseUrl(req) {
@@ -621,10 +825,22 @@ function getRouteAvailability(app) {
     managedTree: has('get', '/api/managed-repos/:repo/tree'),
     managedChanges: has('get', '/api/managed-repos/:repo/changes'),
     search: has('get', '/api/search'),
+    repoTree: has('get', '/api/repos/:repo/tree'),
+    repoChanges: has('get', '/api/repos/:repo/changes'),
+    repoFileRead: has('get', '/api/repos/:repo/files/*'),
     searchSuggest: has('get', '/api/search/suggest'),
     publishCreate: has('post', '/api/publish'),
     publishUpdate: has('post', '/api/publish/:slug'),
     publishRevoke: has('post', '/api/publish/:slug/revoke'),
+    publishList: has('get', '/api/publish'),
+    publishGet: has('get', '/api/publish/:slug'),
+    wallpaperImage: has('get', '/wallpaper/:slug/:mode/:id'),
+    appearance: has('get', '/api/appearance'),
+    appearanceTheme: has('get', '/api/appearance/themes/:slug'),
+    kits: has('get', '/api/kits'),
+    kit: has('get', '/api/kits/:name'),
+    kitStylesheet: has('get', '/kit/:name/kit.css'),
+    kitFile: has('get', '/kit/:name/files/:file'),
   };
 }
 
@@ -635,11 +851,26 @@ function createApp(options = {}) {
   const editingEnabled = options.editingEnabled === undefined ? getEditingEnabled() : Boolean(options.editingEnabled);
   const annotationsEnabled = options.annotationsEnabled === undefined ? getAnnotationsEnabled() : Boolean(options.annotationsEnabled);
   const rawHtmlEnabled = options.rawHtmlEnabled === undefined ? getRawHtmlEnabled() : Boolean(options.rawHtmlEnabled);
-  const customThemeCss = options.customThemeCss || '';
+  // `let`, not const: every page reads this at request time, so the theme
+  // watcher can swap in regenerated CSS without a restart.
+  let customThemeCss = options.customThemeCss || '';
+  app.locals.setCustomThemeCss = (css) => { customThemeCss = typeof css === 'string' ? css : ''; };
+  if (options.wallpaperCatalog !== undefined) setWallpaperCatalog(options.wallpaperCatalog, options.wallpaperThemes || [], options.wallpaperDefaults || null);
   const rawAccessConfig = options.accessConfig === undefined ? getAccessConfig() : options.accessConfig;
   const rawManagedReposConfig = options.managedReposConfig === undefined ? getManagedReposConfig() : options.managedReposConfig;
   const rawPublishConfig = options.publishConfig === undefined ? getPublishConfig() : options.publishConfig;
   const formsConfig = options.formsConfig === undefined ? getFormsConfig() : options.formsConfig;
+  const kitsConfig = options.kitsConfig === undefined ? getKitsConfig() : options.kitsConfig;
+  const refreshKits = () => loadKits({
+    folders: kitsConfig.folders || [],
+    managedFolder: kitsConfig.managedFolder === undefined ? null : kitsConfig.managedFolder,
+    bundledRoot: kitsConfig.bundledRoot === undefined ? undefined : kitsConfig.bundledRoot,
+    enabled: kitsConfig.enabled !== false,
+    default: kitsConfig.default,
+    warn: typeof logger.warn === 'function' ? (...args) => logger.warn(...args) : console.warn,
+  });
+  refreshKits();
+  app.locals.refreshKits = refreshKits;
   // Forms only appears when the deployment actually serves them.
   setNavLinks([
     { href: '/', label: 'Files' },
@@ -655,6 +886,13 @@ function createApp(options = {}) {
   const managedRepoStore = options.managedRepoStore === undefined
     ? ManagedRepoStore.fromConfig(rawManagedReposConfig)
     : options.managedRepoStore;
+  // Every served repo (managed or plainly mapped) behind one read-only door
+  // (API roadmap R2): tree / changes / file read / search work for all of them.
+  const repoResolver = createRepoResolver({ mappings, managedRepoStore });
+  // Search backend (roadmap R8): ripgrep when configured/found, else the walk.
+  const searchConfig = options.searchConfig === undefined ? getSearchConfig() : (options.searchConfig || {});
+  const ripgrepBinary = resolveRipgrep(searchConfig.ripgrep === undefined ? 'auto' : searchConfig.ripgrep);
+  app.locals.searchBackend = ripgrepBinary ? 'ripgrep' : 'walk';
   if (managedRepoStore && managedRepoStore.isEnabled()) {
     for (const repo of managedRepoStore.listRepos().repos) {
       if (!mappings[repo.id]) mappings[repo.id] = repo.rootPath;
@@ -749,6 +987,7 @@ function createApp(options = {}) {
     throw new Error(`publish.repoId "${publishedRepo}" conflicts with a configured repository mapping.`);
   }
   const canPublishTarget = (accessContext) => canAccessRepo(accessContext, 'publish', publishedRepo);
+  const canViewPublished = (accessContext) => canAccessRepo(accessContext, 'view', publishedRepo);
   const resolvePublishedTarget = async (repo, relativePath, version) => {
     if (!publishStore || !publishStore.isEnabled() || repo !== publishedRepo) {
       return null;
@@ -795,7 +1034,7 @@ function createApp(options = {}) {
   }
   app.use((req, res, next) => {
     if (mutationUsesQueryToken(req)) {
-      res.status(400).json({ ok: false, error: 'Mutation credentials must use the Authorization header.' });
+      apiError(res, 400, 'query_credentials_rejected', 'Mutation credentials must use the Authorization header.');
       return;
     }
     next();
@@ -846,7 +1085,7 @@ function createApp(options = {}) {
       contexts: options.formsCsrfContexts,
       audit: formsAudit,
       logger,
-      customThemeCss,
+      get customThemeCss() { return customThemeCss; },
     }));
   }
   app.use(express.json({ limit: '2mb' }));
@@ -879,12 +1118,12 @@ function createApp(options = {}) {
   app.post('/api/managed-repos', (req, res) => {
     const auth = authenticateManagedRepoAdmin(req);
     if (!auth.ok) {
-      res.status(auth.status).json({ ok: false, error: auth.error });
+      apiError(res, auth.status, null, auth.error);
       return;
     }
     try {
       if (req.body && mappings[String(req.body.repoId || '').trim().toLowerCase()]) {
-        res.status(409).json({ ok: false, error: 'Repository id already exists.' });
+        apiError(res, 409, null, 'Repository id already exists.');
         return;
       }
       const result = managedRepoStore.createRepo(req.body || {}, auth.admin);
@@ -892,7 +1131,89 @@ function createApp(options = {}) {
       res.status(201).json({ ok: true, repo: publicManagedRepo(result.repo) });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
+    }
+  });
+
+  // ---- Generic read routes: any served repo, managed or mapped -------------
+  const resolveReadableRepo = (req, res, relativePath, type) => {
+    const accessContext = resolveAccessContext(req);
+    if (accessContext.mode === 'denied') {
+      sendAccessError(res, accessContext, true);
+      return null;
+    }
+    const found = repoResolver.resolve(req.params.repo);
+    if (!found
+      || (found.repo.managed && isManagedInternalPath(found.repo.id, relativePath))
+      || !canAccessPath(accessContext, 'view', found.repo.id, relativePath, type)) {
+      managedNotFound(res);
+      return null;
+    }
+    return { ...found, accessContext };
+  };
+
+  app.get('/api/repos/:repo/tree', async (req, res) => {
+    const relativePath = typeof req.query.path === 'string' ? req.query.path : '';
+    const found = resolveReadableRepo(req, res, relativePath, 'directory');
+    if (!found) return;
+    const { repo, reader, accessContext } = found;
+    try {
+      const tree = await reader.listTree(repo, relativePath, {
+        maxDepth: req.query.maxDepth,
+        maxEntries: req.query.maxEntries,
+        includeEntry: (entry) => canAccessPath(accessContext, 'view', repo.id, entry.path, entry.type === 'directory' ? 'directory' : 'file'),
+        shouldDescend: (entry) => canAccessPath(accessContext, 'view', repo.id, entry.path, 'directory'),
+      });
+      res.status(200).json({
+        ok: true, repo: repo.id, managed: repo.managed, path: toPosixPath(relativePath),
+        entries: tree.entries, count: tree.entries.length, truncated: tree.truncated,
+        limits: { maxDepth: tree.maxDepth, maxEntries: tree.maxEntries },
+      });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
+    }
+  });
+
+  app.get('/api/repos/:repo/changes', async (req, res) => {
+    const found = resolveReadableRepo(req, res, '', 'directory');
+    if (!found) return;
+    const { repo, reader, accessContext } = found;
+    const parsedSince = parseSince(req.query.since);
+    if (parsedSince.error) {
+      apiError(res, 400, null, parsedSince.error, [{ path: 'since', message: 'epoch ms | epoch s | ISO-8601' }]);
+      return;
+    }
+    const since = parsedSince.since;
+    try {
+      const tree = await reader.listTree(repo, '', {
+        maxDepth: 10,
+        maxEntries: req.query.maxEntries,
+        includeEntry: (entry) => entry.type === 'file' && canAccessPath(accessContext, 'view', repo.id, entry.path, 'file'),
+        shouldDescend: (entry) => canAccessPath(accessContext, 'view', repo.id, entry.path, 'directory'),
+      });
+      const entries = tree.entries
+        .filter((entry) => since === null || entry.mtimeMs >= since)
+        .sort((a, b) => b.mtimeMs - a.mtimeMs)
+        .map((entry) => ({ path: entry.path, mtimeMs: entry.mtimeMs, size: entry.size, change: 'modified', viewUrl: buildHref(repo.id, entry.path) }));
+      res.status(200).json({ ok: true, repo: repo.id, managed: repo.managed, since, entries, count: entries.length, truncated: tree.truncated });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
+    }
+  });
+
+  app.get('/api/repos/:repo/files/*', async (req, res) => {
+    const relativePath = req.params[0] || '';
+    const found = resolveReadableRepo(req, res, relativePath, 'file');
+    if (!found) return;
+    const { repo, reader } = found;
+    try {
+      const result = await reader.readFile(repo, relativePath);
+      res.status(200).json({ ok: true, repo: repo.id, managed: repo.managed, ...result, viewUrl: buildHref(repo.id, result.path) });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
     }
   });
 
@@ -933,7 +1254,7 @@ function createApp(options = {}) {
       });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
     }
   });
 
@@ -944,11 +1265,12 @@ function createApp(options = {}) {
       managedNotFound(res);
       return;
     }
-    const since = req.query.since == null || req.query.since === '' ? null : Number(req.query.since);
-    if (since !== null && !Number.isFinite(since)) {
-      res.status(400).json({ ok: false, error: 'since must be a unix timestamp.' });
+    const parsedSince = parseSince(req.query.since);
+    if (parsedSince.error) {
+      apiError(res, 400, null, parsedSince.error, [{ path: 'since', message: 'epoch ms | epoch s | ISO-8601' }]);
       return;
     }
+    const since = parsedSince.since;
     try {
       const tree = await managedRepoStore.listTree(repo, '', {
         maxDepth: 10,
@@ -962,7 +1284,7 @@ function createApp(options = {}) {
       res.status(200).json({ ok: true, repo: repo.id, entries, count: entries.length, truncated: tree.truncated });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
     }
   });
 
@@ -979,7 +1301,7 @@ function createApp(options = {}) {
       res.status(200).json({ ok: true, repo: repo.id, ...result, viewUrl: buildHref(repo.id, result.path) });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
     }
   });
 
@@ -992,7 +1314,7 @@ function createApp(options = {}) {
       return;
     }
     if (!req.body || typeof req.body.content !== 'string') {
-      res.status(400).json({ ok: false, error: 'content is required.' });
+      apiError(res, 400, null, 'content is required.', [{ path: 'content', message: 'content is required.' }]);
       return;
     }
     try {
@@ -1004,13 +1326,79 @@ function createApp(options = {}) {
       res.status(result.created ? 201 : 200).json({ ok: true, repo: repo.id, ...result });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({
-        ok: false,
-        error: status === 404 ? 'Not found.' : error.message,
-        ...(status === 409 ? { current: error.current } : {}),
-      });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message, null,
+        status === 409 ? { current: error.current } : null);
     }
   });
+
+  // Optional publish-time kit: name string or true (= configured default).
+  // Resolved here so the store only receives baked CSS + kit metadata.
+  function resolvePublishKit(rawKit) {
+    if (rawKit === undefined || rawKit === null) {
+      return { ok: true, kit: null };
+    }
+    if (!kitsEnabled()) {
+      return {
+        ok: false,
+        code: 'feature_disabled',
+        message: 'Kits are not enabled.',
+        details: [{ path: 'kit', message: 'kits disabled or none loaded' }],
+      };
+    }
+    let name;
+    if (rawKit === true) {
+      name = defaultKitName();
+      if (!name) {
+        return {
+          ok: false,
+          code: 'feature_disabled',
+          message: 'Kits are not enabled.',
+          details: [{ path: 'kit', message: 'kits disabled or none loaded' }],
+        };
+      }
+    } else if (typeof rawKit === 'string' && rawKit.trim()) {
+      name = rawKit.trim();
+    } else {
+      return {
+        ok: false,
+        code: 'invalid_request',
+        message: 'kit must be a kit name or true for the default kit.',
+        details: [{ path: 'kit', message: 'kit name string or true' }],
+      };
+    }
+    const record = getKitRecord(name);
+    if (!record) {
+      return {
+        ok: false,
+        code: 'invalid_request',
+        message: `unknown kit: ${name}`,
+        details: [{ path: 'kit', message: `unknown kit: ${name}` }],
+      };
+    }
+    // The SERVED stylesheet (base + any admin token overlay), so a revision
+    // published under an overlay bakes it in; the revision records the
+    // effective version (e.g. 1.26+7c8bc0d7). Found 2026-09-24: the first cut
+    // inlined the base file and a revision published during an overlay lost it.
+    const css = readKitStylesheet(name);
+    if (css == null) {
+      return {
+        ok: false,
+        code: 'invalid_request',
+        message: `kit stylesheet unavailable: ${name}`,
+        details: [{ path: 'kit', message: `kit stylesheet unavailable: ${name}` }],
+      };
+    }
+    return {
+      ok: true,
+      kit: {
+        name: record.name,
+        version: record.effectiveVersion || record.version,
+        baseVersion: record.version,
+        revision: kitsRevision(),
+        css,
+      },
+    };
+  }
 
   app.post('/api/publish', async (req, res) => {
     if (!publishStore || !publishStore.isEnabled()) {
@@ -1022,8 +1410,16 @@ function createApp(options = {}) {
       sendAccessError(res, accessContext, true);
       return;
     }
+    const kitResolution = resolvePublishKit(req.body && req.body.kit);
+    if (!kitResolution.ok) {
+      apiError(res, 400, kitResolution.code, kitResolution.message, kitResolution.details);
+      return;
+    }
     try {
-      const result = await publishStore.createPublication(req.body || {});
+      const result = await publishStore.createPublication({
+        ...(req.body || {}),
+        kit: kitResolution.kit,
+      });
       const revision = result.publication.revisions.at(-1);
       recordApiKeyAuditEvent('publish.create', accessContext, {
         repo: publishedRepo,
@@ -1039,9 +1435,7 @@ function createApp(options = {}) {
       });
     } catch (error) {
       const status = error.code === 'ECONFLICT' ? 409 : 400;
-      res.status(status).json({
-        ok: false,
-        error: error.message,
+      apiError(res, status, status === 409 ? 'revision_conflict' : null, error.message, null, {
         current: error.current ? publishStore.serializePublication(error.current) : null,
       });
     }
@@ -1061,7 +1455,24 @@ function createApp(options = {}) {
       res.status(200).json({ ok: true, repo: repo.id, ...result });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
+    }
+  });
+
+  app.get('/api/managed-repos/:repo/trash', async (req, res) => {
+    const accessContext = resolveAccessContext(req);
+    const repo = managedRepoStore && managedRepoStore.getRepo(req.params.repo);
+    if (!repo || !canAccessPath(accessContext, 'view', repo.id, '', 'directory')) {
+      managedNotFound(res);
+      return;
+    }
+    try {
+      const records = (await managedRepoStore.listTrash(repo))
+        .filter((record) => canAccessPath(accessContext, 'view', repo.id, record.originalPath, 'file'));
+      res.status(200).json({ ok: true, repo: repo.id, trash: records, count: records.length });
+    } catch (error) {
+      const status = managedErrorStatus(error);
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
     }
   });
 
@@ -1082,7 +1493,7 @@ function createApp(options = {}) {
       res.status(200).json({ ok: true, repo: repo.id, ...result });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
     }
   });
 
@@ -1103,69 +1514,109 @@ function createApp(options = {}) {
       res.status(200).json({ ok: true, repo: repo.id, ...result });
     } catch (error) {
       const status = managedErrorStatus(error);
-      res.status(status).json({ ok: false, error: status === 404 ? 'Not found.' : error.message });
+      apiError(res, status, null, status === 404 ? 'Not found.' : error.message);
     }
   });
 
+  // A misspelled filter must not silently widen a search (independent-agent
+  // trial 2026-09-23: `repo=` was ignored and 18 repos were searched). `repo`
+  // is accepted as an alias of `scope`; anything else unknown is a 400.
+  const SEARCH_QUERY_KEYS = new Set(['q', 'scope', 'repo', 'limit', 'maxEntries', 'token']);
+  const rejectUnknownSearchParams = (req, res) => {
+    const unknown = Object.keys(req.query).filter((key) => !SEARCH_QUERY_KEYS.has(key));
+    if (!unknown.length) return false;
+    apiError(res, 400, 'invalid_request', `Unknown query parameter${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}. Accepted: q, scope (alias repo), limit, maxEntries.`, unknown.map((key) => ({ path: key, message: 'unknown query parameter' })));
+    return true;
+  };
+  const searchScope = (query) => [].concat(query.scope || [], query.repo || []);
+
   app.get('/api/search', async (req, res) => {
-    if (!managedRepoStore || !managedRepoStore.isEnabled()) {
-      managedNotFound(res);
+    if (req.accessContext && req.accessContext.mode === 'denied') {
+      sendAccessError(res, req.accessContext, true);
       return;
     }
+    if (rejectUnknownSearchParams(req, res)) return;
     const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (!query) {
-      res.status(400).json({ ok: false, error: 'q is required.' });
+      apiError(res, 400, null, 'q is required.', [{ path: 'q', message: 'q is required.' }]);
       return;
     }
     if (query.length > 256) {
-      res.status(400).json({ ok: false, error: 'q must be at most 256 characters.' });
+      apiError(res, 400, null, 'q must be at most 256 characters.');
+      return;
+    }
+    if (req.query.limit !== undefined && !(Number.isInteger(Number(req.query.limit)) && Number(req.query.limit) >= 1)) {
+      apiError(res, 400, null, 'limit must be an integer of at least 1.', [{ path: 'limit', message: 'integer >= 1' }]);
       return;
     }
     const accessContext = resolveAccessContext(req);
     try {
-      const result = await searchManagedRepos({
-        store: managedRepoStore,
-        repos: managedRepoStore.listRepos().repos,
-        query,
-        scope: req.query.scope,
-        limit: req.query.limit,
-        maxEntries: req.query.maxEntries,
-        canView: (repo, relativePath, type) => canAccessPath(accessContext, 'view', repo, relativePath, type),
-      });
-      res.status(200).json({ ok: true, ...result });
+      const canView = (repo, relativePath, type) => canAccessPath(accessContext, 'view', repo, relativePath, type);
+      // A scope that names no repo this caller can search is an error, not an
+      // empty result: a typo used to look like "nothing there" (2026-09-23).
+      const requestedScopes = searchScope(req.query).flatMap((v) => String(v).split(',')).map((v) => v.trim()).filter(Boolean);
+      if (requestedScopes.length) {
+        const searchable = new Set(repoResolver.listAll().filter((repo) => canView(repo.id, '', 'directory')).map((repo) => repo.id));
+        const unknown = requestedScopes.filter((id) => !searchable.has(id));
+        if (unknown.length) {
+          apiError(res, 400, null, `scope names no searchable repo: ${unknown.join(', ')}. See GET /api/repos for the repos you can search.`, unknown.map((id) => ({ path: 'scope', message: `not searchable: ${id}` })));
+          return;
+        }
+      }
+      const result = ripgrepBinary
+        ? await searchWithRipgrep({
+          binary: ripgrepBinary,
+          repos: repoResolver.listAll(),
+          query,
+          scope: searchScope(req.query),
+          limit: req.query.limit,
+          maxResults: searchConfig.maxResults,
+          canView,
+        })
+        : await searchManagedRepos({
+          store: repoResolver.store,
+          repos: repoResolver.listAll(),
+          query,
+          scope: searchScope(req.query),
+          limit: req.query.limit,
+          maxEntries: req.query.maxEntries,
+          canView,
+        });
+      res.status(200).json({ ok: true, backend: result.backend || 'walk', ...result });
     } catch (error) {
-      res.status(500).json({ ok: false, error: 'Search failed.' });
+      apiError(res, 500, null, 'Search failed.');
     }
   });
 
   app.get('/api/search/suggest', async (req, res) => {
-    if (!managedRepoStore || !managedRepoStore.isEnabled()) {
-      managedNotFound(res);
+    if (req.accessContext && req.accessContext.mode === 'denied') {
+      sendAccessError(res, req.accessContext, true);
       return;
     }
+    if (rejectUnknownSearchParams(req, res)) return;
     const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (!query) {
-      res.status(400).json({ ok: false, error: 'q is required.' });
+      apiError(res, 400, null, 'q is required.', [{ path: 'q', message: 'q is required.' }]);
       return;
     }
     if (query.length > 256) {
-      res.status(400).json({ ok: false, error: 'q must be at most 256 characters.' });
+      apiError(res, 400, null, 'q must be at most 256 characters.');
       return;
     }
     const accessContext = resolveAccessContext(req);
     try {
       const result = await suggestManagedRepos({
-        store: managedRepoStore,
-        repos: managedRepoStore.listRepos().repos,
+        store: repoResolver.store,
+        repos: repoResolver.listAll(),
         query,
-        scope: req.query.scope,
+        scope: searchScope(req.query),
         limit: req.query.limit,
         maxEntries: req.query.maxEntries,
         canView: (repo, relativePath, type) => canAccessPath(accessContext, 'view', repo, relativePath, type),
       });
       res.status(200).json({ ok: true, ...result });
     } catch (error) {
-      res.status(500).json({ ok: false, error: 'Suggestion lookup failed.' });
+      apiError(res, 500, null, 'Suggestion lookup failed.');
     }
   });
 
@@ -1179,8 +1630,16 @@ function createApp(options = {}) {
       sendAccessError(res, accessContext, true);
       return;
     }
+    const kitResolution = resolvePublishKit(req.body && req.body.kit);
+    if (!kitResolution.ok) {
+      apiError(res, 400, kitResolution.code, kitResolution.message, kitResolution.details);
+      return;
+    }
     try {
-      const result = await publishStore.updatePublication(req.params.slug, req.body || {});
+      const result = await publishStore.updatePublication(req.params.slug, {
+        ...(req.body || {}),
+        kit: kitResolution.kit,
+      });
       const revision = result.publication.revisions.at(-1);
       recordApiKeyAuditEvent('publish.update', accessContext, {
         repo: publishedRepo,
@@ -1196,9 +1655,7 @@ function createApp(options = {}) {
       });
     } catch (error) {
       if (error.code === 'ECONFLICT') {
-        res.status(409).json({
-          ok: false,
-          error: error.message,
+        apiError(res, 409, 'revision_conflict', error.message, null, {
           currentRevision: error.current ? error.current.currentRevision : null,
           current: error.current ? publishStore.serializePublication(error.current) : null,
         });
@@ -1233,6 +1690,105 @@ function createApp(options = {}) {
     } catch (error) {
       const status = error.code === 'ENOENT' ? 404 : error.code === 'EREVOKED' ? 410 : 400;
       sendPathJsonError(res, { status, message: error.message });
+    }
+  });
+
+  const PUBLISH_LIST_QUERY_KEYS = new Set(['state']);
+  const PUBLISH_GET_QUERY_KEYS = new Set(['version']);
+  const rejectUnknownPublishParams = (req, res, allowed) => {
+    const unknown = Object.keys(req.query).filter((key) => !allowed.has(key));
+    if (!unknown.length) return false;
+    apiError(res, 400, 'invalid_request', `Unknown query parameter${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}. Accepted: ${[...allowed].join(', ')}.`, unknown.map((key) => ({ path: key, message: 'unknown query parameter' })));
+    return true;
+  };
+
+  function sendPublishWithEtag(req, res, revision, body) {
+    const etag = `W/"publish-${revision}"`;
+    res.set('ETag', etag);
+    res.set('Cache-Control', 'no-cache');
+    if (req.get('if-none-match') === etag) {
+      res.status(304).end();
+      return;
+    }
+    res.status(200).json(body);
+  }
+
+  app.get('/api/publish', async (req, res) => {
+    if (!publishStore || !publishStore.isEnabled()) {
+      sendPathJsonError(res, { status: 404, message: 'Publishing is not configured.' });
+      return;
+    }
+    const accessContext = resolveAccessContext(req);
+    if (!canViewPublished(accessContext)) {
+      sendAccessError(res, accessContext, true);
+      return;
+    }
+    if (rejectUnknownPublishParams(req, res, PUBLISH_LIST_QUERY_KEYS)) return;
+    const state = req.query.state === undefined ? null : String(req.query.state).trim();
+    if (state !== null && state !== 'active' && state !== 'revoked') {
+      apiError(res, 400, 'invalid_request', 'state must be active or revoked.', [{ path: 'state', message: 'active or revoked' }]);
+      return;
+    }
+    try {
+      const publications = await publishStore.listPublications(state ? { state } : {});
+      const revision = publishStore.computeListRevision(publications);
+      sendPublishWithEtag(req, res, revision, {
+        ok: true,
+        publications: publications.map((publication) => publishStore.serializePublicationSummary(publication)),
+        count: publications.length,
+        revision,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      apiError(res, 500, null, 'Failed to list publications.');
+    }
+  });
+
+  app.get('/api/publish/:slug', async (req, res) => {
+    if (!publishStore || !publishStore.isEnabled()) {
+      sendPathJsonError(res, { status: 404, message: 'Publishing is not configured.' });
+      return;
+    }
+    const accessContext = resolveAccessContext(req);
+    if (!canViewPublished(accessContext)) {
+      sendAccessError(res, accessContext, true);
+      return;
+    }
+    if (rejectUnknownPublishParams(req, res, PUBLISH_GET_QUERY_KEYS)) return;
+    let version = null;
+    if (req.query.version !== undefined) {
+      version = Number(req.query.version);
+      if (!Number.isSafeInteger(version) || version < 1) {
+        apiError(res, 400, 'invalid_request', 'version must be a positive integer.', [{ path: 'version', message: 'positive integer' }]);
+        return;
+      }
+    }
+    try {
+      const publication = await publishStore.readPublication(req.params.slug);
+      if (!publication) {
+        apiError(res, 404, 'not_found', 'Published artifact not found.');
+        return;
+      }
+      const record = publishStore.serializePublication(publication);
+      let files = null;
+      if (version !== null) {
+        const revisionRecord = publication.revisions.find((entry) => entry.revision === version);
+        if (!revisionRecord) {
+          apiError(res, 404, 'not_found', `Published revision not found: ${version}`);
+          return;
+        }
+        files = record.revisions.find((entry) => entry.revision === version) || null;
+      }
+      const revision = publishStore.computeListRevision([publication]);
+      sendPublishWithEtag(req, res, revision, {
+        ok: true,
+        publication: record,
+        revision,
+        generatedAt: new Date().toISOString(),
+        ...(version !== null ? { version, files } : {}),
+      });
+    } catch (error) {
+      apiError(res, 500, null, 'Failed to read publication.');
     }
   });
 
@@ -1420,6 +1976,9 @@ function createApp(options = {}) {
     accessContext: resolveAccessContext(req),
     mappings,
     version: LOOKIE_LINK_VERSION,
+    themes: getThemeList(),
+    wallpaperCatalog: publicWallpaperCatalog(),
+    wallpaperDefaults: wallpaperDefaultsForDiscovery(),
     baseUrl: inferBaseUrl(req),
     editingEnabled,
     annotationsEnabled,
@@ -1428,6 +1987,8 @@ function createApp(options = {}) {
     publishStore,
     publishedRepo,
     routeAvailability: getRouteAvailability(app),
+    formsEnabled: Boolean(formsConfig && formsConfig.enabled === true),
+    kitsEnabled: kitsEnabled(),
   });
 
   app.get('/.well-known/agent.json', (req, res) => {
@@ -1448,6 +2009,30 @@ function createApp(options = {}) {
     res.status(200).json(buildWhoAmIDocument(optionsForCaller));
   });
 
+  // OpenAPI 3.1 description + try-it explorer (API review 2026-09-23 item 4).
+  app.get('/openapi.json', (req, res) => {
+    const optionsForCaller = buildDiscoveryOptions(req);
+    if (optionsForCaller.accessContext.mode === 'denied') {
+      sendAccessError(res, optionsForCaller.accessContext, true);
+      return;
+    }
+    res.set('Cache-Control', 'no-cache');
+    res.status(200).json(buildOpenApiDocument({
+      formsEnabled: optionsForCaller.formsEnabled,
+      version: LOOKIE_LINK_VERSION,
+      baseUrl: optionsForCaller.baseUrl,
+    }));
+  });
+
+  app.get('/api/docs', (req, res) => {
+    const accessContext = resolveAccessContext(req);
+    if (accessContext.mode === 'denied') {
+      sendAccessError(res, accessContext, false);
+      return;
+    }
+    res.status(200).type('html').send(renderApiDocsPage({ customThemeCss }));
+  });
+
   app.get('/api/repos', (req, res) => {
     const accessContext = resolveAccessContext(req);
     if (accessContext.mode === 'denied') {
@@ -1461,7 +2046,7 @@ function createApp(options = {}) {
         viewUrl: `/view/${encodeURIComponent(repo)}/`,
         assetUrl: `/asset/${encodeURIComponent(repo)}/`,
       }));
-    res.status(200).json({ repos, count: repos.length });
+    res.status(200).json({ ok: true, repos, count: repos.length });
   });
 
   app.get('/view/*', async (req, res) => {
@@ -1591,12 +2176,12 @@ function createApp(options = {}) {
         sourceBuffer = await fs.readFile(resolved);
       } catch (error) {
         console.error('Failed to read HTML file for validation', { resolved, error });
-        res.status(500).json({ ok: false, error: 'Failed to read file.' });
+        apiError(res, 500, null, 'Failed to read file.');
         return;
       }
 
       if (isBinaryBuffer(sourceBuffer)) {
-        res.status(415).json({ ok: false, error: 'Binary files are not supported.' });
+        apiError(res, 415, null, 'Binary files are not supported.');
         return;
       }
 
@@ -1604,6 +2189,7 @@ function createApp(options = {}) {
         const validation = await buildHtmlRenderValidation({
           repo,
           rootPath,
+          rootPrefix: resolvedInput.published ? resolvedInput.published.publication.slug : undefined,
           relativePath,
           stat,
           source: sourceBuffer.toString('utf8'),
@@ -1614,7 +2200,7 @@ function createApp(options = {}) {
         return;
       } catch (error) {
         console.error('Failed to validate HTML render', { resolved, error });
-        res.status(500).json({ ok: false, error: 'Failed to validate HTML render.' });
+        apiError(res, 500, null, 'Failed to validate HTML render.');
         return;
       }
     }
@@ -1774,7 +2360,12 @@ function createApp(options = {}) {
     const html = renderDocumentPage({
       repo,
       repoRoot: rootPath,
+      // Published bundles: the URL path starts with the slug, the root does not.
+      repoRootPrefix: resolvedInput.published ? resolvedInput.published.publication.slug : undefined,
       ...linkResolutionContext(accessContext),
+      // Cache the rendered body only for unscoped callers: their link rewriting
+      // is identical, so one render serves everyone with full view access.
+      renderCacheKey: accessContext.mode === 'unrestricted' ? `u|${rawHtmlEnabled ? 1 : 0}` : null,
       relativePath,
       source,
       parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
@@ -1900,14 +2491,14 @@ function createApp(options = {}) {
   app.post('/api/save/*', async (req, res) => {
     const accessContext = resolveAccessContext(req);
     if (!editingEnabled) {
-      res.status(404).json({ ok: false, error: 'Editing mode is disabled.' });
+      apiError(res, 404, 'feature_disabled', 'Editing mode is disabled.');
       return;
     }
 
     const requested = splitViewPath(req.params[0] || '');
     if (requested && getManagedRepo(requested.repo)
       && !canAccessPath(accessContext, 'write', requested.repo, requested.relativePath, 'file')) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
 
@@ -1916,7 +2507,7 @@ function createApp(options = {}) {
       resolvedInput = await resolveFromRequest(mappings, req.params[0] || '');
     } catch (error) {
       console.error('Failed to resolve save path', { error });
-      res.status(500).json({ ok: false, error: 'Failed to resolve path.' });
+      apiError(res, 500, null, 'Failed to resolve path.');
       return;
     }
 
@@ -1927,22 +2518,22 @@ function createApp(options = {}) {
 
     const { repo, relativePath, resolved } = resolvedInput;
     if (isManagedInternalPath(repo, relativePath)) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
     if (!relativePath) {
-      res.status(400).json({ ok: false, error: 'Save requires a file path.' });
+      apiError(res, 400, null, 'Save requires a file path.');
       return;
     }
 
     if (!canAccessPath(accessContext, 'edit', repo, relativePath, 'file')) {
-      res.status(403).json({ ok: false, error: 'Access denied.' });
+      apiError(res, 403, null, 'Access denied.');
       return;
     }
 
     const content = req.body && req.body.content;
     if (typeof content !== 'string') {
-      res.status(400).json({ ok: false, error: 'Invalid payload. Expected JSON body with string content.' });
+      apiError(res, 400, null, 'Invalid payload. Expected JSON body with string content.');
       return;
     }
 
@@ -1951,22 +2542,22 @@ function createApp(options = {}) {
       stat = await statResolvedPath(resolved);
     } catch (error) {
       console.error('Failed to stat save path', { resolved, error });
-      res.status(500).json({ ok: false, error: 'Failed to read file metadata.' });
+      apiError(res, 500, null, 'Failed to read file metadata.');
       return;
     }
 
     if (!stat) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
 
     if (stat.isDirectory()) {
-      res.status(400).json({ ok: false, error: 'Directories are not editable.' });
+      apiError(res, 400, null, 'Directories are not editable.');
       return;
     }
 
     if (!stat.isFile()) {
-      res.status(415).json({ ok: false, error: 'Unsupported path type.' });
+      apiError(res, 415, null, 'Unsupported path type.');
       return;
     }
 
@@ -1975,12 +2566,12 @@ function createApp(options = {}) {
       currentBuffer = await fs.readFile(resolved);
     } catch (error) {
       console.error('Failed to read existing file for save', { resolved, error });
-      res.status(500).json({ ok: false, error: 'Failed to read existing file.' });
+      apiError(res, 500, null, 'Failed to read existing file.');
       return;
     }
 
     if (isBinaryBuffer(currentBuffer)) {
-      res.status(415).json({ ok: false, error: 'Binary files are not editable.' });
+      apiError(res, 415, null, 'Binary files are not editable.');
       return;
     }
 
@@ -1990,14 +2581,12 @@ function createApp(options = {}) {
       const current = Math.trunc(stat.mtimeMs);
 
       if (!Number.isFinite(expected)) {
-        res.status(400).json({ ok: false, error: 'Invalid expectedMtimeMs value.' });
+        apiError(res, 400, null, 'Invalid expectedMtimeMs value.');
         return;
       }
 
       if (expected !== current) {
-        res.status(409).json({
-          ok: false,
-          error: 'File changed on disk since you opened it. Refresh before saving.',
+        apiError(res, 409, 'stale_write', 'File changed on disk since you opened it. Refresh before saving.', null, {
           currentMtimeMs: current,
         });
         return;
@@ -2020,7 +2609,7 @@ function createApp(options = {}) {
       }
 
       console.error('Failed to save file', { resolved, error });
-      res.status(500).json({ ok: false, error: 'Failed to save file.' });
+      apiError(res, 500, null, 'Failed to save file.');
       return;
     }
 
@@ -2029,7 +2618,7 @@ function createApp(options = {}) {
       updatedStat = await fs.stat(resolved);
     } catch (error) {
       console.error('Failed to stat updated file', { resolved, error });
-      res.status(500).json({ ok: false, error: 'Saved file but failed to fetch metadata.' });
+      apiError(res, 500, null, 'Saved file but failed to fetch metadata.');
       return;
     }
 
@@ -2050,14 +2639,14 @@ function createApp(options = {}) {
   app.post('/api/preview/*', async (req, res) => {
     const accessContext = resolveAccessContext(req);
     if (!editingEnabled) {
-      res.status(404).json({ ok: false, error: 'Editing mode is disabled.' });
+      apiError(res, 404, 'feature_disabled', 'Editing mode is disabled.');
       return;
     }
 
     const requested = splitViewPath(req.params[0] || '');
     if (requested && getManagedRepo(requested.repo)
       && !canAccessPath(accessContext, 'view', requested.repo, requested.relativePath, 'file')) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
 
@@ -2066,7 +2655,7 @@ function createApp(options = {}) {
       resolvedInput = await resolveFromRequest(mappings, req.params[0] || '');
     } catch (error) {
       console.error('Failed to resolve preview path', { error });
-      res.status(500).json({ ok: false, error: 'Failed to resolve path.' });
+      apiError(res, 500, null, 'Failed to resolve path.');
       return;
     }
 
@@ -2077,22 +2666,22 @@ function createApp(options = {}) {
 
     const { repo, relativePath, rootPath, resolved } = resolvedInput;
     if (isManagedInternalPath(repo, relativePath)) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
     if (!relativePath) {
-      res.status(400).json({ ok: false, error: 'Preview requires a file path.' });
+      apiError(res, 400, null, 'Preview requires a file path.');
       return;
     }
 
     if (!canAccessPath(accessContext, 'view', repo, relativePath, 'file')) {
-      res.status(403).json({ ok: false, error: 'Access denied.' });
+      apiError(res, 403, null, 'Access denied.');
       return;
     }
 
     const content = req.body && req.body.content;
     if (typeof content !== 'string') {
-      res.status(400).json({ ok: false, error: 'Invalid payload. Expected JSON body with string content.' });
+      apiError(res, 400, null, 'Invalid payload. Expected JSON body with string content.');
       return;
     }
 
@@ -2101,22 +2690,22 @@ function createApp(options = {}) {
       stat = await statResolvedPath(resolved);
     } catch (error) {
       console.error('Failed to stat preview path', { resolved, error });
-      res.status(500).json({ ok: false, error: 'Failed to read path metadata.' });
+      apiError(res, 500, null, 'Failed to read path metadata.');
       return;
     }
 
     if (!stat) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
 
     if (stat.isDirectory()) {
-      res.status(400).json({ ok: false, error: 'Directories are not editable.' });
+      apiError(res, 400, null, 'Directories are not editable.');
       return;
     }
 
     if (!stat.isFile()) {
-      res.status(415).json({ ok: false, error: 'Unsupported path type.' });
+      apiError(res, 415, null, 'Unsupported path type.');
       return;
     }
 
@@ -2134,7 +2723,7 @@ function createApp(options = {}) {
 
   app.get('/api/annotations/:repo/*', async (req, res) => {
     if (!annotationsEnabled) {
-      res.status(404).json({ ok: false, error: 'Annotations are disabled.' });
+      apiError(res, 404, 'feature_disabled', 'Annotations are disabled.');
       return;
     }
 
@@ -2144,17 +2733,17 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
 
     if (isManagedInternalPath(repo, relativePath)) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
 
     if (!rootPath) {
-      res.status(404).json({ ok: false, error: `Unknown repository: ${repo}` });
+      apiError(res, 404, 'unknown_repo', `Unknown repository: ${repo}`);
       return;
     }
 
     if (!relativePath) {
-      res.status(400).json({ ok: false, error: 'Annotations require a file path.' });
+      apiError(res, 400, null, 'Annotations require a file path.');
       return;
     }
 
@@ -2169,17 +2758,17 @@ function createApp(options = {}) {
       resolved = await safeResolve(rootPath, relativePath);
     } catch (error) {
       if (error && error.code === 'EACCES') {
-        res.status(403).json({ ok: false, error: 'Invalid path.' });
+        apiError(res, 403, null, 'Invalid path.');
         return;
       }
 
       if (error && error.code === 'ENOENT') {
-        res.status(404).json({ ok: false, error: 'File not found.' });
+        apiError(res, 404, null, 'File not found.');
         return;
       }
 
       console.error('Failed to resolve annotation path', { rootPath, relativePath, error });
-      res.status(500).json({ ok: false, error: 'Failed to resolve file path.' });
+      apiError(res, 500, null, 'Failed to resolve file path.');
       return;
     }
 
@@ -2188,17 +2777,17 @@ function createApp(options = {}) {
       stat = await fs.stat(resolved);
     } catch (error) {
       if (error && error.code === 'ENOENT') {
-        res.status(404).json({ ok: false, error: 'File not found.' });
+        apiError(res, 404, null, 'File not found.');
         return;
       }
 
       console.error('Failed to stat annotation file', { resolved, error });
-      res.status(500).json({ ok: false, error: 'Failed to read file metadata.' });
+      apiError(res, 500, null, 'Failed to read file metadata.');
       return;
     }
 
     if (!stat.isFile()) {
-      res.status(400).json({ ok: false, error: 'Annotations only apply to files.' });
+      apiError(res, 400, null, 'Annotations only apply to files.');
       return;
     }
 
@@ -2212,6 +2801,7 @@ function createApp(options = {}) {
       const filtered = filterAnnotationsByState(result.document, states);
       // bodyHtml is a response-only projection; the stored sidecar stays plain text.
       res.status(200).json({
+        ok: true,
         ...filtered,
         annotations: filtered.annotations.map((annotation) => ({
           ...annotation,
@@ -2227,23 +2817,23 @@ function createApp(options = {}) {
       });
     } catch (error) {
       if (error instanceof SyntaxError) {
-        res.status(500).json({ ok: false, error: 'Annotation sidecar contains invalid JSON.' });
+        apiError(res, 500, null, 'Annotation sidecar contains invalid JSON.');
         return;
       }
 
       if (error.message.startsWith('Unsupported state filter:')) {
-        res.status(400).json({ ok: false, error: error.message });
+        apiError(res, 400, null, error.message);
         return;
       }
 
       console.error('Failed to read annotations', { repo, relativePath, error });
-      res.status(500).json({ ok: false, error: 'Failed to read annotations.' });
+      apiError(res, 500, null, 'Failed to read annotations.');
     }
   });
 
   app.post('/api/annotations/:repo/*', async (req, res) => {
     if (!annotationsEnabled) {
-      res.status(404).json({ ok: false, error: 'Annotations are disabled.' });
+      apiError(res, 404, 'feature_disabled', 'Annotations are disabled.');
       return;
     }
 
@@ -2253,17 +2843,17 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
 
     if (isManagedInternalPath(repo, relativePath)) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
 
     if (!rootPath) {
-      res.status(404).json({ ok: false, error: `Unknown repository: ${repo}` });
+      apiError(res, 404, 'unknown_repo', `Unknown repository: ${repo}`);
       return;
     }
 
     if (!relativePath) {
-      res.status(400).json({ ok: false, error: 'Annotations require a file path.' });
+      apiError(res, 400, null, 'Annotations require a file path.');
       return;
     }
 
@@ -2278,22 +2868,22 @@ function createApp(options = {}) {
       sourceStat = await fs.stat(await safeResolve(rootPath, relativePath));
     } catch (error) {
       if (error && error.code === 'EACCES') {
-        res.status(403).json({ ok: false, error: 'Invalid path.' });
+        apiError(res, 403, null, 'Invalid path.');
         return;
       }
 
       if (error && error.code === 'ENOENT') {
-        res.status(404).json({ ok: false, error: 'File not found.' });
+        apiError(res, 404, null, 'File not found.');
         return;
       }
 
       console.error('Failed to stat source file for annotations', { repo, relativePath, error });
-      res.status(500).json({ ok: false, error: 'Failed to read file metadata.' });
+      apiError(res, 500, null, 'Failed to read file metadata.');
       return;
     }
 
     if (!sourceStat.isFile()) {
-      res.status(400).json({ ok: false, error: 'Annotations only apply to files.' });
+      apiError(res, 400, null, 'Annotations only apply to files.');
       return;
     }
 
@@ -2307,6 +2897,7 @@ function createApp(options = {}) {
     } catch (error) {
       if (
         error.message === 'Anchor is required.' ||
+        error.message === 'anchor is required.' ||
         error.message === 'anchorKind is required.' ||
         error.message === 'body is required.' ||
         error.message === 'author is required.' ||
@@ -2315,23 +2906,23 @@ function createApp(options = {}) {
         error.message.startsWith('lineRange anchors must') ||
         error.message.startsWith('lineRange anchor end')
       ) {
-        res.status(400).json({ ok: false, error: error.message });
+        apiError(res, 400, null, error.message);
         return;
       }
 
       if (error instanceof SyntaxError) {
-        res.status(500).json({ ok: false, error: 'Annotation sidecar contains invalid JSON.' });
+        apiError(res, 500, null, 'Annotation sidecar contains invalid JSON.');
         return;
       }
 
       console.error('Failed to create annotation', { repo, relativePath, error });
-      res.status(500).json({ ok: false, error: 'Failed to create annotation.' });
+      apiError(res, 500, null, 'Failed to create annotation.');
     }
   });
 
   app.patch('/api/annotations/:repo/*', async (req, res) => {
     if (!annotationsEnabled) {
-      res.status(404).json({ ok: false, error: 'Annotations are disabled.' });
+      apiError(res, 404, 'feature_disabled', 'Annotations are disabled.');
       return;
     }
 
@@ -2341,17 +2932,17 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
 
     if (isManagedInternalPath(repo, relativePath)) {
-      res.status(404).json({ ok: false, error: 'File not found.' });
+      apiError(res, 404, null, 'File not found.');
       return;
     }
 
     if (!rootPath) {
-      res.status(404).json({ ok: false, error: `Unknown repository: ${repo}` });
+      apiError(res, 404, 'unknown_repo', `Unknown repository: ${repo}`);
       return;
     }
 
     if (!relativePath) {
-      res.status(400).json({ ok: false, error: 'Annotations require a file path.' });
+      apiError(res, 400, null, 'Annotations require a file path.');
       return;
     }
 
@@ -2366,22 +2957,22 @@ function createApp(options = {}) {
       sourceStat = await fs.stat(await safeResolve(rootPath, relativePath));
     } catch (error) {
       if (error && error.code === 'EACCES') {
-        res.status(403).json({ ok: false, error: 'Invalid path.' });
+        apiError(res, 403, null, 'Invalid path.');
         return;
       }
 
       if (error && error.code === 'ENOENT') {
-        res.status(404).json({ ok: false, error: 'File not found.' });
+        apiError(res, 404, null, 'File not found.');
         return;
       }
 
       console.error('Failed to stat source file for annotation update', { repo, relativePath, error });
-      res.status(500).json({ ok: false, error: 'Failed to read file metadata.' });
+      apiError(res, 500, null, 'Failed to read file metadata.');
       return;
     }
 
     if (!sourceStat.isFile()) {
-      res.status(400).json({ ok: false, error: 'Annotations only apply to files.' });
+      apiError(res, 400, null, 'Annotations only apply to files.');
       return;
     }
 
@@ -2395,9 +2986,7 @@ function createApp(options = {}) {
     } catch (error) {
       if (error.code === 'ESTALE') {
         const current = await readAnnotationDocument(rootPath, repo, relativePath);
-        res.status(409).json({
-          ok: false,
-          error: error.message,
+        apiError(res, 409, 'stale_write', error.message, null, {
           currentMtimeMs: error.currentMtimeMs,
           current: current.document,
         });
@@ -2416,18 +3005,381 @@ function createApp(options = {}) {
         error.message === 'Invalid expectedMtimeMs value.'
       ) {
         const status = error.message === 'Annotation not found.' ? 404 : 400;
-        res.status(status).json({ ok: false, error: error.message });
+        apiError(res, status, null, error.message);
         return;
       }
 
       if (error instanceof SyntaxError) {
-        res.status(500).json({ ok: false, error: 'Annotation sidecar contains invalid JSON.' });
+        apiError(res, 500, null, 'Annotation sidecar contains invalid JSON.');
         return;
       }
 
       console.error('Failed to update annotation', { repo, relativePath, error });
-      res.status(500).json({ ok: false, error: 'Failed to update annotation.' });
+      apiError(res, 500, null, 'Failed to update annotation.');
     }
+  });
+
+  // One reload for themes + wallpapers, shared by the startup watcher and by the
+  // appearance API's after-write hook. Without it, a server built through
+  // createApp() alone (tests, staged trials) answered its own PATCH with stale
+  // defaults because only the watcher in main() knew how to reload (contention
+  // trial, 2026-09-23).
+  const builtInThemeList = BUILT_IN_THEMES.map((slug) => ({
+    slug,
+    label: slug.split('-').map((w) => w[0].toUpperCase() + w.slice(1)).join(' '),
+  }));
+  app.locals.refreshAppearance = () => {
+    reloadConfig();
+    const themes = loadCustomThemes();
+    setThemeList([...builtInThemeList, ...themes.map((t) => ({ slug: t.slug, label: t.label, aliases: t.aliases || [] }))]);
+    app.locals.setCustomThemeCss(generateCustomThemeCss(themes));
+    setWallpaperCatalog(loadWallpaperCatalog(themes), themes, getWallpaperDefaults());
+    return themes;
+  };
+
+  // Appearance API (review item 5): pollable read side + admin writes that
+  // land in the server-owned overlay, which the config watcher reloads live.
+  {
+    const overlayPath = options.appearanceOverlayPath !== undefined ? options.appearanceOverlayPath : getAppearanceOverlayPath();
+    const appearanceAccess = rawAccessConfig && typeof rawAccessConfig === 'object' ? rawAccessConfig : {};
+    registerAppearanceRoutes(app, {
+      overlayPath,
+      managedRoot: options.appearanceManagedRoot !== undefined
+        ? options.appearanceManagedRoot
+        : (overlayPath ? path.join(path.dirname(overlayPath), 'wallpapers') : null),
+      // Dedicated tokens if configured; otherwise the grant admin tokens the
+      // operator already splices in, so no new secret is needed to start.
+      adminTokens: (appearanceAccess.appearance && appearanceAccess.appearance.adminTokens)
+        || (appearanceAccess.grants && appearanceAccess.grants.adminTokens) || null,
+      readState: () => ({ themes: wallpaperThemesForApi(), catalog: wallpaperCatalogForApi(), defaults: wallpaperDefaultsForDiscovery() }),
+      validate(overlay) {
+        const warnings = [];
+        const previous = console.warn;
+        console.warn = (...args) => warnings.push(args.join(' '));
+        try { loadCustomThemes(mergeAppearance(getBaseConfig(), overlay)); } finally { console.warn = previous; }
+        return { warnings };
+      },
+      afterWrite: () => { if (typeof app.locals.refreshAppearance === 'function') app.locals.refreshAppearance(); },
+      audit: (type, req, target, metadata) => recordApiKeyAuditEvent(type, req.accessContext || resolveAccessContext(req), target, metadata),
+      resolveAccess: resolveAccessContext,
+      sendAccessError: (res, accessContext) => sendAccessError(res, accessContext, true),
+      themeProperties: THEME_CSS_PROPERTIES,
+    });
+  }
+
+  // Hosted HTML kits: list/show with ETag polling, stylesheet (plus token overlay),
+  // listed template/example files, and admin create/upload/overlay/delete (same
+  // appearance admin bearer gate; no new token class).
+  {
+    const rejectUnknownKitsParams = (req, res) => {
+      const unknown = Object.keys(req.query);
+      if (!unknown.length) return false;
+      apiError(res, 400, 'invalid_request', `Unknown query parameter${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}. This route accepts no query parameters.`, unknown.map((key) => ({ path: key, message: 'unknown query parameter' })));
+      return true;
+    };
+    const gateKits = (req, res) => {
+      const accessContext = req.accessContext || resolveAccessContext(req);
+      if (accessContext.mode === 'denied') {
+        sendAccessError(res, accessContext, true);
+        return false;
+      }
+      return true;
+    };
+    const appearanceAccess = rawAccessConfig && typeof rawAccessConfig === 'object' ? rawAccessConfig : {};
+    const kitAdminTokens = resolveAdminTokens(
+      (appearanceAccess.appearance && appearanceAccess.appearance.adminTokens)
+      || (appearanceAccess.grants && appearanceAccess.grants.adminTokens)
+      || null
+    );
+    const requireKitAdmin = (req, res) => {
+      if (!kitAdminTokens.length) {
+        apiError(res, 404, 'feature_disabled', 'Kit admin tokens are not configured.');
+        return false;
+      }
+      const secret = extractBearer(req);
+      if (!secret) {
+        apiError(res, 401, 'unauthenticated', 'Kit admin authentication required.');
+        return false;
+      }
+      const admin = kitAdminTokens.find((token) => constantTimeEqual(token.secret, secret));
+      if (!admin) {
+        apiError(res, 403, 'forbidden', 'Invalid kit admin token.');
+        return false;
+      }
+      req.kitAdmin = admin.name;
+      return true;
+    };
+    const refreshKitsNow = () => {
+      if (typeof app.locals.refreshKits === 'function') app.locals.refreshKits();
+    };
+    const sendKitsWithEtag = (req, res, body) => {
+      const revision = kitsRevision();
+      const etag = `W/"kits-${revision}"`;
+      res.set('ETag', etag);
+      res.set('Cache-Control', 'no-cache');
+      if (req.get('if-none-match') === etag) {
+        res.status(304).end();
+        return;
+      }
+      res.status(200).json(body);
+    };
+    const sendKitCss = (req, res, { immutable = false } = {}) => {
+      if (!gateKits(req, res)) return;
+      if (rejectUnknownKitsParams(req, res)) return;
+      const name = String(req.params.name || '');
+      const kit = getKitRecord(name);
+      if (!kit) {
+        apiError(res, 404, 'not_found', `Unknown kit: ${name}`);
+        return;
+      }
+      let css = null;
+      let cacheVersion = kit.effectiveVersion;
+      if (immutable) {
+        const version = String(req.params.version || '');
+        css = readKitStylesheetAtVersion(name, version);
+        if (css === null) {
+          apiError(res, 404, 'not_found', `Kit version not found: ${name}@${version}`);
+          return;
+        }
+        cacheVersion = version;
+      } else {
+        css = readKitStylesheet(name);
+        if (css === null) {
+          apiError(res, 404, 'not_found', `Kit stylesheet not found: ${name}`);
+          return;
+        }
+      }
+      const etag = `W/"kit-css-${name}-${cacheVersion}-${kitsRevision()}"`;
+      res.set('ETag', etag);
+      res.set('Cache-Control', immutable ? 'public, max-age=31536000, immutable' : 'no-cache');
+      if (req.get('if-none-match') === etag) {
+        res.status(304).end();
+        return;
+      }
+      res.status(200).type(kitContentType(kit.stylesheet)).send(css);
+    };
+
+    app.get('/api/kits', (req, res) => {
+      if (!gateKits(req, res)) return;
+      if (rejectUnknownKitsParams(req, res)) return;
+      const kits = listKits();
+      sendKitsWithEtag(req, res, {
+        ok: true,
+        kits,
+        default: defaultKitName(),
+        count: kits.length,
+        revision: kitsRevision(),
+        generatedAt: new Date().toISOString(),
+      });
+    });
+
+    app.get('/api/kits/:name', (req, res) => {
+      if (!gateKits(req, res)) return;
+      if (rejectUnknownKitsParams(req, res)) return;
+      const name = String(req.params.name || '');
+      const kit = getKit(name);
+      if (!kit) {
+        if (getDeletedKit(name)) {
+          apiError(res, 410, 'gone', `Kit was deleted: ${name}`);
+          return;
+        }
+        apiError(res, 404, 'not_found', `Unknown kit: ${name}`);
+        return;
+      }
+      sendKitsWithEtag(req, res, { ok: true, kit, revision: kitsRevision(), generatedAt: new Date().toISOString() });
+    });
+
+    app.post('/api/kits', express.json({ limit: '2mb' }), (req, res) => {
+      if (!requireKitAdmin(req, res)) return;
+      try {
+        const name = createManagedKit(req.body);
+        refreshKitsNow();
+        const kit = getKit(name);
+        res.status(201).json({ ok: true, kit, revision: kitsRevision(), generatedAt: new Date().toISOString() });
+      } catch (error) {
+        if (error.code === 'EINVALID') {
+          apiError(res, 400, 'invalid_request', error.message, error.details || null);
+          return;
+        }
+        if (error.code === 'ECONFLICT') {
+          apiError(res, 409, 'conflict', error.message);
+          return;
+        }
+        if (error.code === 'EFEATURE') {
+          apiError(res, 404, 'feature_disabled', error.message);
+          return;
+        }
+        logger.error('Failed to create kit', { error });
+        apiError(res, 500, 'internal_error', 'Failed to create kit.');
+      }
+    });
+
+    app.put('/api/kits/:name/files/:file', express.text({ type: '*/*', limit: '1mb' }), (req, res) => {
+      if (!requireKitAdmin(req, res)) return;
+      const name = String(req.params.name || '');
+      const file = String(req.params.file || '');
+      let content = null;
+      if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)
+        && typeof req.body.content === 'string') {
+        // Global express.json already parsed application/json.
+        content = req.body.content;
+      } else {
+        const raw = typeof req.body === 'string' ? req.body
+          : (Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '');
+        const type = (req.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        if (type === 'application/json') {
+          try {
+            const parsed = JSON.parse(raw || '{}');
+            if (parsed && typeof parsed.content === 'string') content = parsed.content;
+            else {
+              apiError(res, 400, 'invalid_request', 'JSON body must be { content: string }.', [{ path: 'content', message: 'required string' }]);
+              return;
+            }
+          } catch (error) {
+            apiError(res, 400, 'invalid_request', `Invalid JSON: ${error.message}`);
+            return;
+          }
+        } else {
+          content = raw;
+        }
+      }
+      try {
+        writeManagedFile(name, file, content);
+        refreshKitsNow();
+        const kit = getKit(name);
+        res.status(200).json({ ok: true, kit, revision: kitsRevision(), generatedAt: new Date().toISOString() });
+      } catch (error) {
+        if (error.code === 'ENOTFOUND') {
+          apiError(res, 404, 'not_found', error.message);
+          return;
+        }
+        if (error.code === 'EREADONLY') {
+          apiError(res, 403, 'read_only', error.message);
+          return;
+        }
+        if (error.code === 'EINVALID') {
+          apiError(res, 400, 'invalid_request', error.message, error.details || null);
+          return;
+        }
+        logger.error('Failed to upload kit file', { error });
+        apiError(res, 500, 'internal_error', 'Failed to upload kit file.');
+      }
+    });
+
+    app.patch('/api/kits/:name', express.json({ limit: '256kb' }), (req, res) => {
+      if (!requireKitAdmin(req, res)) return;
+      const name = String(req.params.name || '');
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      try {
+        patchKitOverlay(name, {
+          expectedRevision: body.expectedRevision,
+          tokens: body.tokens,
+          label: body.label,
+        });
+        refreshKitsNow();
+        const kit = getKit(name);
+        res.status(200).json({ ok: true, kit, revision: kitsRevision(), generatedAt: new Date().toISOString() });
+      } catch (error) {
+        if (error.code === 'ENOTFOUND') {
+          apiError(res, 404, 'not_found', error.message);
+          return;
+        }
+        if (error.code === 'EREVISION') {
+          apiError(res, 409, 'revision_conflict', error.message, null, { currentRevision: error.currentRevision });
+          return;
+        }
+        if (error.code === 'EINVALID') {
+          apiError(res, 400, 'invalid_request', error.message, error.details || null);
+          return;
+        }
+        if (error.code === 'EFEATURE') {
+          apiError(res, 404, 'feature_disabled', error.message);
+          return;
+        }
+        logger.error('Failed to patch kit overlay', { error });
+        apiError(res, 500, 'internal_error', 'Failed to patch kit.');
+      }
+    });
+
+    app.delete('/api/kits/:name', (req, res) => {
+      if (!requireKitAdmin(req, res)) return;
+      const name = String(req.params.name || '');
+      try {
+        deleteManagedKit(name);
+        refreshKitsNow();
+        res.status(200).json({ ok: true, deleted: name, revision: kitsRevision(), generatedAt: new Date().toISOString() });
+      } catch (error) {
+        if (error.code === 'ENOTFOUND') {
+          apiError(res, 404, 'not_found', error.message);
+          return;
+        }
+        if (error.code === 'EREADONLY') {
+          apiError(res, 403, 'read_only', error.message);
+          return;
+        }
+        logger.error('Failed to delete kit', { error });
+        apiError(res, 500, 'internal_error', 'Failed to delete kit.');
+      }
+    });
+
+    app.get('/kit/:name/kit.css', (req, res) => sendKitCss(req, res, { immutable: false }));
+    app.get('/kit/:name/v/:version/kit.css', (req, res) => sendKitCss(req, res, { immutable: true }));
+
+    app.get('/kit/:name/files/:file', (req, res) => {
+      if (!gateKits(req, res)) return;
+      if (rejectUnknownKitsParams(req, res)) return;
+      const name = String(req.params.name || '');
+      const file = String(req.params.file || '');
+      if (file.includes('..') || file.includes('/') || file.includes('\\')) {
+        apiError(res, 404, 'not_found', 'Kit file not found.');
+        return;
+      }
+      const kit = getKitRecord(name);
+      if (!kit) {
+        apiError(res, 404, 'not_found', `Unknown kit: ${name}`);
+        return;
+      }
+      // Files route serves templates/examples (and other listed text files);
+      // stylesheet has its own URL but is also readable when listed.
+      const lower = file.toLowerCase();
+      const textOk = lower.endsWith('.html') || lower.endsWith('.htm') || lower.endsWith('.md') || lower.endsWith('.css');
+      if (!textOk || !kit.files.includes(file)) {
+        apiError(res, 404, 'not_found', 'Kit file not found.');
+        return;
+      }
+      const body = readKitFile(name, file);
+      if (body === null) {
+        apiError(res, 404, 'not_found', 'Kit file not found.');
+        return;
+      }
+      res.set('Cache-Control', 'no-cache');
+      res.status(200).type(kitContentType(file)).send(body);
+    });
+  }
+
+  // Viewer-wide wallpapers: ids come from the live catalog scan, so this never
+  // maps a request onto an arbitrary path. Revalidate on every use (no-cache +
+  // the ETag/Last-Modified that sendFile emits): the catalog reloads live and
+  // an id survives a picture being replaced in place, so a long max-age would
+  // pin the old bytes in the browser for a day (review finding D1, 2026-09-23).
+  app.get('/wallpaper/:slug/:mode/:id', (req, res) => {
+    // Same gate as every other viewer surface: a denied caller on a locked-down
+    // instance learns nothing, not even theme or picture names (review D10).
+    const accessContext = req.accessContext || resolveAccessContext(req);
+    if (accessContext.mode === 'denied') {
+      sendAccessError(res, accessContext);
+      return;
+    }
+    const file = resolveWallpaperFile(req.params.slug, req.params.mode, req.params.id);
+    if (!file) {
+      res.status(404).type('text/plain').send('Wallpaper not found.');
+      return;
+    }
+    res.set('Cache-Control', 'no-cache');
+    res.type(wallpaperContentType(file));
+    res.sendFile(file, (error) => {
+      if (error && !res.headersSent) res.status(404).type('text/plain').send('Wallpaper not found.');
+    });
   });
 
   app.get('/asset/:repo/*', async (req, res) => {
@@ -2536,9 +3488,11 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
     const repo = req.params.repo;
     const relativePath = req.params[0] || '';
-    const rootPath = mappings[repo];
+    let rootPath = mappings[repo];
 
-    if (!rootPath) {
+    // The published virtual repo is served here too (the /view page of a
+    // published .html embeds /embed/published/...; it was a 404 until 2026-09-23).
+    if (!rootPath && repo !== publishedRepo) {
       res.status(404).type('text/plain').send(`Unknown repository: ${repo}`);
       return;
     }
@@ -2557,7 +3511,17 @@ function createApp(options = {}) {
 
     let resolved;
     try {
-      resolved = await safeResolve(rootPath, relativePath);
+      const published = await resolvePublishedTarget(repo, relativePath, req.query && req.query.version);
+      if (published && published.error) {
+        sendPathError(res, published.error);
+        return;
+      }
+      if (published) {
+        rootPath = published.rootPath;
+        resolved = published.resolved;
+      } else {
+        resolved = await safeResolve(rootPath, relativePath);
+      }
     } catch (error) {
       if (error && error.code === 'EACCES') {
         res.status(403).type('text/plain').send('Invalid path.');
@@ -2748,20 +3712,36 @@ function createApp(options = {}) {
     res.redirect(302, appendAccessToken('/', resolveAccessContext(req)));
   });
 
+  // Fallbacks answer in the JSON error envelope for API callers and keep
+  // text/plain for browsers and asset requests. Every /kit/ path uses the
+  // envelope so unmatched kit URLs (e.g. /kit/ops/package.json) never fall
+  // through to the plain-text 404.
+  const wantsJsonError = (req) => req.path.startsWith('/api/')
+    || req.path.startsWith('/kit/')
+    || req.path.startsWith('/.well-known/')
+    || req.accepts(['text/plain', 'text/html', 'application/json']) === 'application/json';
+  const sendFallbackError = (req, res, status, message) => {
+    if (wantsJsonError(req)) {
+      apiError(res, status, null, message);
+      return;
+    }
+    res.status(status).type('text/plain').send(message);
+  };
+
   app.use((req, res) => {
-    res.status(404).type('text/plain').send(`Not found: ${req.path}`);
+    sendFallbackError(req, res, 404, `Not found: ${req.path}`);
   });
 
-  app.use((error, _req, res, _next) => {
+  app.use((error, req, res, _next) => {
     if (error && (error.status === 413 || error.type === 'entity.too.large')) {
-      res.status(413).type('text/plain').send('Request body is too large.');
+      sendFallbackError(req, res, 413, 'Request body is too large.');
       return;
     }
     logger.error('Unhandled request error.', {
       name: error && error.name || 'Error',
       code: error && error.code || 'EUNHANDLED',
     });
-    res.status(500).type('text/plain').send('Internal server error.');
+    sendFallbackError(req, res, 500, 'Internal server error.');
   });
 
   return app;
@@ -2778,22 +3758,43 @@ function startServer() {
   const managedReposConfig = getManagedReposConfig();
   const formsConfig = getFormsConfig();
 
-  const customThemes = loadCustomThemes();
-  const customThemeCss = generateCustomThemeCss(customThemes);
-
   const builtInThemes = BUILT_IN_THEMES.map((slug) => ({
     slug,
     label: slug.split('-').map((w) => w[0].toUpperCase() + w.slice(1)).join(' '),
   }));
-  // Aliases (#389) ride along on the canonical entry so the toolbar can reveal
-  // their label too; they are never listed as separate picker entries.
-  const allThemes = [
-    ...builtInThemes,
-    ...customThemes.map((t) => ({ slug: t.slug, label: t.label, aliases: t.aliases || [] })),
-  ];
-  setThemeList(allThemes);
+  let customThemes = [];
+  const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss: '', accessConfig, managedReposConfig, formsConfig });
 
-  const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss, accessConfig, managedReposConfig, formsConfig });
+  // Themes and wallpapers reload live: edit a palette, an alias, a wallpaper
+  // key, or drop images into a folder, and the next page load has it. The
+  // watcher covers the config file's directory and every wallpaper folder.
+  const appearanceWatcher = watchWallpapers({
+    fs: require('node:fs'),
+    path,
+    reload() {
+      customThemes = app.locals.refreshAppearance();
+      const catalog = wallpaperCatalogForApi();
+      const folders = customThemes.flatMap((t) => t.wallpapers ? [t.wallpapers.dark, t.wallpapers.light] : []);
+      const configPath = getConfigPath();
+      return {
+        watch: [configPath && path.dirname(configPath), ...folders],
+        summary: `${customThemes.length} custom themes, ${Object.keys(catalog).length} with wallpapers, ${Object.values(catalog).reduce((n, s) => n + s.dark.length + s.light.length, 0)} pictures`,
+      };
+    },
+  });
+  app.locals.refreshAppearance = appearanceWatcher.refresh;
+
+  watchKits({
+    fs: require('node:fs'),
+    path,
+    reload() {
+      const result = typeof app.locals.refreshKits === 'function' ? app.locals.refreshKits() : { kits: [], watch: kitWatchTargets() };
+      return {
+        watch: result.watch || kitWatchTargets(),
+        summary: `${(result.kits || listKits()).length} kit(s), default ${defaultKitName() || 'none'}`,
+      };
+    },
+  });
 
   app.listen(port, '0.0.0.0', () => {
     console.log(`Lookie Link listening on http://${hostname}:${port}`);

@@ -111,7 +111,21 @@ publish:
 
 `areaPath` enables the store unless `enabled` is exactly `false`. The virtual repo ID must not collide with a mounted repository. All limits are positive integers. Enabling the store while leaving `humanDefault: full` permits anonymous publishing, so restricted access is strongly recommended.
 
+## Search
+
+```yaml
+search:
+  ripgrep: auto        # auto (look on the service's PATH) | false | /usr/bin/rg
+  maxResults: 100      # 1-100
+```
+
+Query semantics are the same on both backends: every whitespace-separated term must occur in a file's content (any order) or every term in its path; `"quoted words"` form one phrase; matching is literal and case-insensitive.
+
+With a ripgrep binary available, `/api/search` searches every served repository in one process and is complete (the response says `backend: "ripgrep"`). Without one, the built-in walk is used: complete when scoped to one repo, fair-share sampled across a fleet (`backend: "walk"`, `truncated` says when a slice ran out). `maxEntries` applies to the walk only. The binary must be on the SERVICE's PATH (a shell alias or function does not count) or named explicitly.
+
 ## Custom themes
+
+> **Live-reloadable values (contributors).** Theme CSS, wallpapers, appearance and kits change at runtime without a restart. Any code that renders chrome must read them per request (the server hands out live getters); never copy one into a local at construction. `test/live-theme-every-page.test.js` sets theme CSS after startup and requires every HTML page family to carry it: add new page families to its `PAGES` list. (2026-09-25: the Trackers router copied it once and shipped every Trackers page without custom-theme tokens.)
 
 Lookie-Link ships with Slate, Teal, Nord, Rose Pine, Monokai, Solarized,
 GitHub, Ember, Noir, Indigo, and Codex. The Codex theme is a research-based
@@ -143,6 +157,65 @@ block came later in the file won in the cascade. Slugs are now tracked as
 they are claimed across the whole pass, so the later entry is skipped
 entirely, with a warning naming the theme (or theme and alias) and the
 colliding slug. Only the first claim survives.
+
+### Wallpapers
+
+A custom theme may point at a folder of images per mode. The viewer scans each
+folder once at startup and paints the pictures behind every page while that
+theme and mode are active (see [CAPABILITIES.md](CAPABILITIES.md#viewer-wide-wallpapers)).
+
+```yaml
+themes:
+  Carolina Sunset:
+    wallpapers:
+      dark: ~/.config/omarchy/themes/carolina-sunset/backgrounds
+      light: ~/.config/omarchy/themes/carolina-sunset-light/backgrounds
+```
+
+Presentation is configuration too. A global block sets the glass defaults
+every theme starts from, and a theme may override them and name its starting
+picture per mode:
+
+```yaml
+wallpapers:
+  panel_opacity: 72        # 50-100, percent
+  blur: 12                 # 0-16, px behind the panel
+
+themes:
+  Carolina Sunset:
+    wallpapers:
+      dark: ~/.config/omarchy/themes/carolina-sunset/backgrounds
+      light: ~/.config/omarchy/themes/carolina-sunset-light/backgrounds
+      default:
+        dark: mackerel-sky   # picture id; moves to the front of the set
+        light: pale-dawn
+      panel_opacity: 80    # this theme only
+      blur: 6
+```
+
+Changes take effect without a restart. The server watches the config file
+and every wallpaper folder; a saved edit or a new image is picked up within
+about half a second and shows on the next page load. This covers the whole
+`themes:` section (palettes, aliases, wallpapers) and the global
+`wallpapers:` block. Server settings such as roots, port, access and forms
+are still read at startup.
+
+A reader's own slider changes, once made, persist in their browser and win
+over these defaults until they press Reset. URL parameters
+(`lookie-wallpaper`, `lookie-panel`, `lookie-blur`) win over both for that
+page. A `default` id that is not in the set logs a warning and is ignored.
+
+Accepted files: `.jpg`, `.jpeg`, `.png`, `.webp`; at most 50 per folder.
+Files are ordered by a leading number (`3-…`) when present, then by name. The
+picture's id and label come from the filename with the number and the theme's
+own name stripped, so `0-carolina-sunset-ember-ripples.jpg` is "Ember
+Ripples". A folder that is missing or unreadable logs a warning and yields an
+empty set; the server still starts. Only the images are served, by id, at
+`/wallpaper/<slug>/<mode>/<id>`; the folder path never leaves the server.
+
+### Appearance API and the overlay file
+
+Themes and wallpapers can also be changed over HTTP (see [API.md](API.md#appearance)). Those changes are written to `appearance.yaml` beside the config file (override with `LOOKIE_LINK_APPEARANCE_OVERLAY`), never to the config file itself; the overlay is merged over the config at load time and wins where both set a key. Uploaded pictures go to `wallpapers/<slug>/<mode>/` beside the config file. Writes require a bearer token from `access.appearance.adminTokens` (same shape as the grant admin tokens); when that block is absent the grant admin tokens are accepted.
 
 ### Aliases
 
@@ -187,6 +260,67 @@ their stored preference is rewritten to the canonical slug automatically.
 Templates that still reference `presentation.theme: harbor-night` keep
 rendering correctly too, so the rename is a config-only, zero-downtime
 change. Drop the alias later once nothing references the old name anymore.
+
+## Kits
+
+Hosted HTML kits are folders of a stylesheet plus templates/examples that
+agents can list and fetch. The product ships a bundled `ops` kit under
+`kits/ops/`; operators can add more roots, and the admin API writes org-scoped
+kits under `kits.managedFolder` (the key name is unchanged; its meaning is the
+org-scoped kits root):
+
+```yaml
+kits:
+  enabled: true          # default true when any kit exists
+  default: ops           # advertised default; used by publish when kit: is omitted
+  managedFolder: ~/.local/share/lookie-link/kits   # org kits + overlays (+ optional _shared); created on first write
+  folders:               # extra kit roots; each child folder with a kit.yaml is a kit
+    - ~/.config/lookie-link/kits
+```
+
+On-disk layout under `managedFolder`:
+
+```
+<managedFolder>/
+  _shared/<name>/...                         # operator-curated kits (read-only via API)
+  orgs/<org>/kits/<name>/kit.yaml            # record (name, label, version, description,
+                                             #   currentVersion, createdAt, updatedAt, deletedAt)
+  orgs/<org>/kits/<name>/versions/<n>/...    # immutable snapshot (kit.css + listed files + manifest)
+  orgs/<org>/overlays/<name>.overlay.yaml    # org token overlay on any visible kit
+```
+
+R15a has exactly one org, `default`. Every admin write goes to `orgs/default/`.
+Reads merge bundled → `kits.folders[]` / `_shared` → `orgs/default`. Name-clash
+precedence: **org > shared > bundled** (`kits.folders[]` and `_shared` share the
+shared tier; later load wins within the tier). Bundled and shared kits are never
+written by the API (`403 read_only`); overlays on them are allowed and stored
+under the org.
+
+**Versions.** `POST /api/kits` creates `versions/1`. `PUT /api/kits/:name/files/:file`
+writes a full `versions/<n+1>` snapshot (copy of the previous version plus the
+change) and bumps `currentVersion`. Nothing under `versions/` is modified in
+place. `DELETE /api/kits/:name` sets `deletedAt` (tombstone): the kit disappears
+from the list, `GET /api/kits/:name` returns `410 gone`, and version directories
+stay on disk. Creating the same name again returns `409 conflict` ("kit was
+deleted; restore is not supported yet").
+
+**Migration.** On load, a pre-R15a flat kit at `<managedFolder>/<name>/kit.yaml`
+or overlay at `<managedFolder>/<name>.overlay.yaml` is moved once into
+`orgs/default/…` (idempotent; one log line per moved item; source removed only
+after a byte-equal copy).
+
+Each kit folder / snapshot contains `kit.yaml` (required), `kit.css`, and the
+HTML/Markdown files listed in the manifest. Missing folders and invalid
+manifests are skipped with a console warning; the server still starts. Kit
+folders (including the managed root) are watched for live reload like wallpaper
+folders; a write through the admin API refreshes the catalog immediately.
+
+**Token overlays.** `PATCH /api/kits/:name` (same appearance admin bearer gate
+as the appearance API; no new token class) writes
+`<managedFolder>/orgs/default/overlays/<name>.overlay.yaml` with a `tokens:` map
+of CSS custom properties. Served `GET /kit/:name/kit.css` appends an overlay
+block after the base stylesheet. `tokens: {}` or `null` clears the overlay file.
+Overlay and managed-folder changes advance the kits catalog `revision`.
 
 ## Server environment variables
 

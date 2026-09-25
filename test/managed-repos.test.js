@@ -158,7 +158,7 @@ test('managed repo HTTP CRUD is scoped, conflict-aware, non-leaking, and recover
     );
     assert.equal(hiddenTree.status, 404);
     const hiddenTreeText = await hiddenTree.text();
-    assert.deepEqual(JSON.parse(hiddenTreeText), { ok: false, error: 'Not found.' });
+    assert.deepEqual(JSON.parse(hiddenTreeText), { ok: false, error: { code: 'not_found', message: 'Not found.' } });
     assert.equal(hiddenTreeText.includes(deleted.trashId), false);
     assert.equal(hiddenTreeText.includes('metadata'), false);
   }
@@ -168,7 +168,7 @@ test('managed repo HTTP CRUD is scoped, conflict-aware, non-leaking, and recover
     { headers: auth('reader-placeholder') }
   );
   assert.equal(pathScopedTrashTree.status, 404);
-  assert.deepEqual(await pathScopedTrashTree.json(), { ok: false, error: 'Not found.' });
+  assert.deepEqual(await pathScopedTrashTree.json(), { ok: false, error: { code: 'not_found', message: 'Not found.' } });
 
   const hiddenTrash = await fixture.request(`/asset/shared-notes/.lookie-link-trash/${deleted.trashId}/payload`, {
     headers: auth('maintainer-placeholder'),
@@ -254,6 +254,42 @@ test('search and suggest responses contain only caller-visible managed paths', a
   const excludedScope = await fixture.request('/api/search?q=common&scope=unknown-repo', {
     headers: auth('reader-placeholder'),
   });
-  assert.equal(excludedScope.status, 200);
-  assert.deepEqual((await excludedScope.json()).results, []);
+  assert.equal(excludedScope.status, 400, 'a scope naming no searchable repo is an error, not an empty result');
+  const excludedBody = await excludedScope.json();
+  assert.equal(excludedBody.error.code, 'invalid_request');
+  assert.match(excludedBody.error.message, /unknown-repo/);
+});
+
+test('trash listing shows soft-deleted records the caller may view, newest first, and empties on restore', async (t) => {
+  const fixture = await startFixture();
+  t.after(() => fixture.close());
+  const create = await fixture.request('/api/managed-repos', {
+    method: 'POST',
+    headers: auth('managed-admin-placeholder', { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ repoId: 'shared-notes', rootPath: path.join(fixture.allowRoot, 'shared-notes') }),
+  });
+  assert.equal(create.status, 201);
+  const put = (p, content) => fixture.request(`/api/managed-repos/shared-notes/files/${p}`, { method: 'PUT', headers: auth('maintainer-placeholder', { 'Content-Type': 'application/json' }), body: JSON.stringify({ content }) });
+  assert.equal((await put('notes/a.md', '# a')).status, 201);
+  assert.equal((await put('other/b.md', '# b')).status, 201);
+  const empty = await fixture.request('/api/managed-repos/shared-notes/trash', { headers: auth('maintainer-placeholder') });
+  assert.equal(empty.status, 200);
+  assert.deepEqual(await empty.json(), { ok: true, repo: 'shared-notes', trash: [], count: 0 });
+  const delA = await (await fixture.request('/api/managed-repos/shared-notes/files/notes/a.md', { method: 'DELETE', headers: auth('maintainer-placeholder') })).json();
+  const delB = await (await fixture.request('/api/managed-repos/shared-notes/files/other/b.md', { method: 'DELETE', headers: auth('maintainer-placeholder') })).json();
+  assert.equal(delA.deleted, 'soft'); assert.equal(delB.deleted, 'soft');
+  const all = await (await fixture.request('/api/managed-repos/shared-notes/trash', { headers: auth('maintainer-placeholder') })).json();
+  assert.equal(all.count, 2);
+  assert.deepEqual(all.trash.map((r) => r.originalPath).sort(), ['notes/a.md', 'other/b.md']);
+  assert.equal(all.trash[0].originalPath, 'other/b.md', 'newest first');
+  assert.ok(all.trash.every((r) => typeof r.trashId === 'string' && typeof r.deletedAt === 'string' && typeof r.size === 'number'));
+  assert.equal(JSON.stringify(all).includes(fixture.allowRoot), false, 'no host paths');
+  const scoped = await (await fixture.request('/api/managed-repos/shared-notes/trash', { headers: auth('reader-placeholder') })).json();
+  assert.deepEqual(scoped.trash.map((r) => r.originalPath), ['notes/a.md'], 'a caller scoped to notes/ sees only its record');
+  const anon = await fixture.request('/api/managed-repos/shared-notes/trash');
+  assert.equal(anon.status, 404, 'managed routes answer 404, not 401, to an unauthenticated caller (non-leaking)');
+  const restore = await fixture.request(`/api/managed-repos/shared-notes/trash/${delA.trashId}/restore`, { method: 'POST', headers: auth('maintainer-placeholder') });
+  assert.equal(restore.status, 200);
+  const after = await (await fixture.request('/api/managed-repos/shared-notes/trash', { headers: auth('maintainer-placeholder') })).json();
+  assert.deepEqual(after.trash.map((r) => r.originalPath), ['other/b.md']);
 });

@@ -27,4 +27,4 @@ The annotation shim supports:
 
 Kinds are `heading`, `yamlKey`, and `lineRange`; states are `open`, `claimed`, and `resolved`. Body input may come from `--body`, `--body-file`, or stdin via `--body -`. Output is JSON by default; `--pretty` is human-oriented and `--json-errors` moves structured errors to stdout.
 
-There is no annotation migration command and no `lookie annotations` unified subcommand.
+There is no annotation migration command. The unified CLI also offers `lookie annotations list|get|add|claim|resolve|replies` with the same grammar (JSON output only).

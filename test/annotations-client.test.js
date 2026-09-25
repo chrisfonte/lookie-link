@@ -656,6 +656,29 @@ test('saved notes reveal rendered and previews strip markdown sigils', async () 
   dom.window.close();
 });
 
+test('annotation client stays quiet on opaque null origin', async () => {
+  let fetchCount = 0;
+  const dom = new JSDOM('<!doctype html><html><body></body></html>', {
+    url: 'about:blank',
+    runScripts: 'outside-only',
+  });
+  assert.equal(dom.window.origin, 'null');
+  dom.window.__lookieLinkAnnotations = {
+    repo: 'docs',
+    relativePath: 'page.html',
+    queryToken: null,
+  };
+  dom.window.fetch = async () => {
+    fetchCount += 1;
+    return { ok: true, async json() { return { annotations: [] }; } };
+  };
+  dom.window.eval(SCRIPT_SOURCE);
+  dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
+  await flush();
+  assert.equal(fetchCount, 0, 'opaque origin must not call /api/annotations');
+  dom.window.close();
+});
+
 test('open annotation cards hide the plain preview line', () => {
   const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
   const rule = css.match(/\.lookie-annotation-item\[open\][^{]*\.lookie-annotation-preview[^{]*\{[^}]*\}/);
