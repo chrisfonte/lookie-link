@@ -120,3 +120,12 @@ test('walk backend shares the query semantics; the route rejects limit < 1', asy
     assert.equal(bad.status, 400); assert.match(bad.body.error.message, /nope/);
   } finally { server.close(); fs.rmSync(f.root, { recursive: true, force: true }); }
 });
+
+test('parsed search caches stay small: distinct queries evict oldest-first', { skip: RG ? false : 'ripgrep not on PATH' }, async () => {
+  const f = fixture();
+  try {
+    const { contentCacheSize } = require('../lib/search-backend');
+    for (let i = 0; i < 40; i++) await searchWithRipgrep({ binary: RG, repos: f.repos, query: `needle-${i} needle`, canView: () => true });
+    assert.ok(contentCacheSize() <= 12, `content cache bounded, was ${contentCacheSize()}`);
+  } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+});
