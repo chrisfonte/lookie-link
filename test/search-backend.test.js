@@ -126,6 +126,6 @@ test('parsed search caches stay small: distinct queries evict oldest-first', { s
   try {
     const { contentCacheSize } = require('../lib/search-backend');
     for (let i = 0; i < 40; i++) await searchWithRipgrep({ binary: RG, repos: f.repos, query: `needle-${i} needle`, canView: () => true });
-    assert.ok(contentCacheSize() <= 12, `content cache bounded, was ${contentCacheSize()}`);
+    assert.ok(contentCacheSize() <= 8, `content cache bounded, was ${contentCacheSize()}`);
   } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 });
