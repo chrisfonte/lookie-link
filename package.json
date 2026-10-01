@@ -23,7 +23,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "dompurify": "^3.3.1",
+    "dompurify": "^3.4.16",
     "express": "^4.21.2",
     "highlight.js": "^11.11.1",
     "js-yaml": "^4.1.1",
