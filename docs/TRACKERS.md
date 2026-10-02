@@ -10,12 +10,17 @@ Enable it with the `forms:` block in the config (see
 [CONFIGURATION.md](CONFIGURATION.md) and the annotated
 `lookie-link.yaml.example`). Everything below assumes it is enabled.
 
-## Three kinds (internal taxonomy)
+## Four kinds (internal taxonomy)
 
-Internally the platform has three kinds of template — the labels below are
+Internally the platform has four kinds of template — the labels below are
 for builders and this doc, not end-user marketing:
 
 - **TRACKER** (`kind: 'form'`) — logs. Entry form, history, receipts.
+- **LIST** (`kind: 'list'`) — checklist. Mutable current state (sections and
+  items with checkboxes). No submissions and no receipts; state lives in
+  `list-state.json` beside the draft and uses revision CAS. A missing state
+  file reads as virtual revision `0` and is created only on the first
+  authorized write.
 - **PARENT** (`kind: 'parent'`, or any form something inherits from) —
   defines. Its fields serve on its children live; it never accepts new
   entries itself (a born parent refuses everything and carries no entry
@@ -236,6 +241,9 @@ access model.
 | Submit an entry | `POST /api/forms/:id/submissions` |
 | Read submissions | `GET /api/forms/:id/submissions` |
 | Correction chain | `GET /api/forms/:id/submissions/:submissionId/history` |
+| Read list state | `GET /api/forms/:id/list` |
+| Replace list state (CAS) | `PUT /api/forms/:id/list` |
+| Validate list state | `POST /api/forms/:id/list/validate` |
 
 Template keys accepted on create/patch include the structural set —
 `kind`, `containerId`, `memberOrder`, `parentId`, `related`, `inherit` —
@@ -244,13 +252,13 @@ everything the GUI can do, the API can do.
 ## GUI surfaces
 
 - `/forms` — the root (groups, view switcher, create links, archived groups)
-- `/forms/:id` — a tracker (entry form + recent entries) or a group (member
-  hub + archived members)
+- `/forms/:id` — a tracker (entry form + recent entries), a list (checklist),
+  or a group (member hub + archived members)
 - `/forms/:id/entries` — history (day-grouped; aggregated for groups)
 - `/forms/:id/receipts/:submissionId` — immutable receipt (+ supersede chain,
   inline correction), carrying the tracker's bar
 - `/forms/:id/configure` — the builder: basics, parent/group selects, related
   picker, field editor, publish, clone/archive lifecycle
-- `/forms/new` — create (accepts `?group=<id>` to pre-join and
-  `?kind=container` for a new group; the ID derives from the name when left
-  blank)
+- `/forms/new` — create (accepts `?group=<id>` to pre-join,
+  `?kind=container` for a new group, and `?kind=list` for a checklist; the ID
+  derives from the name when left blank)
