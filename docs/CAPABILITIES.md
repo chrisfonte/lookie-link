@@ -126,6 +126,7 @@ This three-column table is test-checked against `lib/agent-discovery.js` and the
 | `forms` | `/forms` | `forms.enabled` is true |
 | `formsTemplates` | `/api/forms/templates` | `forms.enabled` is true |
 | `formsSubmissions` | `/api/forms/:templateId/submissions` | `forms.enabled` is true |
+| `formsList` | `/api/forms/:templateId/list` | `forms.enabled` is true |
 
 Administrative grant, API-key, and managed-repo registration routes are intentionally not emitted.
 
@@ -292,8 +293,8 @@ The package also ships compatibility executables `lookie-read` and `lookie-annot
 These routes are **not** part of the default route set above: they are registered
 only when the opt-in `forms` configuration block is present, so the route-matrix
 equality test intentionally does not cover them. When mounted, discovery
-advertises the `forms` capability and the `forms`, `formsTemplates` and
-`formsSubmissions` endpoint templates; per-template authorization still
+advertises the `forms` capability and the `forms`, `formsTemplates`,
+`formsSubmissions`, and `formsList` endpoint templates; per-template authorization still
 applies on every forms route.
 
 | Route | Method | Effective auth | Enabled by | Notes |
@@ -320,6 +321,8 @@ applies on every forms route.
 | Clone API: `/api/forms/templates/:templateId/clone` | `POST` | `forms.manage` | `forms.enabled` | Creates a revision-1 draft with a fresh identity and clone lineage; no submissions or published history are copied. |
 | Archive/restore API: `/api/forms/templates/:templateId/archive`, `/api/forms/templates/:templateId/restore` | `POST` | `forms.manage` | `forms.enabled` | CAS-guarded lifecycle changes. Archived forms refuse new submissions while history and receipts remain readable. |
 | JSON submit: `/api/forms/:templateId/submissions` | `POST` | `forms.submit` | `forms.enabled` | Same submission service as the native path. |
+| List state: `/api/forms/:templateId/list` | `GET`, `PUT` | `forms.view` or `forms.submit` (`GET`); `forms.submit` or `forms.manage` (`PUT`) | `forms.enabled` | Mutable checklist state for `kind: 'list'`. GET is read-only and returns virtual revision `0` when absent (no file created). PUT uses revision CAS (`0` creates). Discovery template `formsList`. |
+| List validate: `/api/forms/:templateId/list/validate` | `POST` | `forms.submit` or `forms.manage` | `forms.enabled` | Same validator as PUT; no write. |
 | Receipt: `/forms/:templateId/receipts/:submissionId` | `GET` | Submitter (or `read_submissions`) | `forms.enabled` | Uniform 404 for non-owners and unknown IDs. |
 
 Templates are file-backed and validated on load (invalid ones are skipped, last

@@ -260,6 +260,7 @@ const ROUTE_FOR_ENDPOINT = Object.freeze({
   forms: ['get', '/forms'],
   formsTemplates: ['get', '/api/forms/templates'],
   formsSubmissions: ['get', '/api/forms/:templateId/submissions'],
+  formsList: ['get', '/api/forms/:templateId/list'],
   edit: ['get', '/edit/*'],
   save: ['post', '/api/save/*'],
   preview: ['post', '/api/preview/*'],
@@ -299,7 +300,7 @@ const CAPABILITY_ENDPOINTS = Object.freeze({
   wallpapers: ['wallpaperImage'],
   appearance: ['appearance', 'appearanceTheme'],
   kits: ['kits', 'kit', 'kitStylesheet', 'kitFile'],
-  forms: ['forms', 'formsTemplates', 'formsSubmissions'],
+  forms: ['forms', 'formsTemplates', 'formsSubmissions', 'formsList'],
 });
 
 // App-level routes only by default (the authoritative matrix covers those).

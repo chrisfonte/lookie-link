@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased — List trackers
+
+- Added first-class `kind: 'list'` templates: mutable checklist state with
+  sections, items, optional owner, revision CAS, and a stable `/forms/:id` UI.
+- List state is separate from submissions. `GET /api/forms/:id/list` is
+  read-only (virtual revision `0` when absent); writes initialize via
+  `PUT` / validate via `POST …/list/validate`. Discovery key `formsList`.
+- Hide-completed is a per-browser display preference, not shared list state.
+- Autosave is single-flight: the revision is read at dispatch, later ticks made
+  during a save are kept, and a stale-revision conflict keeps the unsaved edits
+  visible with explicit "Keep my changes" / "Load latest" choices.
+- Form pages now allow same-origin `connect-src` so the list can autosave.
+
 ## Unreleased — House standards routing
 
 - AGENTS.md now points at the house standards router and the review-termination doctrine (§46.7 — terminal ACCEPT, findings versus blockers, two-round cap) rather than leaving each lane to improvise its own review procedure.
