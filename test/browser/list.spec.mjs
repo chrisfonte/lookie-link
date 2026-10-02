@@ -43,7 +43,7 @@ after(async () => {
   if (browser) await browser.close();
 });
 
-async function startFixture() {
+async function startFixture({seed = true, title} = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lookie-list-browser-'));
   const templatesPath = path.join(root, 'templates');
   const destinationPath = path.join(root, 'subs');
@@ -54,7 +54,7 @@ async function startFixture() {
     destinationIds: ['default'],
     logger: {warn() {}},
   });
-  await registry.createDraft(structuredClone(listTemplate));
+  if (seed) await registry.createDraft({...structuredClone(listTemplate), ...(title ? {title} : {})});
 
   const listener = http.createServer();
   await new Promise((resolve, reject) => {
@@ -85,7 +85,7 @@ async function startFixture() {
   };
 }
 
-function browserTest(name, run) {
+function browserTest(name, run, {seed = true, title} = {}) {
   test(name, {timeout: 45_000}, async (t) => {
     if (!browser) {
       t.skip(`Playwright Chromium unavailable: ${launchError && launchError.message}`);
@@ -95,7 +95,7 @@ function browserTest(name, run) {
     let context;
     let page;
     try {
-      fixture = await startFixture();
+      fixture = await startFixture({seed, title});
       context = await browser.newContext({viewport: PHONE_VIEWPORT, colorScheme: 'dark'});
       page = await context.newPage();
       await run({page, fixture});
@@ -147,14 +147,8 @@ browserTest('list page at 390px autosaves a checkbox change', async ({page, fixt
   assert.equal(afterToggle.revision, 2);
   assert.equal(afterToggle.items[0].checked, true);
 
-  // Shared chrome (the properties drawer) is out of scope; the list itself must fit.
-  const wide = await page.evaluate(() => {
-    const limit = document.documentElement.clientWidth + 1;
-    return [...document.querySelectorAll('.list-card, .list-card *')]
-      .filter((el) => el.getBoundingClientRect().right > limit)
-      .slice(0, 5).map((el) => `${el.tagName}.${el.className}`);
-  });
-  assert.deepEqual(wide, [], 'list content must fit within 390px');
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  assert.ok(overflow <= 0, `document overflows 390px by ${overflow}px`);
 
   if (process.env.LIST_SCREENSHOT) await page.screenshot({path: process.env.LIST_SCREENSHOT, fullPage: true});
 
@@ -250,4 +244,91 @@ browserTest('conflict keeps unsaved intent visible and offers explicit choices',
   await page.waitForFunction(savedStatus);
   const merged = JSON.parse(await fs.readFile(statePath, 'utf8'));
   assert.equal(merged.items[0].checked, true);
+});
+
+browserTest('native UI creates a List and the page is usable', async ({page, fixture}) => {
+  await page.goto(`${fixture.origin}/forms/new?kind=list`, {waitUntil: 'networkidle'});
+  assert.equal(await page.locator('select[name="kind"]').inputValue(), 'list');
+  await page.fill('input[name="title"]', 'Weekend shopping');
+  await page.click('form[action="/forms"] button[type="submit"]');
+  await page.waitForURL(/\/forms\/weekend-shopping\/configure/);
+  assert.match(await page.locator('main').innerText(), /Not published yet/);
+  const draft = JSON.parse(await fs.readFile(path.join(fixture.templatesPath, 'weekend-shopping', 'draft.json'), 'utf8'));
+  assert.equal(draft.kind, 'list');
+  assert.equal(draft.fields, undefined);
+  await page.getByRole('button', {name: 'Publish'}).click();
+  await page.waitForLoadState('networkidle');
+  assert.doesNotMatch(await page.locator('main').innerText(), /Not published yet/);
+  await page.goto(`${fixture.origin}/forms/weekend-shopping`, {waitUntil: 'networkidle'});
+  assert.match(await page.content(), /list-root/);
+  await addItems(page, ['Milk']);
+  const state = JSON.parse(await fs.readFile(path.join(fixture.templatesPath, 'weekend-shopping', 'list-state.json'), 'utf8'));
+  assert.equal(state.items[0].text, 'Milk');
+}, {seed: false});
+
+const LONG_WORD = 'Supercalifragilisticexpialidocious'.repeat(3);
+const MID_WORD = 'Supercalifragilisticexpialidocious';
+
+browserTest('long synthetic title, section and item stay inside the 390px document', async ({page, fixture}) => {
+  const statePath = path.join(fixture.templatesPath, TEMPLATE_ID, 'list-state.json');
+  await fs.writeFile(statePath, JSON.stringify({
+    contractVersion: 1,
+    resourceKind: 'form-list-state',
+    templateId: TEMPLATE_ID,
+    revision: 1,
+    updatedAt: new Date().toISOString(),
+    sections: [{id: 'long', title: `${MID_WORD}-section title that goes on`}],
+    items: [{id: '33333333-3333-4333-8333-333333333333', text: `${LONG_WORD} item text that also goes on`, sectionId: 'long', checked: false, owner: `${MID_WORD}-owner`}],
+  }));
+  await page.goto(`${fixture.origin}/forms/${TEMPLATE_ID}`, {waitUntil: 'networkidle'});
+  const metrics = await page.evaluate(() => {
+    const root = document.documentElement;
+    const limit = root.clientWidth + 1;
+    return {
+      overflow: root.scrollWidth - root.clientWidth,
+      wide: [...document.querySelectorAll('body *')]
+        .filter((el) => el.checkVisibility() && el.getBoundingClientRect().right > limit)
+        .slice(0, 5).map((el) => `${el.tagName}.${el.className}`),
+    };
+  });
+  assert.deepEqual(metrics.wide, []);
+  assert.ok(metrics.overflow <= 0, `document overflows 390px by ${metrics.overflow}px`);
+  if (process.env.LIST_SCREENSHOT) await page.screenshot({path: process.env.LIST_SCREENSHOT.replace('.png', '-long.png'), fullPage: true});
+  // Touch targets stay at least 44px tall with long content.
+  const heights = await page.evaluate(() => [...document.querySelectorAll('.list-check, .list-icon-btn')].map((el) => el.getBoundingClientRect().height));
+  assert.ok(heights.length >= 5 && heights.every((height) => height >= 44), `touch heights ${heights}`);
+}, {title: `${LONG_WORD} title`});
+
+browserTest('Remove needs confirmation and removes only the chosen item', async ({page, fixture}) => {
+  await page.goto(`${fixture.origin}/forms/${TEMPLATE_ID}`, {waitUntil: 'networkidle'});
+  await addItems(page, ['Tent', 'Lantern', 'Kettle']);
+  await page.locator('.list-item', {hasText: 'Kettle'}).locator('input[type="checkbox"]').check();
+  await page.waitForFunction(savedStatus);
+  const statePath = path.join(fixture.templatesPath, TEMPLATE_ID, 'list-state.json');
+  const before = JSON.parse(await fs.readFile(statePath, 'utf8'));
+
+  const lantern = page.locator('.list-item', {hasText: 'Lantern'});
+  await lantern.getByRole('button', {name: 'Remove item'}).click();
+  // First press only arms the button; nothing is removed or saved yet.
+  assert.equal(await page.locator('.list-item').count(), 3);
+  assert.equal(JSON.parse(await fs.readFile(statePath, 'utf8')).revision, before.revision);
+  await page.locator('.list-item', {hasText: 'Lantern'}).getByRole('button', {name: 'Confirm remove item'}).click();
+  await page.waitForFunction(savedStatus);
+
+  const after = JSON.parse(await fs.readFile(statePath, 'utf8'));
+  assert.deepEqual(after.items.map((item) => item.text), ['Tent', 'Kettle']);
+  const byText = (state, text) => state.items.find((item) => item.text === text);
+  assert.equal(byText(after, 'Tent').id, byText(before, 'Tent').id);
+  assert.equal(byText(after, 'Kettle').id, byText(before, 'Kettle').id);
+  assert.equal(byText(after, 'Kettle').checked, true);
+  assert.equal(byText(after, 'Tent').checked, false);
+
+  // Arming one item then ticking another disarms the removal.
+  await page.locator('.list-item', {hasText: 'Tent'}).getByRole('button', {name: 'Remove item'}).click();
+  await page.locator('.list-item', {hasText: 'Kettle'}).locator('input[type="checkbox"]').uncheck();
+  await page.waitForFunction(savedStatus);
+  assert.equal(await page.getByRole('button', {name: 'Confirm remove item'}).count(), 0);
+  const fresh = await page.context().newPage();
+  await fresh.goto(`${fixture.origin}/forms/${TEMPLATE_ID}`, {waitUntil: 'networkidle'});
+  assert.equal(await fresh.locator('.list-item').count(), 2);
 });

@@ -3048,6 +3048,8 @@ html[data-wallpaper="on"] .content { border-radius: 18px; }
 
 /* List tracker (kind: list) */
 .list-layout .list-card { display: grid; gap: 1rem; }
+.list-layout .crumb-title,
+.list-layout .crumb-title a { min-width: 0; overflow-wrap: anywhere; }
 .list-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -3084,6 +3086,8 @@ html[data-wallpaper="on"] .content { border-radius: 18px; }
   margin: 0;
   font-size: 1.1rem;
   text-transform: none;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .list-section-count { margin: 0; color: var(--text-soft); }
 .list-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
@@ -3104,13 +3108,18 @@ html[data-wallpaper="on"] .content { border-radius: 18px; }
   min-height: 44px;
   text-transform: none;
   cursor: pointer;
+  position: relative;
 }
-.list-check input {
+.form-layout .form-card .list-check input[type="checkbox"] {
   position: absolute;
   opacity: 0;
   width: 1px;
   height: 1px;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
 }
+.list-check input:focus-visible + .list-check-mark { outline: 3px solid var(--text); outline-offset: 2px; }
 .list-check-mark {
   width: 28px;
   height: 28px;
@@ -3134,7 +3143,7 @@ html[data-wallpaper="on"] .content { border-radius: 18px; }
   border-width: 0 3px 3px 0;
   transform: rotate(45deg);
 }
-.list-check-text { text-transform: none; line-height: 1.3; }
+.list-check-text { text-transform: none; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
 .list-owner { color: var(--text-soft); font-weight: 400; }
 .list-item-actions {
   display: flex;
@@ -3144,6 +3153,7 @@ html[data-wallpaper="on"] .content { border-radius: 18px; }
   justify-content: flex-start;
   padding-left: 44px;
 }
+.list-remove-confirm { font-weight: 700; border-width: 2px; }
 .list-icon-btn,
 .list-add-btn,
 .list-add-section button {

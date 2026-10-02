@@ -11,6 +11,8 @@
 - Autosave is single-flight: the revision is read at dispatch, later ticks made
   during a save are kept, and a stale-revision conflict keeps the unsaved edits
   visible with explicit "Keep my changes" / "Load latest" choices.
+- Items can be removed from the page (two-step Remove / Confirm remove). The
+  list page is verified free of horizontal overflow at 390px, document-wide.
 - Form pages now allow same-origin `connect-src` so the list can autosave.
 
 ## Unreleased — House standards routing

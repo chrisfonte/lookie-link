@@ -210,6 +210,24 @@ test('list API: bearer create/read/write, validate, CSRF reject, stale revision,
     });
     assert.equal(created.status, 201, await created.text());
 
+    // The create body above is the whole contract: server-owned keys are refused.
+    const serverKeys = await inject(fixture.app, '/api/forms/templates', {
+      method: 'POST',
+      headers: { ...AGENT_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contractVersion: 1, resourceKind: 'form-template', ownerId: 'x', revision: 1,
+        templateId: 'rejected-list', grammarVersion: 1, title: 'Rejected', kind: 'list',
+      }),
+    });
+    assert.equal(serverKeys.status, 400);
+
+    const published = await inject(fixture.app, '/api/forms/templates/packing-list/publish', {
+      method: 'POST',
+      headers: { ...AGENT_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    assert.equal(published.status, 201, await published.text());
+
     const unread = await inject(fixture.app, '/api/forms/packing-list/list', {
       headers: { Authorization: 'Bearer list-secret' },
     });
