@@ -294,9 +294,14 @@ browserTest('long synthetic title, section and item stay inside the 390px docume
   assert.deepEqual(metrics.wide, []);
   assert.ok(metrics.overflow <= 0, `document overflows 390px by ${metrics.overflow}px`);
   if (process.env.LIST_SCREENSHOT) await page.screenshot({path: process.env.LIST_SCREENSHOT.replace('.png', '-long.png'), fullPage: true});
-  // Touch targets stay at least 44px tall with long content.
-  const heights = await page.evaluate(() => [...document.querySelectorAll('.list-check, .list-icon-btn')].map((el) => el.getBoundingClientRect().height));
-  assert.ok(heights.length >= 5 && heights.every((height) => height >= 44), `touch heights ${heights}`);
+  // Touch targets stay at least 44px tall with long content, in both modes.
+  await page.getByRole('button', {name: 'Edit list'}).click();
+  await page.getByRole('button', {name: 'Edit item'}).click();
+  const heights = await page.evaluate(() => [...document.querySelectorAll('.list-check, .list-icon-btn, .list-mode-btn, .list-add-btn, .list-layout select, .list-layout input:not([type="checkbox"])')]
+    .filter((el) => el.checkVisibility()).map((el) => el.getBoundingClientRect().height));
+  assert.ok(heights.length >= 8 && heights.every((height) => height >= 44), `touch heights ${heights}`);
+  const editOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  assert.ok(editOverflow <= 0, `edit mode overflows 390px by ${editOverflow}px`);
 }, {title: `${LONG_WORD} title`});
 
 browserTest('Remove needs confirmation and removes only the chosen item', async ({page, fixture}) => {
@@ -307,7 +312,9 @@ browserTest('Remove needs confirmation and removes only the chosen item', async 
   const statePath = path.join(fixture.templatesPath, TEMPLATE_ID, 'list-state.json');
   const before = JSON.parse(await fs.readFile(statePath, 'utf8'));
 
+  await page.getByRole('button', {name: 'Edit list'}).click();
   const lantern = page.locator('.list-item', {hasText: 'Lantern'});
+  await lantern.getByRole('button', {name: 'Edit item'}).click();
   await lantern.getByRole('button', {name: 'Remove item'}).click();
   // First press only arms the button; nothing is removed or saved yet.
   assert.equal(await page.locator('.list-item').count(), 3);
@@ -324,6 +331,7 @@ browserTest('Remove needs confirmation and removes only the chosen item', async 
   assert.equal(byText(after, 'Tent').checked, false);
 
   // Arming one item then ticking another disarms the removal.
+  await page.locator('.list-item', {hasText: 'Tent'}).getByRole('button', {name: 'Edit item'}).click();
   await page.locator('.list-item', {hasText: 'Tent'}).getByRole('button', {name: 'Remove item'}).click();
   await page.locator('.list-item', {hasText: 'Kettle'}).locator('input[type="checkbox"]').uncheck();
   await page.waitForFunction(savedStatus);
@@ -331,4 +339,174 @@ browserTest('Remove needs confirmation and removes only the chosen item', async 
   const fresh = await page.context().newPage();
   await fresh.goto(`${fixture.origin}/forms/${TEMPLATE_ID}`, {waitUntil: 'networkidle'});
   assert.equal(await fresh.locator('.list-item').count(), 2);
+});
+
+
+// ---- check-first layout, large generic list ---------------------------------
+
+const SECTION_COUNT = 18;
+const ITEM_COUNT = 104;
+
+async function seedLargeList(fixture, {labelSuffix = ''} = {}) {
+  // Synthetic, generic data only: "Aisle N" sections, "Sample item N" rows.
+  const sections = [{id: 'general', title: 'General'}];
+  for (let index = 1; index < SECTION_COUNT; index += 1) sections.push({id: `aisle-${index}`, title: `Aisle ${index}`});
+  const items = [];
+  for (let index = 0; index < ITEM_COUNT; index += 1) {
+    const sectionIndex = 1 + (index % (SECTION_COUNT - 1));
+    items.push({
+      id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+      text: `Sample item ${index + 1}${labelSuffix}`,
+      sectionId: sections[sectionIndex].id,
+      checked: false,
+    });
+  }
+  await fs.writeFile(path.join(fixture.templatesPath, TEMPLATE_ID, 'list-state.json'), JSON.stringify({
+    contractVersion: 1,
+    resourceKind: 'form-list-state',
+    templateId: TEMPLATE_ID,
+    revision: 1,
+    updatedAt: new Date().toISOString(),
+    sections,
+    items,
+  }));
+}
+
+const rowByLabel = (page, label) => page.locator('.list-item').filter({has: page.locator('.list-check-text', {hasText: new RegExp(`^${label}$`)})});
+const overflowOf = (page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+browserTest('check mode is compact: no edit clutter, empty section hidden, rows fit the first screen', async ({page, fixture}) => {
+  await seedLargeList(fixture);
+  await page.goto(`${fixture.origin}/forms/${TEMPLATE_ID}`, {waitUntil: 'networkidle'});
+  assert.equal(await page.locator('.list-section').count(), SECTION_COUNT - 1, 'empty General hidden');
+  assert.equal(await page.locator('.list-item').count(), ITEM_COUNT);
+  assert.equal(await page.locator('.list-section-header h2', {hasText: 'General'}).count(), 0);
+
+  // Clutter gate: geometry can pass while every row still carries its buttons.
+  // Normal mode must expose zero edit controls anywhere in the list.
+  const clutter = await page.evaluate(() => ({
+    rowControls: document.querySelectorAll('#list-root button, #list-root select, #list-root input:not([type="checkbox"])').length,
+    visibleButtons: [...document.querySelectorAll('.list-layout button')].filter((el) => el.checkVisibility()).map((el) => el.textContent.trim()),
+    newSection: document.getElementById('list-add-section').checkVisibility(),
+  }));
+  assert.equal(clutter.rowControls, 0, 'no per-row buttons, selects or inputs in check mode');
+  assert.deepEqual(clutter.visibleButtons.sort(), ['Add', 'Edit list']);
+  assert.equal(clutter.newSection, false, 'add-section is edit-only');
+
+  const metrics = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.list-item')];
+    const heights = rows.map((row) => row.getBoundingClientRect().height);
+    const inFirstScreen = rows.filter((row) => row.getBoundingClientRect().bottom <= window.innerHeight).length;
+    return {maxRow: Math.max(...heights), inFirstScreen, firstTop: rows[0].getBoundingClientRect().top};
+  });
+  assert.ok(metrics.maxRow <= 60, `row height ${metrics.maxRow}`);
+  assert.ok(metrics.inFirstScreen >= 6, `only ${metrics.inFirstScreen} rows fit the first 844px screen`);
+  assert.ok(metrics.firstTop < 560, `first row starts at ${metrics.firstTop}px`);
+  assert.ok(await overflowOf(page) <= 0);
+  const sizes = await page.evaluate(() => [...document.querySelectorAll('.list-check, .list-mode-btn, .list-add-btn')].map((el) => el.getBoundingClientRect().height));
+  assert.ok(sizes.every((height) => height >= 44), `touch heights ${sizes}`);
+  if (process.env.LIST_SCREENSHOT) await page.screenshot({path: process.env.LIST_SCREENSHOT.replace('.png', '-check.png')});
+});
+
+browserTest('check, filter, edit mode and reload keep state; Done editing returns', async ({page, fixture}) => {
+  await seedLargeList(fixture);
+  await page.goto(`${fixture.origin}/forms/${TEMPLATE_ID}`, {waitUntil: 'networkidle'});
+  const statePath = path.join(fixture.templatesPath, TEMPLATE_ID, 'list-state.json');
+
+  await page.locator('.list-item', {hasText: 'Sample item 1'}).first().locator('input[type="checkbox"]').check();
+  await page.waitForFunction(savedStatus);
+  await page.fill('#list-filter', 'Sample item 2');
+  const filtered = await page.locator('.list-item').count();
+  assert.ok(filtered > 0 && filtered < ITEM_COUNT, `filter narrowed to ${filtered}`);
+
+  // Into edit mode: filter and checked state survive, empty sections stay filtered out while narrowed.
+  await page.getByRole('button', {name: 'Edit list'}).click();
+  assert.equal(await page.inputValue('#list-filter'), 'Sample item 2');
+  assert.equal(await page.locator('.list-item').count(), filtered);
+  await page.fill('#list-filter', '');
+  assert.equal(await page.locator('.list-section').count(), SECTION_COUNT, 'edit mode shows the empty section');
+  assert.equal(await rowByLabel(page, 'Sample item 1').locator('input').isChecked(), true);
+  assert.equal(await page.locator('#list-add-section').isVisible(), true);
+
+  // Inline edit (no window.prompt), reassign section, remove with confirmation.
+  page.on('dialog', () => { throw new Error('window.prompt/alert must not be used'); });
+  const row = rowByLabel(page, 'Sample item 3');
+  await row.getByRole('button', {name: 'Edit item'}).click();
+  await page.locator('.list-item.is-open input[name="text"]').fill('Renamed sample');
+  await page.getByRole('button', {name: 'Save item text'}).click();
+  await page.waitForFunction(savedStatus);
+  const renamed = page.locator('.list-item', {hasText: 'Renamed sample'});
+  await renamed.getByRole('button', {name: 'Edit item'}).click();
+  await renamed.locator('select[data-action="section"]').selectOption('general');
+  await page.waitForFunction(savedStatus);
+  let disk = JSON.parse(await fs.readFile(statePath, 'utf8'));
+  const moved = disk.items.find((item) => item.text === 'Renamed sample');
+  assert.equal(moved.sectionId, 'general');
+  assert.equal(moved.id, '00000000-0000-4000-8000-000000000002', 'id preserved across edit and move');
+  await page.locator('.list-item', {hasText: 'Renamed sample'}).getByRole('button', {name: 'Remove item'}).click();
+  await page.locator('.list-item', {hasText: 'Renamed sample'}).getByRole('button', {name: 'Confirm remove item'}).click();
+  await page.waitForFunction(savedStatus);
+
+  // Add a section, then add an item into it from the always-visible quick add.
+  await page.fill('#list-add-section input[name="title"]', 'Extras');
+  await page.click('#list-add-section button');
+  await page.waitForFunction(savedStatus);
+  await page.selectOption('#list-add-form select[name="section"]', {label: 'Extras'});
+  await page.fill('#list-add-form input[name="text"]', 'Spare item');
+  await page.click('#list-add-form button[type="submit"]');
+  await page.waitForFunction(savedStatus);
+
+  await page.getByRole('button', {name: 'Done editing'}).click();
+  assert.equal(await page.getByRole('button', {name: 'Edit list'}).count(), 1);
+  assert.equal(await page.locator('#list-root button, #list-root select').count(), 0, 'edit controls gone after Done editing');
+  assert.equal(await page.locator('#list-add-section').isVisible(), false);
+  assert.equal(await page.locator('.list-section-header h2', {hasText: 'Extras'}).count(), 1, 'populated new section shows');
+  assert.equal(await page.locator('.list-section-header h2', {hasText: 'General'}).count(), 0, 'General is empty again after the removal, so it is hidden');
+
+  // Reload: server state is exactly what was done.
+  await page.reload({waitUntil: 'networkidle'});
+  disk = JSON.parse(await fs.readFile(statePath, 'utf8'));
+  assert.equal(disk.items.length, ITEM_COUNT);
+  assert.equal(await page.locator('.list-item').count(), ITEM_COUNT);
+  assert.equal(await rowByLabel(page, 'Sample item 1').locator('input').isChecked(), true);
+  assert.equal(await page.locator('.list-item', {hasText: 'Spare item'}).count(), 1);
+  assert.equal(await page.locator('.list-item', {hasText: 'Renamed sample'}).count(), 0);
+});
+
+browserTest('jump to section and hide completed work on the large list', async ({page, fixture}) => {
+  await seedLargeList(fixture);
+  await page.goto(`${fixture.origin}/forms/${TEMPLATE_ID}`, {waitUntil: 'networkidle'});
+  const options = await page.locator('#list-jump option').count();
+  assert.equal(options, SECTION_COUNT, 'placeholder plus 17 populated sections');
+  await page.selectOption('#list-jump', 'aisle-15');
+  const focused = await page.evaluate(() => document.activeElement && document.activeElement.textContent);
+  assert.equal(focused, 'Aisle 15');
+  await page.locator('.list-item').first().locator('input').check();
+  await page.waitForFunction(savedStatus);
+  await page.check('#list-hide-completed');
+  assert.equal(await page.locator('.list-item').count(), ITEM_COUNT - 1);
+});
+
+browserTest('large list with long labels stays inside the document at 390px and desktop', async ({page, fixture}) => {
+  await seedLargeList(fixture, {labelSuffix: ` ${MID_WORD}${MID_WORD}`});
+  await page.goto(`${fixture.origin}/forms/${TEMPLATE_ID}`, {waitUntil: 'networkidle'});
+  assert.ok(await overflowOf(page) <= 0, 'phone check mode');
+  await page.getByRole('button', {name: 'Edit list'}).click();
+  await page.getByRole('button', {name: 'Edit item'}).first().click();
+  assert.ok(await overflowOf(page) <= 0, 'phone edit mode');
+  await page.setViewportSize({width: 1280, height: 900});
+  assert.ok(await overflowOf(page) <= 0, 'desktop edit mode');
+  await page.getByRole('button', {name: 'Done editing'}).click();
+  assert.ok(await overflowOf(page) <= 0, 'desktop check mode');
+  if (process.env.LIST_SCREENSHOT) await page.screenshot({path: process.env.LIST_SCREENSHOT.replace('.png', '-desktop.png')});
+});
+
+browserTest('keyboard: toggling keeps focus on the row and the checkbox is focusable', async ({page, fixture}) => {
+  await seedLargeList(fixture);
+  await page.goto(`${fixture.origin}/forms/${TEMPLATE_ID}`, {waitUntil: 'networkidle'});
+  await page.locator('.list-item input[type="checkbox"]').first().focus();
+  await page.keyboard.press('Space');
+  await page.waitForFunction(savedStatus);
+  const stillFocused = await page.evaluate(() => document.activeElement && document.activeElement.matches('input[data-action="toggle"]'));
+  assert.equal(stillFocused, true, 'focus stays on the toggled checkbox after re-render');
 });

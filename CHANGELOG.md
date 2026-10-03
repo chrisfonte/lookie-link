@@ -7,6 +7,13 @@
 - List state is separate from submissions. `GET /api/forms/:id/list` is
   read-only (virtual revision `0` when absent); writes initialize via
   `PUT` / validate via `POST …/list/validate`. Discovery key `formsList`.
+- The list page is check-first: one compact row per item, with a filter,
+  jump-to-section, hide-completed and a single quick-add always available.
+  Empty sections are hidden in the normal view. Edit list reveals a per-row
+  menu (inline text edit, move, section, confirmed remove) and add-section;
+  Done editing returns. Filter, hide-completed and checked state survive mode
+  changes. A group's list member now opens the checklist instead of offering
+  Log entry.
 - Hide-completed is a per-browser display preference, not shared list state.
 - Autosave is single-flight: the revision is read at dispatch, later ticks made
   during a save are kept, and a stale-revision conflict keeps the unsaved edits
