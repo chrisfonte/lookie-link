@@ -20,7 +20,7 @@ All notable changes to the Ops HTML Kit.
   label and marker collisions, leader lines through labels, marker/key agreement,
   minimum rendered text size, contrast and page overflow at 1280/390px in light and
   dark, with a screenshot per diagram. The browser test uses the same module and
-  plants one defect of each new kind to prove it is caught.
+  plants one defect for every failure it reports to prove each is caught.
 
 ## v1.27 (2026-10-06)
 

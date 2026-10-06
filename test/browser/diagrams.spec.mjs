@@ -120,6 +120,30 @@ test('annotated diagrams survive publishing and sanitization at desktop and phon
       assert.match(diagramProblems(await page.evaluate(inspectDiagrams)).failures.join('\n'),/marker numbers do not match the key/);
       await page.locator('li[data-parked]').evaluate(el=>{el.hidden=false;el.previousElementSibling.append(el);delete el.dataset.parked;});
       assert.deepEqual(diagramProblems(await page.evaluate(inspectDiagrams)).failures,[]);
+      // One planted defect per remaining failure path; each is undone before the next.
+      const problems = async () => diagramProblems(await page.evaluate(inspectDiagrams)).failures.join('\n');
+      await viewLabel.evaluate(el=>el.setAttribute('y','-40'));
+      assert.match(await problems(),/"Front view" is outside the canvas/);
+      await viewLabel.evaluate(el=>el.setAttribute('y','20'));
+      await viewLabel.evaluate(el=>{el.style.fontSize='4px';});
+      assert.match(await problems(),/smallest text renders at [\d.]+px/);
+      await viewLabel.evaluate(el=>{el.style.fontSize='';el.style.fill=getComputedStyle(el.closest('.dg')).backgroundColor;});
+      assert.match(await problems(),/label contrast 1:1 is below/);
+      await viewLabel.evaluate(el=>{el.style.fill='none';});
+      assert.match(await problems(),/label contrast 0:1 is below/,'an unpainted label fails instead of throwing');
+      await viewLabel.evaluate(el=>{el.style.fill='';});
+      const keyedSvg = page.locator('.dg-keyed svg.dg-canvas');
+      const viewBox = await keyedSvg.getAttribute('viewBox');
+      await keyedSvg.evaluate(el=>el.removeAttribute('viewBox'));
+      assert.match(await problems(),/no viewBox/);
+      await keyedSvg.evaluate((el,value)=>el.setAttribute('viewBox',value),viewBox);
+      await page.locator('ol.dg-key').evaluate(el=>{el.className='parked-key';});
+      assert.match(await problems(),/the key is missing/);
+      await page.locator('ol.parked-key').evaluate(el=>{el.className='dg-key';});
+      await page.locator('.dg-keyed svg.dg-canvas title').evaluate(el=>{el.dataset.text=el.textContent;el.textContent='';});
+      assert.match(await problems(),/title\/desc missing/);
+      await page.locator('.dg-keyed svg.dg-canvas title').evaluate(el=>{el.textContent=el.dataset.text;delete el.dataset.text;});
+      assert.equal(await problems(),'');
       assert.deepEqual(metrics.arrows,[24,24]);
       assert.equal(metrics.flow,width===390?'column':'row');
       for(const region of metrics.regions) {assert.equal(region.focus,0);assert.equal(region.role,'region');assert.equal(region.scroll,width===390);}
@@ -135,6 +159,7 @@ test('annotated diagrams survive publishing and sanitization at desktop and phon
       if(width===390) {
         await page.addStyleTag({content:'.dg-scroll{overflow:visible!important}'});
         assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth),true);
+        assert.match(diagramProblems(await page.evaluate(inspectDiagrams)).failures.join('\n'),/page scrolls sideways/);
       }
     }
     // Existing consumer: the full component showcase still fits at phone width.

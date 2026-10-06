@@ -231,7 +231,8 @@ SVGs (leader labels twice, a numbered key once) and a complete `dg-flow` recipe.
 ### Structure and accessible names
 
 Use `figure.dg` with a visible heading, `.dg-scroll`, `svg.dg-canvas`, and
-`figcaption.dg-caption`. Give the SVG a `viewBox`, `role="img"`, and unique
+`figcaption.dg-caption`. The scroll wrapper belongs to leader-label drawings that
+set a minimum width; a numbered-key drawing (below) omits it. Give the SVG a `viewBox`, `role="img"`, and unique
 `title`/`desc` IDs referenced by `aria-labelledby`. Explain the relationships in
 `desc` and nearby text; a title alone does not describe the drawing. Give each
 scroll region `tabindex="0"`, `role="region"`, a distinct accessible name, and a
@@ -320,9 +321,12 @@ node scripts/check-diagrams.mjs <url> --out <dir>     # from a Lookie-Link check
 
 Give it a `/view` or `/embed` address. It renders 1280px and 390px in light and
 dark, measures inside the real artifact frame, and saves one screenshot per diagram
-card. It fails on: a label outside the canvas, two labels or markers overlapping, a
-leader line running through a label, marker numbers that do not match the key, text
-rendering under 10px, label contrast under 4.5:1, and a page that scrolls sideways.
+card. It fails on: a missing or unreferenced `title`/`desc`, a missing `viewBox`, a
+label outside the canvas, two labels or markers overlapping, a leader line running
+through a label, marker numbers that do not match the key (or markers with no key),
+text rendering under 10px, label contrast under 4.5:1 (an unpainted label counts as
+0:1), and a page that scrolls sideways. On `/view` it measures the first embedded
+artifact frame. It needs the checkout's development dependencies (Playwright).
 It notes, without failing, leader lines that cross and diagrams that need sideways
 scrolling at that width. Passing is necessary, not sufficient: **open the
 screenshots**. The checker cannot tell whether the drawing is true or whether a

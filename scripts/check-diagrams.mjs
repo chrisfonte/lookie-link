@@ -7,7 +7,9 @@
 //   node scripts/check-diagrams.mjs <url> [--out <dir>] [--widths 1280,390] [--min-text 10]
 //
 // <url> may be a Lookie /view or /embed address, or any page that uses svg.dg-canvas.
-// Exit code 1 means at least one failure. Notices never fail the run.
+// On /view the first /embed/ child frame is measured.
+// Exit 0 pass, 1 at least one failure, 2 usage error. Notices never fail the run.
+// Needs the repository's development dependencies (Playwright).
 import fs from 'node:fs';
 import path from 'node:path';
 import {createRequire} from 'node:module';
@@ -15,18 +17,30 @@ const require = createRequire(import.meta.url);
 const {chromium} = require('playwright');
 const {inspectDiagrams, diagramProblems} = require('../lib/diagram-checks');
 
+const usage = (reason) => {
+  console.error(`check-diagrams: ${reason}`);
+  console.error('usage: node scripts/check-diagrams.mjs <url> [--out <dir>] [--widths 1280,390] [--min-text 10]');
+  process.exit(2);
+};
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
   const at = args.indexOf(name);
-  return at === -1 ? fallback : args.splice(at, 2)[1];
+  if (at === -1) return fallback;
+  const value = args.splice(at, 2)[1];
+  if (value === undefined || value.startsWith('--')) usage(`${name} needs a value`);
+  return value;
 };
 const out = option('--out', null);
 const widths = option('--widths', '1280,390').split(',').map(Number);
 const minTextPx = Number(option('--min-text', '10'));
-const url = args[0];
-if (!url || widths.some((width) => !width)) {
-  console.error('usage: node scripts/check-diagrams.mjs <url> [--out <dir>] [--widths 1280,390] [--min-text 10]');
-  process.exit(2);
+if (args.length !== 1 || args[0].startsWith('--')) usage('give exactly one URL');
+if (widths.some((width) => !Number.isInteger(width) || width < 200)) usage('--widths takes whole pixel widths of 200 or more');
+if (!Number.isFinite(minTextPx) || minTextPx <= 0) usage('--min-text takes a positive number');
+let url;
+try {
+  url = new URL(args[0]).href;
+} catch {
+  usage(`not a URL: ${args[0]}`);
 }
 if (out) fs.mkdirSync(out, {recursive: true});
 
@@ -57,7 +71,16 @@ try {
       await context.close();
       continue;
     }
-    const report = await frame.evaluate(inspectDiagrams);
+    let report;
+    try {
+      report = await frame.evaluate(inspectDiagrams);
+    } catch (error) {
+      // An unexpected page shape is a failed check, never a silent crash.
+      failed = true;
+      runs.push({width, mode, failures: [`could not inspect the page: ${error.message.split('\n')[0]}`], notices: [], figures: []});
+      await context.close();
+      continue;
+    }
     const {failures, notices} = diagramProblems(report, {minTextPx});
     if (failures.length) failed = true;
     if (out) {
