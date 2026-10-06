@@ -1,6 +1,6 @@
-/* File: ~/operations/templates/html-kit/kit.css
+/* File: kits/ops/kit.css
    Ops HTML Kit — reusable design tokens + components for agent-built HTML deliverables.
-   Lookie-safe. v1.24 (2026-08-27).
+   Lookie-safe. v1.27 (2026-10-06).
 
    USAGE
    - Inline this file into a <style> block in each page (most reliable everywhere), OR
@@ -465,6 +465,19 @@ html[data-lookie-link-scheme="folly-beach"][data-lookie-link-theme="light"],html
 .dg .dg-title{font-size:21px;font-weight:850;color:var(--accent-deep);margin:0 0 16px;line-height:1.2;letter-spacing:-.3px}
 .dg .dg-note{font-size:12.5px;color:var(--muted);font-style:italic;margin:10px 0 0}
 
+/* Annotated diagrams: only explicit canvases scale; small nested icons keep their size.
+   Set --dg-min-width locally when labels need a scrollable reading width. */
+figure.dg{margin-inline:0;min-width:0}
+.dg-scroll{max-width:100%;min-width:0;overflow-x:auto;overscroll-behavior-x:contain}
+.dg-scroll:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+svg.dg-canvas{display:block;width:100%;height:auto;min-width:var(--dg-min-width,0);font-family:inherit;font-size:16px;color:var(--ink)}
+.dg-canvas .dg-shape{fill:var(--surface-2);stroke:var(--muted);stroke-width:2}
+.dg-canvas .dg-label{fill:var(--ink);font-size:16px;font-weight:700}
+.dg-canvas .dg-detail{fill:var(--muted);font-size:14px}
+.dg-canvas .dg-leader{fill:none;stroke:var(--muted);stroke-width:2}
+.dg-canvas .dg-shape,.dg-canvas .dg-leader{vector-effect:non-scaling-stroke}
+.dg-caption{color:var(--muted);font-size:14px;line-height:1.5;margin:12px 0 0}
+
 /* .dg-ladder — known-vs-unknown comparison rows: label | scaled bar+value | qualitative
    label (+ optional big "?" via .lq). Bars: width is data — set inline, scaled to the max. */
 .dg-ladder{display:flex;flex-direction:column;gap:8px}
@@ -491,6 +504,16 @@ html[data-lookie-link-scheme="folly-beach"][data-lookie-link-theme="light"],html
 .dg-flow .fv{font-size:14.5px;font-weight:700;margin:0 0 3px}
 .dg-flow .fd{font-size:12.5px;color:var(--muted);margin:0}
 .dg-flow .farrow{display:flex;align-items:center;color:var(--muted);flex:0 0 auto}
+.dg-flow .farrow>svg{width:24px;height:24px;flex:none}
+/* Optional ordered flow: keep direction explicit as the boxes stack on phones. */
+ol.dg-flow{list-style:none;padding:0;margin:0}
+.dg-flow.dg-flow-stack{flex-wrap:nowrap}
+.dg-flow-stack .fbox{min-width:0}
+@media(max-width:640px){
+  .dg-flow.dg-flow-stack{flex-direction:column}
+  .dg-flow-stack .fbox{flex-basis:auto}
+  .dg-flow-stack .farrow{align-self:center;transform:rotate(90deg)}
+}
 
 /* .dg-branch — a decision's outcomes as tag + body rows (Off/On, Yes/No). Tag color
    states the SEMANTIC of taking that branch: .ok (safe) / .bad (open risk). */

@@ -1,11 +1,12 @@
 name: ops
 label: Ops HTML Kit
-version: "1.26"
+version: "1.27"
 stylesheet: kit.css
 templates:
   - research-packet-template.html
   - email-table-template.html
 examples:
+  - diagram-examples.html
   - EXAMPLES.html
   - theme-follow-demo.html
 consumes:
