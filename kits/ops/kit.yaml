@@ -6,6 +6,8 @@ templates:
   - research-packet-template.html
   - email-table-template.html
 examples:
+  - README.md
+  - CHANGELOG.md
   - diagram-examples.html
   - EXAMPLES.html
   - theme-follow-demo.html

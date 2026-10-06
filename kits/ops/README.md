@@ -33,6 +33,11 @@ A small, reusable CSS kit so agent-built HTML deliverables share one consistent,
 
 ## Use it
 
+Fetch this guide at `/kit/ops/files/README.md` and the history at
+`/kit/ops/files/CHANGELOG.md`. Both are listed in the kit catalog's `examples`
+collection alongside the HTML examples; use the returned URLs. These routes
+serve source files, not the viewer shell.
+
 1. **Pull the styles** into your page — two ways:
    - **Inline** the contents of `kit.css` into a `<style>` block. **Most reliable for standalone report/deliverable pages** (Lookie, a plain browser, PDF). ⚠ **NOT for actual email bodies** — `kit.css` relies on CSS custom properties (`var(--…)`), which Gmail and most email clients strip, so a kit-styled page pasted into an email loses all its color. For email bodies see **Plain HTML email bodies** below.
    - **Link** it: `<link rel="stylesheet" href="kit.css">` when the page sits next to `kit.css` and is served via Lookie-Link (works since the 2026-06 asset-MIME fix) or opened locally.
@@ -247,6 +252,11 @@ need distinct IDs throughout the document. Decorative arrow SVGs use
 - `.dg-caption` provides visible context and limits. Geometry, leader paths,
   label placement, dimensions and markers remain local. Check that labels fit
   inside the viewBox and do not overlap lines or each other at the minimum width.
+  Automated bounds checks must map text-box corners through ancestor transforms
+  into root SVG coordinates; `getBBox()` alone is local to the text element and
+  can reject a valid translated label or miss one moved off-canvas. The product
+  browser test exercises both cases. Bounds checks do not detect label collisions;
+  visually inspect the rendered minimum-width diagram too.
 - Do not add broad descendant SVG sizing rules: small arrows and icons are not
   canvases. Flow arrows stay 24px. Add `dg-flow-stack` to an ordered `dg-flow` to
   stack boxes and turn the arrows downward at 640px and below; existing flows

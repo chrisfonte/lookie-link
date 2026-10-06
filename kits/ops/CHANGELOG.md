@@ -10,6 +10,10 @@ All notable changes to the Ops HTML Kit.
 
 ## v1.27 (2026-10-06)
 
+- Authoring follow-up: expose README and CHANGELOG through the existing kit-file
+  allowlist/catalog, with byte-for-byte HTTP regression coverage. Verify SVG text
+  bounds in root coordinates, including translated groups and an off-canvas canary.
+  Stylesheet bytes and version remain unchanged.
 - Add opt-in annotated SVG canvas, scroll region, labels, shapes, leader lines,
   and figure caption classes. Keep subject geometry and colors local.
 - Add connection and room-layout examples with accessible title/description,

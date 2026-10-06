@@ -141,6 +141,23 @@ test('kit.css is text/css and byte-equal to kits/ops/kit.css; versioned URL is i
   }
 });
 
+test('kit authoring documents are discoverable and served byte-for-byte', async () => {
+  const s = await startServer();
+  try {
+    const catalog = await request(s.base, '/api/kits/ops');
+    assert.equal(catalog.status, 200);
+    for (const name of ['README.md', 'CHANGELOG.md']) {
+      const res = await request(s.base, `/kit/ops/files/${name}`);
+      assert.equal(res.status, 200, `${name} must be served`);
+      assert.match(String(res.headers['content-type']), /text\/markdown/);
+      assert.ok(res.buf.equals(fs.readFileSync(path.join(__dirname, '..', 'kits', 'ops', name))));
+      assert.ok(catalog.json.kit.examples.some(file => file.file === name), `${name} must be discoverable`);
+    }
+  } finally {
+    await s.close();
+  }
+});
+
 test('kit files route serves templates and refuses traversal and unlisted files', async () => {
   const s = await startServer();
   try {
@@ -151,7 +168,7 @@ test('kit files route serves templates and refuses traversal and unlisted files'
     const traversal = await request(s.base, '/kit/ops/files/..%2Fkit.yaml');
     assert.equal(traversal.status, 404);
 
-    const unlisted = await request(s.base, '/kit/ops/files/README.md');
+    const unlisted = await request(s.base, '/kit/ops/files/kit.yaml');
     assert.equal(unlisted.status, 404);
     assert.equal(unlisted.json.error.code, 'not_found');
   } finally {

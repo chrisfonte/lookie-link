@@ -2,6 +2,8 @@
 
 ## Unreleased — generic diagram authoring
 
+- Make the bundled kit's authoring guide and history discoverable and fetchable;
+  cover transformed SVG label bounds with positive and negative browser checks.
 - Ops Kit 1.27 adds accessible annotated SVG recipes, contained horizontal scrolling,
   reusable drawing classes, and a responsive ordered-flow example. See
   [the kit authoring contract](kits/ops/README.md#annotated-diagrams).
