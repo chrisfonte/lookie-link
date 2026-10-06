@@ -431,3 +431,25 @@ reset. Documents own image rendering and defaults. They can keep standalone
 controls until the viewer acknowledges the toolbar. The bridge does not save
 wallpaper preferences or add a server wallpaper catalog. `'*'` is required for
 the opaque sandbox origin; payloads must contain only the cosmetic values above.
+
+## YouTube clips in authored HTML
+
+In `/view`, supported YouTube embed iframes in authored HTML become play links
+that open a viewer-owned modal player. The selected absolute `start`/`end`
+window is preserved. Close video removes the iframe and returns focus to the clip. Escape does the
+same while focus is in viewer controls; when focus is inside YouTube, use Close
+video. A timestamped YouTube fallback stays available.
+The authored document remains in its existing opaque-origin sandbox.
+
+Supported sources are HTTPS `youtube.com` / `www.youtube.com` and
+`youtube-nocookie.com` / `www.youtube-nocookie.com`, with `/embed/VIDEO_ID`
+(11-character ID). Start/end must be nonnegative integer seconds, with end
+strictly after start. `cc_load_policy` and `rel` accept 0/1; other source query
+parameters are discarded. The viewer adds autoplay and playsinline. Provider
+requests send an origin-only referrer; report paths and query credentials are
+not forwarded. Invalid sources and srcdoc iframes are not transformed.
+
+This bridge applies to transformed HTML in `/view`. Direct `/embed` play links
+fall back to YouTube when no viewer handshake exists; `/raw` remains unchanged.
+Provider, regional, browser, or network restrictions can still prevent playback.
+An iframe rendering successfully is not proof that video has decoded or advanced.
