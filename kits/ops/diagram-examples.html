@@ -11,10 +11,10 @@
 <header class="hero"><div class="wrap">
   <p class="eyebrow">Ops HTML Kit · Diagram recipes</p>
   <h1>Make the relationship visible.</h1>
-  <p class="sub">Use a simple flow for sequence. Use an annotated drawing when position and connections carry the explanation.</p>
+  <p class="sub">Use a simple flow for sequence. Use an annotated drawing when position and connections carry the explanation. Use a numbered key when the labels are dense or the drawing must fit a phone.</p>
 </div></header>
 <nav class="topnav" aria-label="Diagram examples"><div class="inner">
-  <a href="#connections">Connections</a><a href="#layout">Room layout</a><a href="#flow">Process</a><a href="#recipe">Authoring</a>
+  <a href="#connections">Connections</a><a href="#layout">Room layout</a><a href="#keyed">Numbered key</a><a href="#flow">Process</a><a href="#recipe">Authoring</a>
 </div></nav>
 <main class="wrap">
 <section id="connections">
@@ -79,6 +79,46 @@
     <figcaption class="dg-caption">Furniture stays at the edges of the central route. The dashed line identifies the path; it is not a measured clearance or a safety certification.</figcaption>
   </figure>
 </section>
+<section id="keyed">
+  <h2>A numbered key keeps a dense drawing readable</h2>
+  <p>When several labels crowd one small drawing, put numbers on the drawing and the words beside it. The key is ordinary text: it wraps, it can carry a full sentence, and the drawing fits a phone with no sideways scrolling. This control panel is fictional.</p>
+  <figure class="dg" aria-labelledby="panel-heading">
+    <p class="dg-eyebrow">Annotated SVG · Numbered key</p>
+    <h3 class="dg-title" id="panel-heading">Every control is reachable from the front.</h3>
+    <div class="dg-keyed">
+      <svg class="dg-canvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 250" role="img" aria-labelledby="panel-title panel-desc">
+        <title id="panel-title">Front and top views of a small control panel</title>
+        <desc id="panel-desc">Front view: a display at the upper left, a round dial at the right, two buttons under the display and a socket at the lower right. Top view: a carry handle along the top edge. Numbered markers one to five match the key beside the drawing; marker five appears in both views.</desc>
+        <text class="dg-view" x="10" y="20">Front view</text>
+        <rect class="dg-shape" x="10" y="30" width="340" height="150" rx="10"/>
+        <rect class="dg-shape" x="30" y="50" width="150" height="60" rx="4" style="fill:var(--surface)"/>
+        <circle class="dg-shape" cx="270" cy="92" r="36"/>
+        <path class="dg-leader" d="M270 92V64"/>
+        <rect class="dg-shape" x="30" y="130" width="60" height="30" rx="15"/>
+        <rect class="dg-shape" x="104" y="130" width="60" height="30" rx="15"/>
+        <rect class="dg-shape" x="226" y="140" width="34" height="22" rx="3"/>
+        <path class="dg-leader" d="M150 30V20H290V30"/>
+        <text class="dg-view" x="10" y="212">Top view</text>
+        <rect class="dg-shape" x="10" y="222" width="340" height="18" rx="6"/>
+        <path class="dg-leader" d="M150 231H290" style="stroke-width:5"/>
+        <g class="dg-marker" transform="translate(105 80)"><circle r="13"/><text>1</text></g>
+        <g class="dg-marker" transform="translate(318 60)"><circle r="13"/><text>2</text></g>
+        <g class="dg-marker" transform="translate(190 145)"><circle r="13"/><text>3</text></g>
+        <g class="dg-marker" transform="translate(286 151)"><circle r="13"/><text>4</text></g>
+        <g class="dg-marker" transform="translate(220 20)"><circle r="13"/><text>5</text></g>
+        <g class="dg-marker" transform="translate(318 231)"><circle r="13"/><text>5</text></g>
+      </svg>
+      <ol class="dg-key" aria-label="Key to the numbered markers">
+        <li><strong>Display</strong><span>Shows the current reading.</span></li>
+        <li><strong>Dial</strong><span>Turn to change the value; the line marks its position.</span></li>
+        <li><strong>Buttons</strong><span>The left one confirms and the right one cancels.</span></li>
+        <li><strong>Socket</strong><span>Accepts the supplied cable only.</span></li>
+        <li><strong>Handle</strong><span>Runs along the top edge, so it shows in both views.</span></li>
+      </ol>
+    </div>
+    <figcaption class="dg-caption">Markers carry numbers only. Repeat a number when one part appears in two views, and keep every fact in the key so it is readable without the drawing.</figcaption>
+  </figure>
+</section>
 <section id="flow">
   <h2>Use HTML when order is the whole story</h2>
   <div class="dg">
@@ -96,7 +136,7 @@
 </section>
 <section id="recipe">
   <h2>Keep content local; share the framing</h2>
-  <p>Use HTML/CSS for steps and comparison cards, inline SVG for precise connections or spatial annotations, and an illustration for appearance or texture. Keep essential facts in text as well.</p>
+  <p>Use HTML/CSS for steps and comparison cards, inline SVG for precise connections or spatial annotations, and an illustration for appearance or texture. Keep essential facts in text as well. Draw only what the source confirms: a drawing asserts where things are, so check placement against the source before trusting a label.</p>
   <p>The reusable classes supply surfaces, readable labels, leaders, scrolling and captions. Coordinates and subject-specific colors belong to the drawing. If a color is itself the subject, preserve it and label it; status meaning uses semantic tokens plus text.</p>
   <p>See the <a href="README.md#annotated-diagrams">annotated-diagram authoring contract</a> and the <a href="EXAMPLES.html">complete component showcase</a>.</p>
 </section>

@@ -5,7 +5,7 @@ Title: Ops HTML Kit
 Owner: Operations Team
 Created: 2026-06-28
 Last Updated: 2026-10-06
-Version: 1.27
+Version: 1.28
 Status: Active
 Tags: #html #css #design-system #templates #lookie-link
 Document URL: kits/ops/README.md
@@ -222,10 +222,11 @@ Choose the representation by what the reader needs to learn:
 |---|---|
 | Sequence, branches, comparisons | HTML/CSS `dg-flow`, `dg-branch`, or another existing family; native text can reflow |
 | Precise connections, position, dimensions, annotations | Inline SVG inside a `figure.dg`; geometry remains page-local |
+| Many labels on one small drawing, or a drawing that must fit a phone without sideways scrolling | Inline SVG with numbered `dg-marker`s beside an HTML `ol.dg-key` inside `.dg-keyed` |
 | Appearance, material, texture, or atmosphere | An illustration or photograph with alt text and a caption; keep exact labels and facts in HTML/SVG |
 
-Open [diagram-examples.html](diagram-examples.html) for two unrelated annotated
-SVGs and a complete `dg-flow` recipe. These are fictional examples, not measurements.
+Open [diagram-examples.html](diagram-examples.html) for three unrelated annotated
+SVGs (leader labels twice, a numbered key once) and a complete `dg-flow` recipe. These are fictional examples, not measurements.
 
 ### Structure and accessible names
 
@@ -255,12 +256,77 @@ need distinct IDs throughout the document. Decorative arrow SVGs use
   Automated bounds checks must map text-box corners through ancestor transforms
   into root SVG coordinates; `getBBox()` alone is local to the text element and
   can reject a valid translated label or miss one moved off-canvas. The product
-  browser test exercises both cases. Bounds checks do not detect label collisions;
-  visually inspect the rendered minimum-width diagram too.
+  browser test exercises both cases. `scripts/check-diagrams.mjs` (below) automates
+  bounds, label collisions and lines through labels; still look at the rendered
+  minimum-width diagram.
 - Do not add broad descendant SVG sizing rules: small arrows and icons are not
   canvases. Flow arrows stay 24px. Add `dg-flow-stack` to an ordered `dg-flow` to
   stack boxes and turn the arrows downward at 640px and below; existing flows
   retain their wrapping behavior.
+
+### Numbered key (v1.28)
+
+Leader labels stop working when a drawing is dense or narrow: the lines cross, the
+text shrinks with the canvas, and a phone needs sideways scrolling. Put numbers on
+the drawing and the words in HTML instead.
+
+```html
+<figure class="dg" aria-labelledby="x-heading">
+  <p class="dg-eyebrow">…</p><h3 class="dg-title" id="x-heading">…</h3>
+  <div class="dg-keyed">
+    <svg class="dg-canvas" viewBox="0 0 360 250" role="img" aria-labelledby="x-title x-desc">
+      <title id="x-title">…</title><desc id="x-desc">…</desc>
+      <text class="dg-view" x="10" y="20">Front view</text>
+      <!-- shapes -->
+      <g class="dg-marker" transform="translate(105 80)"><circle r="13"/><text>1</text></g>
+    </svg>
+    <ol class="dg-key" aria-label="Key to the numbered markers">
+      <li><strong>Name</strong><span>One sentence about it.</span></li>
+    </ol>
+  </div>
+  <figcaption class="dg-caption">…</figcaption>
+</figure>
+```
+
+- `.dg-keyed` places the drawing beside the key and stacks them at 760px and below.
+  The canvas is capped at `--dg-max-width` (540px by default). No `.dg-scroll` wrapper
+  is needed, because nothing scrolls; do not add an empty focus stop.
+- `.dg-marker` is a `g` positioned with `transform`, holding one `circle` and one
+  `text`. It follows the theme and keeps a contrasting ring, so it stays visible on
+  both the card and a fixed-color subject. A 360-unit viewBox with `r="13"` keeps
+  the numbers above 12px on a phone.
+- `ol.dg-key` numbers itself, so **marker numbers are authored and must match the key
+  order**. Repeat a number when one part appears in two views. Keep every fact in
+  the key: it must be readable without the drawing.
+- `.dg-view` labels a view ("Top view", "Side view") when one canvas holds several.
+  `.dg-anchor` is the dot where a leader touches its subject. `.dg-swatch` is an
+  inline color chip for when a color is itself the subject; set its `background`
+  inline and always name the color in text.
+
+### Draw only what the source confirms
+
+A drawing asserts placement. Before drawing where something goes, read the source's
+own definition of the term; do not infer it from the word. A shipped plan once drew
+a decoration as a ring on the top face of its subject because the name suggested
+it; the vendor defines it as running along the sides, so it could never have
+appeared in a top view. If a detail is unverified, leave it out of the drawing and
+say so in the key or caption.
+
+### Check the rendered diagram
+
+```bash
+node scripts/check-diagrams.mjs <url> --out <dir>     # from a Lookie-Link checkout
+```
+
+Give it a `/view` or `/embed` address. It renders 1280px and 390px in light and
+dark, measures inside the real artifact frame, and saves one screenshot per diagram
+card. It fails on: a label outside the canvas, two labels or markers overlapping, a
+leader line running through a label, marker numbers that do not match the key, text
+rendering under 10px, label contrast under 4.5:1, and a page that scrolls sideways.
+It notes, without failing, leader lines that cross and diagrams that need sideways
+scrolling at that width. Passing is necessary, not sufficient: **open the
+screenshots**. The checker cannot tell whether the drawing is true or whether a
+line crosses a shape it should avoid.
 
 The drawing classes are opt-in defaults. Override fill/stroke locally when color
 itself is the subject (a swatch, material or wiring convention), and label what

@@ -9,6 +9,7 @@ const {chromium} = require('playwright');
 const {createApp} = require('../../server');
 const {renderPreviewHtml} = require('../../lib/renderer');
 const {JSDOM} = require('jsdom');
+const {inspectDiagrams, diagramProblems} = require('../../lib/diagram-checks');
 const kit = path.resolve('kits/ops');
 
 // getBBox() is text-local: map all four corners into the root SVG's coordinates.
@@ -51,7 +52,9 @@ test('annotated diagrams survive publishing and sanitization at desktop and phon
       for(const id of svg.getAttribute('aria-labelledby').split(' ')) assert.ok(doc.getElementById(id)?.textContent);
       assert.ok(svg.querySelectorAll('text').length>=6);
     }
-    assert.equal(doc.querySelectorAll('.dg-canvas').length,2);
+    assert.equal(doc.querySelectorAll('.dg-canvas').length,3);
+    assert.equal(doc.querySelectorAll('.dg-keyed .dg-marker').length,6);
+    assert.equal(doc.querySelectorAll('ol.dg-key > li').length,5);
     const published = await fetch(base+'/api/publish', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({slug:'diagram-test', kit:'ops', entryPath:'diagram-examples.html', files})});
     assert.equal(published.status,201);
     const route = '/published/diagram-test/diagram-examples.html';
@@ -73,7 +76,7 @@ test('annotated diagrams survive publishing and sanitization at desktop and phon
             refs:svg.getAttribute('aria-labelledby').split(' ').map(id=>!!document.getElementById(id)?.textContent.trim()),
             labels:svg.querySelectorAll('text').length, paths:svg.querySelectorAll('path').length,
             width:svg.getBoundingClientRect().width,
-            labelColor:getComputedStyle(svg.querySelector('.dg-label')).fill})),
+            scrolls:!!svg.closest('.dg-scroll')})),
           arrows:[...document.querySelectorAll('.farrow svg')].map(s=>s.getBoundingClientRect().width),
           regions:[...document.querySelectorAll('.dg-scroll')].map(s=>({focus:s.tabIndex,role:s.getAttribute('role'),scroll:s.scrollWidth>s.clientWidth})),
           flow:getComputedStyle(document.querySelector('.dg-flow-stack')).flexDirection};
@@ -81,9 +84,9 @@ test('annotated diagrams survive publishing and sanitization at desktop and phon
       assert.equal(metrics.overflow,false,JSON.stringify(metrics));
       assert.equal(metrics.canary,undefined);
       assert.equal(metrics.handlers,0);
-      assert.equal(metrics.canvases.length,2);
-      for(const c of metrics.canvases) {assert.deepEqual(c.refs,[true,true]);assert.ok(c.labels>=6);assert.ok(c.paths>=2);assert.ok(c.width>=640);}
-      assert.deepEqual(await page.evaluate(diagramLabelBounds),[true,true]);
+      assert.equal(metrics.canvases.length,3);
+      for(const c of metrics.canvases) {assert.deepEqual(c.refs,[true,true]);assert.ok(c.labels>=6);assert.ok(c.paths>=2);if(c.scrolls)assert.ok(c.width>=640);else assert.ok(c.width<=width);}
+      assert.deepEqual(await page.evaluate(diagramLabelBounds),[true,true,true]);
       // Negative geometry canary: a locally valid label translated off-canvas must fail.
       const translated = page.locator('.dg-canvas g[transform]').first();
       const originalTransform = await translated.getAttribute('transform');
@@ -95,9 +98,28 @@ test('annotated diagrams survive publishing and sanitization at desktop and phon
         return b.x>=v.x && b.y>=v.y && b.x+b.width<=v.x+v.width && b.y+b.height<=v.y+v.height;
       }),true,'the old local-only check would accept this label');
       await translated.evaluate(el=>el.setAttribute('transform','translate(2000 2000)'));
-      assert.deepEqual(await page.evaluate(diagramLabelBounds),[true,false]);
+      assert.deepEqual(await page.evaluate(diagramLabelBounds),[true,false,true]);
       await translated.evaluate((el,value)=>el.setAttribute('transform',value),originalTransform);
       await label.evaluate((el,[x,y])=>{el.setAttribute('x',x);el.setAttribute('y',y);},originalPosition);
+      // Shared checker: the shipped examples are clean, and it notices planted defects.
+      const clean = await page.evaluate(inspectDiagrams);
+      assert.deepEqual(diagramProblems(clean).failures,[],JSON.stringify(clean));
+      assert.deepEqual(clean.figures.map(f=>f.markerKeyMatch),[null,null,true]);
+      assert.deepEqual(clean.figures.map(f=>f.needsSidewaysScroll),[width===390,width===390,false]);
+      assert.deepEqual(clean.figures.map(f=>f.leaderCrossings),[0,1,0],'only the room label line crosses a wall');
+      const marker = page.locator('.dg-keyed .dg-marker').nth(1);
+      const markerTransform = await marker.getAttribute('transform');
+      await marker.evaluate(el=>el.setAttribute('transform','translate(110 84)'));
+      assert.match(diagramProblems(await page.evaluate(inspectDiagrams)).failures.join('\n'),/"marker 1" overlaps "marker 2"/);
+      await marker.evaluate((el,value)=>el.setAttribute('transform',value),markerTransform);
+      const viewLabel = page.locator('.dg-keyed .dg-view').first();
+      await viewLabel.evaluate(el=>el.setAttribute('x','160'));
+      assert.match(diagramProblems(await page.evaluate(inspectDiagrams)).failures.join('\n'),/a leader line runs through "Front view"/);
+      await viewLabel.evaluate(el=>el.setAttribute('x','10'));
+      await page.locator('ol.dg-key > li').last().evaluate(el=>{el.hidden=true;el.dataset.parked='1';el.parentNode.after(el);});
+      assert.match(diagramProblems(await page.evaluate(inspectDiagrams)).failures.join('\n'),/marker numbers do not match the key/);
+      await page.locator('li[data-parked]').evaluate(el=>{el.hidden=false;el.previousElementSibling.append(el);delete el.dataset.parked;});
+      assert.deepEqual(diagramProblems(await page.evaluate(inspectDiagrams)).failures,[]);
       assert.deepEqual(metrics.arrows,[24,24]);
       assert.equal(metrics.flow,width===390?'column':'row');
       for(const region of metrics.regions) {assert.equal(region.focus,0);assert.equal(region.role,'region');assert.equal(region.scroll,width===390);}

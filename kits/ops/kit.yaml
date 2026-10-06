@@ -1,6 +1,6 @@
 name: ops
 label: Ops HTML Kit
-version: "1.27"
+version: "1.28"
 stylesheet: kit.css
 templates:
   - research-packet-template.html

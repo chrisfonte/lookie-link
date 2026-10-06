@@ -8,6 +8,20 @@ Status: Active
 
 All notable changes to the Ops HTML Kit.
 
+## v1.28 (2026-10-06)
+
+- Add numbered-key diagrams: `dg-keyed` layout, `dg-marker` numbers on the SVG and a
+  self-numbering `ol.dg-key` in HTML. Dense or phone-width drawings no longer need
+  leader labels or sideways scrolling. Add `dg-view` for multi-view canvases,
+  `dg-anchor` for leader endpoints and `dg-swatch` for colors that are the subject.
+- Add a third, unrelated example (a control panel in two views) and the authoring
+  rule to draw only what the source confirms.
+- Ship `scripts/check-diagrams.mjs` with a shared `lib/diagram-checks.js`: bounds,
+  label and marker collisions, leader lines through labels, marker/key agreement,
+  minimum rendered text size, contrast and page overflow at 1280/390px in light and
+  dark, with a screenshot per diagram. The browser test uses the same module and
+  plants one defect of each new kind to prove it is caught.
+
 ## v1.27 (2026-10-06)
 
 - Authoring follow-up: expose README and CHANGELOG through the existing kit-file

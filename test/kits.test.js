@@ -62,7 +62,7 @@ async function startServer(options = {}) {
   };
 }
 
-test('GET /api/kits lists the bundled ops kit with version 1.27 and a revision', async () => {
+test('GET /api/kits lists the bundled ops kit with version 1.28 and a revision', async () => {
   const s = await startServer();
   try {
     const res = await request(s.base, '/api/kits');
@@ -73,11 +73,11 @@ test('GET /api/kits lists the bundled ops kit with version 1.27 and a revision',
     assert.equal(res.json.default, 'ops');
     const ops = res.json.kits.find((kit) => kit.name === 'ops');
     assert.ok(ops, 'bundled ops kit present');
-    assert.equal(ops.version, '1.27');
+    assert.equal(ops.version, '1.28');
     assert.equal(ops.source, 'bundled');
     assert.equal(ops.stylesheetUrl, '/kit/ops/kit.css');
-    assert.equal(ops.pinnedStylesheetUrl, '/kit/ops/v/1.27/kit.css');
-    assert.equal(ops.effectiveVersion, '1.27');
+    assert.equal(ops.pinnedStylesheetUrl, '/kit/ops/v/1.28/kit.css');
+    assert.equal(ops.effectiveVersion, '1.28');
     assert.deepEqual(ops.caching, { stylesheetUrl: 'no-cache', pinnedStylesheetUrl: 'immutable' });
     assert.equal(ops.writable, false);
     assert.equal(ops.overlay, null);
@@ -128,7 +128,7 @@ test('kit.css is text/css and byte-equal to kits/ops/kit.css; versioned URL is i
     assert.ok(css.buf.equals(BUNDLED_CSS));
     assert.equal(css.headers['cache-control'], 'no-cache');
 
-    const versioned = await request(s.base, '/kit/ops/v/1.27/kit.css');
+    const versioned = await request(s.base, '/kit/ops/v/1.28/kit.css');
     assert.equal(versioned.status, 200);
     assert.ok(versioned.buf.equals(BUNDLED_CSS));
     assert.match(String(versioned.headers['cache-control'] || ''), /immutable/);

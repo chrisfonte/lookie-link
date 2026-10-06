@@ -2,6 +2,10 @@
 
 ## Unreleased — generic diagram authoring
 
+- Ops Kit 1.28 adds numbered-key diagrams (markers on the drawing, a reflowing HTML
+  key) and `npm run check:diagrams -- <url>`, which renders a page at desktop and
+  phone widths and fails on overlapping, clipped, struck-through or unreadable
+  labels. See [the numbered-key contract](kits/ops/README.md#numbered-key-v128).
 - Make the bundled kit's authoring guide and history discoverable and fetchable;
   cover transformed SVG label bounds with positive and negative browser checks.
 - Ops Kit 1.27 adds accessible annotated SVG recipes, contained horizontal scrolling,

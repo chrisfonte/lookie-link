@@ -231,10 +231,10 @@ test('PATCH overlay on bundled ops updates kit.css, effectiveVersion, and revisi
   try {
     const before = await request(s.base, '/api/kits/ops');
     assert.equal(before.status, 200);
-    assert.equal(before.json.kit.effectiveVersion, '1.27');
+    assert.equal(before.json.kit.effectiveVersion, '1.28');
     assert.equal(before.json.kit.overlay, null);
     assert.equal(before.json.kit.writable, false);
-    assert.equal(before.json.kit.pinnedStylesheetUrl, '/kit/ops/v/1.27/kit.css');
+    assert.equal(before.json.kit.pinnedStylesheetUrl, '/kit/ops/v/1.28/kit.css');
     assert.deepEqual(before.json.kit.caching, {
       stylesheetUrl: 'no-cache',
       pinnedStylesheetUrl: 'immutable',
@@ -246,7 +246,7 @@ test('PATCH overlay on bundled ops updates kit.css, effectiveVersion, and revisi
       ...json({ expectedRevision: revision, tokens: { '--radius': '8px' } }),
     });
     assert.equal(patched.status, 200, patched.text);
-    assert.match(patched.json.kit.effectiveVersion, /^1\.27\+[0-9a-f]{8}$/);
+    assert.match(patched.json.kit.effectiveVersion, /^1\.28\+[0-9a-f]{8}$/);
     assert.equal(patched.json.kit.overlay.tokens['--radius'], '8px');
     assert.ok(patched.json.kit.overlay.updatedAt);
 
@@ -260,7 +260,7 @@ test('PATCH overlay on bundled ops updates kit.css, effectiveVersion, and revisi
     assert.equal(pinned.text, css.text);
     assert.match(String(pinned.headers['cache-control'] || ''), /immutable/);
 
-    const staleVersion = await request(s.base, '/kit/ops/v/1.27/kit.css');
+    const staleVersion = await request(s.base, '/kit/ops/v/1.28/kit.css');
     assert.equal(staleVersion.status, 404);
 
     const stale = await request(s.base, '/api/kits/ops', {
@@ -277,7 +277,7 @@ test('PATCH overlay on bundled ops updates kit.css, effectiveVersion, and revisi
       ...json({ expectedRevision: patched.json.revision, tokens: {} }),
     });
     assert.equal(cleared.status, 200, cleared.text);
-    assert.equal(cleared.json.kit.effectiveVersion, '1.27');
+    assert.equal(cleared.json.kit.effectiveVersion, '1.28');
     assert.equal(cleared.json.kit.overlay, null);
     const restored = await request(s.base, '/kit/ops/kit.css');
     assert.equal(restored.text, BUNDLED_CSS);
