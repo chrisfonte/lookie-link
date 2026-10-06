@@ -1,0 +1,105 @@
+<!doctype html>
+<!-- File: kits/ops/diagram-examples.html -->
+<html lang="en" data-lookie-follow-theme data-lookie-render="viewport">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagrams that explain relationships · Ops HTML Kit</title>
+<link rel="stylesheet" href="kit.css" data-kit>
+</head>
+<body>
+<header class="hero"><div class="wrap">
+  <p class="eyebrow">Ops HTML Kit · Diagram recipes</p>
+  <h1>Make the relationship visible.</h1>
+  <p class="sub">Use a simple flow for sequence. Use an annotated drawing when position and connections carry the explanation.</p>
+</div></header>
+<nav class="topnav" aria-label="Diagram examples"><div class="inner">
+  <a href="#connections">Connections</a><a href="#layout">Room layout</a><a href="#flow">Process</a><a href="#recipe">Authoring</a>
+</div></nav>
+<main class="wrap">
+<section id="connections">
+  <h2>One switch connects three devices</h2>
+  <p>The solid lines are cables; each endpoint has a written label. This is a fictional connection map, not a live status display.</p>
+  <figure class="dg" aria-labelledby="connections-heading">
+    <p class="dg-eyebrow">Annotated SVG · Connections</p>
+    <h3 class="dg-title" id="connections-heading">The switch is the shared connection point.</h3>
+    <p class="dg-note" id="connections-help">On narrow screens, scroll the drawing horizontally. Keyboard: focus the drawing, then use the arrow keys.</p>
+    <div class="dg-scroll" tabindex="0" role="region" aria-label="Equipment connection drawing" aria-describedby="connections-help" style="--dg-min-width:640px">
+      <svg class="dg-canvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 310" role="img" aria-labelledby="connections-title connections-desc">
+        <title id="connections-title">Equipment connections through a network switch</title>
+        <desc id="connections-desc">A laptop on the left connects to a switch in the center. The switch connects to a printer at the upper right and a storage device at the lower right. The center annotation identifies the shared uplink.</desc>
+        <path class="dg-leader" d="M200 155H290 M450 155H490V80H550 M490 155V230H550"/>
+        <rect class="dg-shape" x="30" y="120" width="170" height="70" rx="10"/>
+        <rect class="dg-shape" x="290" y="120" width="160" height="70" rx="10"/>
+        <rect class="dg-shape" x="550" y="45" width="175" height="70" rx="10"/>
+        <rect class="dg-shape" x="550" y="195" width="175" height="70" rx="10"/>
+        <g text-anchor="middle">
+          <text class="dg-label" x="115" y="152">Laptop</text><text class="dg-detail" x="115" y="175">Workstation</text>
+          <text class="dg-label" x="370" y="152">Switch</text><text class="dg-detail" x="370" y="175">Shared network</text>
+          <text class="dg-label" x="637" y="77">Printer</text><text class="dg-detail" x="637" y="100">Documents</text>
+          <text class="dg-label" x="637" y="227">Storage</text><text class="dg-detail" x="637" y="250">Shared files</text>
+        </g>
+        <path class="dg-leader" d="M245 155V65H325"/>
+        <circle cx="245" cy="155" r="4" fill="currentColor"/>
+        <text class="dg-label" x="335" y="70">Shared uplink</text>
+      </svg>
+    </div>
+    <figcaption class="dg-caption">Read left to right: laptop → switch → printer or storage. Line position shows connectivity; it does not imply bandwidth or cable length.</figcaption>
+  </figure>
+</section>
+<section id="layout">
+  <h2>A clear center connects the room</h2>
+  <p>A spatial drawing makes placement easier to compare than a sequence of boxes. This fictional room is schematic and is not to scale.</p>
+  <figure class="dg" aria-labelledby="room-heading">
+    <p class="dg-eyebrow">Annotated SVG · Spatial layout</p>
+    <h3 class="dg-title" id="room-heading">Keep the route from entrance to work area open.</h3>
+    <p class="dg-note" id="room-help">On narrow screens, scroll to see the full room and its annotations.</p>
+    <div class="dg-scroll" tabindex="0" role="region" aria-label="Annotated room drawing" aria-describedby="room-help" style="--dg-min-width:640px">
+      <svg class="dg-canvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 370" role="img" aria-labelledby="room-title room-desc">
+        <title id="room-title">Work room with an open central path</title>
+        <desc id="room-desc">The entrance is at the bottom left. Shelves sit along the left wall, a table is near the upper center and a desk is on the right. A dashed path leads from the entrance through the open center to the desk. A window is above the table.</desc>
+        <path class="dg-leader" d="M160 310H110V50H575V310H220"/>
+        <rect class="dg-shape" x="125" y="100" width="85" height="145" rx="4"/>
+        <rect class="dg-shape" x="270" y="95" width="170" height="75" rx="8"/>
+        <rect class="dg-shape" x="460" y="195" width="100" height="95" rx="4"/>
+        <path class="dg-leader" d="M280 50H430" style="stroke:var(--ink);stroke-width:6"/>
+        <path class="dg-leader" d="M190 335V265H370V235H445" stroke-dasharray="8 6"/>
+        <g text-anchor="middle">
+          <text class="dg-label" x="167" y="175">Shelves</text>
+          <text class="dg-label" x="355" y="138">Table</text>
+          <text class="dg-label" x="510" y="248">Desk</text>
+        </g>
+        <path class="dg-leader" d="M355 50V25H465"/>
+        <text class="dg-label" x="475" y="30">Window</text>
+        <path class="dg-leader" d="M370 235V185H610"/>
+        <text class="dg-label" x="620" y="190">Open path</text>
+        <text class="dg-label" x="230" y="345">Entrance</text>
+      </svg>
+    </div>
+    <figcaption class="dg-caption">Furniture stays at the edges of the central route. The dashed line identifies the path; it is not a measured clearance or a safety certification.</figcaption>
+  </figure>
+</section>
+<section id="flow">
+  <h2>Use HTML when order is the whole story</h2>
+  <div class="dg">
+    <p class="dg-eyebrow">dg-flow · HTML/CSS sequence</p>
+    <h3 class="dg-title">A repair moves through three steps.</h3>
+    <ol class="dg-flow dg-flow-stack" aria-label="Repair process">
+      <li class="fbox"><p class="fk">1 · Inspect</p><p class="fv">Find the fault</p><p class="fd">Record the symptom before choosing a repair.</p></li>
+      <li class="farrow" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" focusable="false"><path d="M3 12H21M14 5L21 12L14 19" fill="none" stroke="currentColor" stroke-width="2"/></svg></li>
+      <li class="fbox"><p class="fk">2 · Repair</p><p class="fv">Apply the fix</p><p class="fd">Use the finding to select the work.</p></li>
+      <li class="farrow" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" focusable="false"><path d="M3 12H21M14 5L21 12L14 19" fill="none" stroke="currentColor" stroke-width="2"/></svg></li>
+      <li class="fbox"><p class="fk">3 · Verify</p><p class="fv">Repeat the check</p><p class="fd">Confirm that the original symptom is gone.</p></li>
+    </ol>
+    <p class="dg-note">The ordered list reads in sequence without CSS. On phones the boxes stack and the small arrows point down.</p>
+  </div>
+</section>
+<section id="recipe">
+  <h2>Keep content local; share the framing</h2>
+  <p>Use HTML/CSS for steps and comparison cards, inline SVG for precise connections or spatial annotations, and an illustration for appearance or texture. Keep essential facts in text as well.</p>
+  <p>The reusable classes supply surfaces, readable labels, leaders, scrolling and captions. Coordinates and subject-specific colors belong to the drawing. If a color is itself the subject, preserve it and label it; status meaning uses semantic tokens plus text.</p>
+  <p>See the <a href="README.md#annotated-diagrams">annotated-diagram authoring contract</a> and the <a href="EXAMPLES.html">complete component showcase</a>.</p>
+</section>
+</main>
+</body>
+</html>

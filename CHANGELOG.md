@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — generic diagram authoring
+
+- Ops Kit 1.27 adds accessible annotated SVG recipes, contained horizontal scrolling,
+  reusable drawing classes, and a responsive ordered-flow example. See
+  [the kit authoring contract](kits/ops/README.md#annotated-diagrams).
+
+
 ## Unreleased — YouTube clip playback
 
 - Authored HTML clips now open a viewer-owned player with their start/end windows and a timestamped source fallback. This supplies provider identity while preserving the document sandbox.

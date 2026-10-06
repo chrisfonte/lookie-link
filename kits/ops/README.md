@@ -4,11 +4,11 @@
 Title: Ops HTML Kit
 Owner: Operations Team
 Created: 2026-06-28
-Last Updated: 2026-09-19
-Version: 1.26
+Last Updated: 2026-10-06
+Version: 1.27
 Status: Active
 Tags: #html #css #design-system #templates #lookie-link
-Document URL: ~/operations/templates/html-kit/README.md
+Document URL: kits/ops/README.md
 Summary: Reusable design tokens + component classes for agent-built HTML deliverables, with a coastal and neutral theme. Lookie-safe.
 Read-when: Building any rich HTML deliverable (trip plan, report, dashboard, comparison, research summary, review packet).
 Audience: agents
@@ -27,6 +27,7 @@ A small, reusable CSS kit so agent-built HTML deliverables share one consistent,
 | `research-packet-template.html` | Findings-first, source-adjacent scaffold for durable research HTML |
 | `email-table-template.html` | Plain email-safe HTML pattern for actual email bodies with structured tables |
 | `theme-follow-demo.html` | Focused Lookie-Link demo: fixed coastal/neutral panels beside a `data-lookie-follow-theme` panel |
+| `diagram-examples.html` | Annotated connections, room layout, and responsive ordered flow |
 | `CHANGELOG.md` | Version history and notable changes |
 | `README.md` | This file — usage, scenario map, Lookie notes, versioning |
 
@@ -208,6 +209,69 @@ data** — set them inline per instance, scaled to the real maximum, never inven
 `date` before authoring any weekday/calendar label** in a diagram (a shipped burn timeline
 briefly labeled Aug 20 "Wed"; it was a Thursday).
 
+## Annotated diagrams
+
+Choose the representation by what the reader needs to learn:
+
+| Need | Use |
+|---|---|
+| Sequence, branches, comparisons | HTML/CSS `dg-flow`, `dg-branch`, or another existing family; native text can reflow |
+| Precise connections, position, dimensions, annotations | Inline SVG inside a `figure.dg`; geometry remains page-local |
+| Appearance, material, texture, or atmosphere | An illustration or photograph with alt text and a caption; keep exact labels and facts in HTML/SVG |
+
+Open [diagram-examples.html](diagram-examples.html) for two unrelated annotated
+SVGs and a complete `dg-flow` recipe. These are fictional examples, not measurements.
+
+### Structure and accessible names
+
+Use `figure.dg` with a visible heading, `.dg-scroll`, `svg.dg-canvas`, and
+`figcaption.dg-caption`. Give the SVG a `viewBox`, `role="img"`, and unique
+`title`/`desc` IDs referenced by `aria-labelledby`. Explain the relationships in
+`desc` and nearby text; a title alone does not describe the drawing. Give each
+scroll region `tabindex="0"`, `role="region"`, a distinct accessible name, and a
+visible scroll instruction connected with `aria-describedby`. Repeated diagrams
+need distinct IDs throughout the document. Decorative arrow SVGs use
+`aria-hidden="true"` on their wrapper and `focusable="false"`.
+
+### Responsive canvas and drawing classes
+
+- `.dg-scroll` contains horizontal overflow and shows a keyboard focus outline.
+- `svg.dg-canvas` scales to its container. Set `--dg-min-width` on the scroll
+  wrapper (for example `640px`) when further shrinking would make labels unreadable.
+  Choose that width from the rendered label size, not the subject. The two examples
+  use 760-unit viewBoxes; their 16-unit primary labels render at least 13.5px wide-screen
+  equivalent at the 640px minimum. For larger text, raise the minimum or simplify.
+- `.dg-shape` supplies a theme-aware surface and outline; `.dg-label` supplies
+  primary text; `.dg-detail` supplies secondary text; `.dg-leader` supplies an
+  unfilled line. Lines and shape outlines use non-scaling strokes.
+- `.dg-caption` provides visible context and limits. Geometry, leader paths,
+  label placement, dimensions and markers remain local. Check that labels fit
+  inside the viewBox and do not overlap lines or each other at the minimum width.
+- Do not add broad descendant SVG sizing rules: small arrows and icons are not
+  canvases. Flow arrows stay 24px. Add `dg-flow-stack` to an ordered `dg-flow` to
+  stack boxes and turn the arrows downward at 640px and below; existing flows
+  retain their wrapping behavior.
+
+The drawing classes are opt-in defaults. Override fill/stroke locally when color
+itself is the subject (a swatch, material or wiring convention), and label what
+it means. Use `--sem-bad` / `--good` for status, with words or line patterns too;
+decorative accent is not status. Check foreground/background contrast in both
+viewer modes, including authored-color regions.
+
+### Serve and verify
+
+Use the [publishing contract](../../docs/PUBLISHING.md) to attach the kit. For
+standalone files inline the actual stylesheet in a marked `style[data-kit]` block.
+A placeholder link is not an attached kit until publication replaces it.
+Verify the rendered `/embed` artifact, not just the `/view` shell: title/desc
+references, text, paths, focusability, narrow-screen scroll, body containment and
+sticky navigation. Check desktop and about 390px in both light and dark. Kit
+validation is structural; it does not prove label legibility or accessible names.
+The sanitized document renderer strips scripts/handlers; the opt-in trusted
+raw-HTML `/embed` route preserves authored JavaScript. Test the sanitized path
+separately when claiming sanitizer compatibility. This recipe needs neither
+scripts nor handlers and requires no sanitizer changes.
+
 ## Plain HTML email bodies
 
 Use `email-table-template.html` when the artifact is not a standalone Lookie/report page but the **actual email body** to send through Gmail. This applies to vendor cancellation lists, service inventories, approval matrices, and other emails where organization matters.
@@ -247,7 +311,7 @@ Owner of these mechanics: [[lookie-link.yaml]] (~/operations/ai-tools/knowledge/
   Sanity check on any result: if the reported `h1` is your filename, or the image count is `0/1`, you measured the shell. The host also injects its own controls into your document (an annotation button inside headings, for one), so compare text with `includes`, not equality, and ignore host-injected classes when counting. The maintained screenshot helpers already do the frame handling; this matters whenever you write a probe by hand. Related traps in the bullets below: full-page captures stitch the frame as a blank slab, and smooth scrolling samples mid-animation.
 
 - **CSS works** (inline always; external `kit.css` via `<link>` works post-2026-06 fix — Lookie injects a `<base href=…/asset/…>` and `/asset` serves `text/css`).
-- **No JavaScript** — the viewer sanitizes `<script>`. Don't rely on in-page JS; use Lookie annotations for feedback. For **click-to-expand interactivity** (detail panes, FAQs, place lists), use `details.place`; for image enlargement, use the CSS-target `photo-lightbox` pattern. Both work without JS.
+- **Portable pages need no JavaScript** — the sanitized document renderer strips scripts and handlers; trusted raw-HTML embeds preserve them. Don't rely on in-page JS; use Lookie annotations for feedback. For **click-to-expand interactivity** (detail panes, FAQs, place lists), use `details.place`; for image enlargement, use the CSS-target `photo-lightbox` pattern. Both work without JS.
 - **Inter-page links work as normal relative links.** In a multi-page bundle, use portable links like `<a href="other.html">`, `<a href="../overview.html#summary">`, or `<a href="./chapter/">`. Lookie-Link rewrites same-repo HTML document links to `/view/<repo>/...` with `target="_top"` while keeping `img`/`css`/media refs on `/asset`.
 - **Pin the `topnav` in Lookie by declaring the viewport render mode (2026-08-13; research mandate 2026-08-22).** A page's own sticky `topnav` cannot pin inside Lookie's default content-height frame (the outer viewer scrolls, the document never does). Every research HTML primary therefore adds `data-lookie-render="viewport"` to the root `<html>` (beside `data-lookie-follow-theme`) with no opt-out. Non-research multi-section kit pages add it when they use a sticky topnav or another viewport-relative layout. Lookie then hosts the artifact in a real scrolling frame where `position:sticky`/`fixed`, `:target`, and the `photo-lightbox` all work natively and the bar pins with its kit styling. For non-research flowing documents, no hint keeps the seamless single-scroll reader; viewport mode trades that for an internal scroll region. Independently, Lookie builds the persistent `☰` TOC for the page in **both** modes (from heading ids and `section[id]` wrappers). Owner: `supported_formats.html.render_modes` / `.native_toc` in the integration yaml; research mandate: Research Documentation Standards Rule 19; composition convention: documentation-best-practices `#html-composition-checklist`.
 - **`?validate=1` reports advisory kit/pageContract checks** (stale or unmarked inline kit, leftover `data-kit` placeholder link, theme-follow without `--lookie-*` tokens, sticky `topnav` without viewport mode / scroll-margin, `overflow-x: hidden` on html/body). Warnings never change the HTTP status; see Lookie-Link `docs/FEATURES.md` HTML Rendering.

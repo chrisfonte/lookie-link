@@ -8,6 +8,20 @@ Status: Active
 
 All notable changes to the Ops HTML Kit.
 
+## v1.27 (2026-10-06)
+
+- Add opt-in annotated SVG canvas, scroll region, labels, shapes, leader lines,
+  and figure caption classes. Keep subject geometry and colors local.
+- Add connection and room-layout examples with accessible title/description,
+  keyboard scrolling and text alternatives, plus the missing ordered flow recipe.
+- Add optional responsive flow stacking and explicit 24px arrow sizing; retain
+  existing flow wrapping and global SVG behavior.
+- Document representation choice, accessible names, minimum reading width,
+  authored colors and sanitization/render checks. Register the diagram showcase
+  in kit discovery; synchronize stylesheet, manifest, README and showcase version.
+- Replace a quoted historical task-thread phrase so the changelog passes the public guard.
+
+
 - **2026-09-24 (bundled copy, no token change):** research-packet-template.html carries `data-kit` on its stylesheet link so publishing with `kit` replaces it (it used to dangle beside a second inlined block); header names the bundled home and v1.26.
 
 ## v1.26 (2026-09-19)
@@ -19,7 +33,7 @@ All notable changes to the Ops HTML Kit.
 
 ## v1.25 (2026-09-08)
 
-- Reworded the `.dg-meters` comment in `kit.css` ("constraining the user" → "constraining the account").
+- Reworded the `.dg-meters` comment in `kit.css` (changed to "constraining the account").
   When a research page inlines `kit.css`, every CSS comment ships inside the public HTML, and
   `research-doc-guard.sh --extensions html` fired its `TASK_THREAD_THE_USER` class on that comment
   in two shipped packages (ZeroTier multicast, overlay multicast). Rule going forward: kit comments
