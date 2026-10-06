@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — YouTube clip playback
+
+- Authored HTML clips now open a viewer-owned player with their start/end windows and a timestamped source fallback. This supplies provider identity while preserving the document sandbox.
+- Provider referrers expose only the viewer origin. Unknown source parameters are removed; source-window checks, user-gesture/message-source checks, phone geometry and close/focus behavior have regression coverage.
+
 ## Unreleased — List trackers
 
 - Added first-class `kind: 'list'` templates: mutable checklist state with
