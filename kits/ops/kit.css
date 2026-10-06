@@ -1,6 +1,6 @@
 /* File: kits/ops/kit.css
    Ops HTML Kit — reusable design tokens + components for agent-built HTML deliverables.
-   Lookie-safe. v1.27 (2026-10-06).
+   Lookie-safe. v1.28 (2026-10-06).
 
    USAGE
    - Inline this file into a <style> block in each page (most reliable everywhere), OR
@@ -477,6 +477,24 @@ svg.dg-canvas{display:block;width:100%;height:auto;min-width:var(--dg-min-width,
 .dg-canvas .dg-leader{fill:none;stroke:var(--muted);stroke-width:2}
 .dg-canvas .dg-shape,.dg-canvas .dg-leader{vector-effect:non-scaling-stroke}
 .dg-caption{color:var(--muted);font-size:14px;line-height:1.5;margin:12px 0 0}
+
+/* Keyed diagrams: numbered markers on the drawing, words in an HTML key that reflows.
+   Use when leader labels would collide or the drawing must fit a phone without
+   sideways scrolling. Marker numbers are authored; they must match the key order. */
+.dg-keyed{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:12px 30px;align-items:center}
+.dg-keyed>svg.dg-canvas{max-width:var(--dg-max-width,540px);justify-self:center}
+@media(max-width:760px){.dg-keyed{grid-template-columns:minmax(0,1fr)}}
+.dg-canvas .dg-marker circle{fill:var(--ink);stroke:var(--surface);stroke-width:2}
+.dg-canvas .dg-marker text{fill:var(--surface);font-size:15px;font-weight:800;text-anchor:middle;dominant-baseline:central}
+.dg-canvas .dg-view{fill:var(--muted);font-size:13px;font-weight:800;letter-spacing:1px;text-transform:uppercase}
+.dg-canvas .dg-anchor{fill:var(--muted)}
+ol.dg-key{list-style:none;counter-reset:dg-key;margin:0;padding:0}
+ol.dg-key>li{counter-increment:dg-key;position:relative;padding:9px 0 9px 38px;border-bottom:1px solid var(--line);font-size:14.5px;line-height:1.45}
+ol.dg-key>li:last-child{border-bottom:0}
+ol.dg-key>li::before{content:counter(dg-key);position:absolute;left:0;top:9px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--surface);font-weight:800;font-size:13.5px;display:grid;place-items:center}
+ol.dg-key strong{display:block}
+ol.dg-key li>span{color:var(--muted)}
+.dg-swatch{display:inline-block;width:.85em;height:.85em;border-radius:50%;margin-right:.35em;vertical-align:-.05em;border:1px solid color-mix(in srgb,var(--ink) 25%,transparent)}
 
 /* .dg-ladder — known-vs-unknown comparison rows: label | scaled bar+value | qualitative
    label (+ optional big "?" via .lq). Bars: width is data — set inline, scaled to the max. */
