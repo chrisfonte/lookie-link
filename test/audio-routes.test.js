@@ -97,7 +97,7 @@ test('GET /api/audio returns the info shape and no absolute path', { skip }, asy
   const text = await res.text();
   const body = JSON.parse(text);
   assert.deepEqual(Object.keys(body).sort(), [
-    'assetUrl', 'blockSize', 'blocks', 'channels', 'durationSeconds', 'frames', 'infoUrl', 'ok',
+    'assetUrl', 'blockSize', 'blocks', 'channels', 'durationSeconds', 'frames', 'infoUrl', 'limits', 'ok',
     'path', 'peakMode', 'peaksUrl', 'repo', 'sampleRate', 'sha256', 'sidecar', 'viewUrl',
   ]);
   assert.equal(body.ok, true);
@@ -111,6 +111,8 @@ test('GET /api/audio returns the info shape and no absolute path', { skip }, asy
   assert.equal(body.channels, 2);
   assert.equal(body.frames, 96000);
   assert.equal(body.durationSeconds, 2);
+  assert.deepEqual(body.limits, { blockSize: 1152 });
+  assert.equal(res.headers.get('cache-control'), 'no-cache');
   assert.equal(body.blockSize, 1152);
   assert.equal(body.blocks, 84);
   assert.equal(body.peakMode, 'max-abs');
@@ -232,4 +234,67 @@ test('a missing ffmpeg gives 503 peaks_unavailable', { skip }, async () => {
   } finally {
     await new Promise((resolve) => local.close(resolve));
   }
+});
+
+async function withApp(deps, fn) {
+  const app = express();
+  registerAudioRoutes(app, { apiError, buildViewHref, buildAssetHref, ...deps });
+  const local = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
+  try {
+    await fn(`http://127.0.0.1:${local.address().port}`);
+  } finally {
+    await new Promise((resolve) => local.close(resolve));
+  }
+}
+
+test('durationSeconds is rounded to 6 decimals', async () => {
+  const header = {
+    sampleRate: 44100, channels: 1, frames: 100000, blockSize: 1152, blocks: 87, peakMode: 'max-abs',
+    source: { sha256: 'a'.repeat(64) },
+  };
+  await withApp({
+    resolveAudioFile: () => ({ ok: true, absPath: '/path/to/share/x.wav', extension: '.wav', mimeType: 'audio/wav' }),
+    peaksCandidates: () => [],
+    peaksService: { ensurePeaks: async () => ({ header, kind: 'cache', peaksPath: '/unused' }) },
+  }, async (url) => {
+    const body = await (await fetch(`${url}/api/audio/r/x.wav`)).json();
+    assert.equal(body.durationSeconds, 2.267574); // 100000 / 44100 = 2.2675736961...
+    assert.equal(body.sidecar.location, 'cache');
+  });
+});
+
+test('a source over the size cap gives 413 audio_too_large without a path', { skip }, async () => {
+  const capped = createPeaksService({
+    ffmpegPath: FFMPEG, ffprobePath: FFPROBE, cachePath: cacheDir, maxAudioBytes: 10,
+  });
+  await withApp({
+    resolveAudioFile: () => ({
+      ok: true, absPath: path.join(audioDir, 'sub dir', 'copy #1.wav'), extension: '.wav', mimeType: 'audio/wav',
+    }),
+    peaksCandidates: () => [{ dir: path.join(workDir, 'unwritten'), readOnly: true }],
+    peaksService: capped,
+  }, async (url) => {
+    for (const kind of ['audio', 'peaks']) {
+      const res = await fetch(`${url}/api/${kind}/r/x.wav`);
+      assert.equal(res.status, 413);
+      const text = await res.text();
+      const body = JSON.parse(text);
+      assert.equal(body.ok, false);
+      assert.equal(body.error.code, 'audio_too_large');
+      assert.ok(!text.includes(workDir) && !text.includes('copy'), 'message names no path');
+    }
+  });
+});
+
+test('a timed-out generation gives 503 peaks_unavailable', async () => {
+  const { PeaksError } = require('../lib/audio/peaks');
+  await withApp({
+    resolveAudioFile: () => ({ ok: true, absPath: '/path/to/share/x.wav', extension: '.wav', mimeType: 'audio/wav' }),
+    peaksCandidates: () => [],
+    peaksService: { ensurePeaks: async () => { throw new PeaksError('audio decode timed out'); } },
+  }, async (url) => {
+    const res = await fetch(`${url}/api/audio/r/x.wav`);
+    assert.equal(res.status, 503);
+    assert.equal((await res.json()).error.code, 'peaks_unavailable');
+  });
 });

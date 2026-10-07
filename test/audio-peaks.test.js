@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
+const { EventEmitter } = require('node:events');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
@@ -14,6 +15,8 @@ const {
   createPeaksService,
   readPeaks,
   peaksHeaderToHttpHeaders,
+  EXTENSION_DEMUXERS,
+  PeaksError,
 } = require('../lib/audio/peaks');
 const pkg = require('../package.json');
 
@@ -435,4 +438,334 @@ test('ensurePeaks: failed generation is not cached and the in-flight entry clear
   await assert.rejects(service.ensurePeaks({ filePath: bad, candidates: [dir] }), (e) => e.code === 'peaks_unavailable');
   await assert.rejects(service.ensurePeaks({ filePath: bad, candidates: [dir] }), (e) => e.code === 'peaks_unavailable');
   assert.deepEqual(await fs.readdir(dir), ['bad.wav']);
+});
+
+// ---- hardening: argv, limits, write order, read-only candidates ----
+
+const PROBE_JSON = JSON.stringify({ streams: [{ sample_rate: '8000', channels: 1, codec_name: 'pcm_s16le' }] });
+
+function fakeChild({ stdout = null, exitCode = 0, hang = false } = {}) {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.stderr.resume = () => {};
+  child.killed = null;
+  child.kill = (signal) => {
+    child.killed = signal;
+    return true;
+  };
+  if (!hang) {
+    setImmediate(() => {
+      if (stdout) child.stdout.emit('data', stdout);
+      child.emit('close', exitCode);
+    });
+  }
+  return child;
+}
+
+// Fake ffprobe/ffmpeg: records every call; the decoder emits 4 mono frames, or hangs.
+function fakeSpawn({ hangProbe = false, hangDecode = false } = {}) {
+  const calls = [];
+  const children = [];
+  const spawn = (command, args) => {
+    const probe = path.basename(command) === 'ffprobe';
+    const child = probe
+      ? fakeChild({ stdout: Buffer.from(PROBE_JSON), hang: hangProbe })
+      : fakeChild({ stdout: s16Buffer([[1], [2], [3], [-4]]), hang: hangDecode });
+    calls.push({ command, args, probe });
+    children.push(child);
+    return child;
+  };
+  return { spawn, calls, children };
+}
+
+async function tinyAudio(name, bytes = 'RIFF-not-real') {
+  const dir = await freshDir('tiny');
+  const file = path.join(dir, name);
+  await fs.writeFile(file, bytes);
+  return { dir, file };
+}
+
+test('demuxer table maps every supported extension', () => {
+  assert.deepEqual({ ...EXTENSION_DEMUXERS }, {
+    '.wav': 'wav', '.mp3': 'mp3', '.flac': 'flac', '.ogg': 'ogg', '.oga': 'ogg', '.opus': 'ogg',
+    '.m4a': 'mov', '.aac': 'aac', '.aif': 'aiff', '.aiff': 'aiff',
+  });
+  assert.ok(Object.isFrozen(EXTENSION_DEMUXERS));
+});
+
+test('ffmpeg and ffprobe argv: protocol whitelist and the demuxer forced before -i', async () => {
+  const { file } = await tinyAudio('Clip.WAV');
+  const fake = fakeSpawn();
+  const out = await generatePeaks({ filePath: file, spawn: fake.spawn, blockSize: 2 });
+  assert.equal(out.header.frames, 4);
+  assert.equal(fake.calls.length, 2);
+  for (const call of fake.calls) {
+    const { args } = call;
+    const wl = args.indexOf('-protocol_whitelist');
+    assert.ok(wl >= 0 && args[wl + 1] === 'file,pipe', `${call.command} whitelist`);
+    const input = args.indexOf('-i');
+    const fmt = args.indexOf('-f');
+    assert.ok(fmt >= 0 && fmt < input, `${call.command} -f before -i`);
+    assert.equal(args[fmt + 1], 'wav');
+    assert.ok(wl < input, 'whitelist before -i');
+    assert.equal(args[input + 1], file);
+  }
+});
+
+test('each supported extension picks its demuxer', async () => {
+  for (const [ext, demuxer] of Object.entries(EXTENSION_DEMUXERS)) {
+    const { file } = await tinyAudio(`song${ext}`);
+    const fake = fakeSpawn();
+    await generatePeaks({ filePath: file, spawn: fake.spawn });
+    const decode = fake.calls.find((c) => !c.probe).args;
+    assert.equal(decode[decode.indexOf('-f') + 1], demuxer, ext);
+  }
+});
+
+test('an unknown extension is refused before anything is spawned', async () => {
+  for (const name of ['clip.xyz', 'noext', 'playlist.m3u8', 'clip.wav.txt']) {
+    const { file } = await tinyAudio(name);
+    const fake = fakeSpawn();
+    await assert.rejects(
+      generatePeaks({ filePath: file, spawn: fake.spawn }),
+      (e) => e instanceof PeaksError && e.code === 'peaks_unavailable' && !e.message.includes(name),
+    );
+    await assert.rejects(probeAudio({ filePath: file, spawn: fake.spawn }), (e) => e.code === 'peaks_unavailable');
+    assert.equal(fake.calls.length, 0, name);
+  }
+});
+
+test('a hanging decoder is killed at timeoutMs and rejects', async () => {
+  const { file } = await tinyAudio('hang.wav');
+  const fake = fakeSpawn({ hangDecode: true });
+  const started = Date.now();
+  await assert.rejects(
+    generatePeaks({ filePath: file, spawn: fake.spawn, timeoutMs: 40 }),
+    (e) => e.code === 'peaks_unavailable' && /timed out/.test(e.message) && !e.message.includes('hang.wav'),
+  );
+  assert.ok(Date.now() - started < 2000);
+  const decoder = fake.children[1];
+  assert.equal(decoder.killed, 'SIGKILL');
+  assert.equal(fake.children[0].killed, null, 'the finished probe is left alone');
+});
+
+test('a hanging probe is killed at timeoutMs and the decoder never starts', async () => {
+  const { file } = await tinyAudio('hang.wav');
+  const fake = fakeSpawn({ hangProbe: true });
+  await assert.rejects(
+    generatePeaks({ filePath: file, spawn: fake.spawn, timeoutMs: 40 }),
+    (e) => e.code === 'peaks_unavailable' && /timed out/.test(e.message),
+  );
+  assert.equal(fake.children.length, 1);
+  assert.equal(fake.children[0].killed, 'SIGKILL');
+});
+
+test('the service passes timeoutMs through and a timeout leaves no sidecars', async () => {
+  const { dir, file } = await tinyAudio('hang.wav');
+  const fake = fakeSpawn({ hangDecode: true });
+  const service = createPeaksService({
+    timeoutMs: 40,
+    generate: (options) => generatePeaks({ ...options, spawn: fake.spawn }),
+  });
+  await assert.rejects(service.ensurePeaks({ filePath: file, candidates: [dir] }), (e) => e.code === 'peaks_unavailable');
+  assert.deepEqual(await fs.readdir(dir), ['hang.wav']);
+});
+
+function slowGenerate(tracker, { delayMs = 40, failFor = null } = {}) {
+  return async ({ filePath }) => {
+    tracker.started.push(path.basename(filePath));
+    tracker.inFlight += 1;
+    tracker.max = Math.max(tracker.max, tracker.inFlight);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      if (failFor && path.basename(filePath) === failFor) throw new Error('boom');
+      const stat = await fs.stat(filePath);
+      return {
+        header: {
+          version: 1, sampleRate: 8000, channels: 1, blockSize: 1152, frames: 2, blocks: 1,
+          peakMode: 'max-abs', source: { size: stat.size, mtimeMs: Math.round(stat.mtimeMs), sha256: 'f'.repeat(64) },
+        },
+        peaks: new Uint16Array([7]),
+      };
+    } finally {
+      tracker.inFlight -= 1;
+    }
+  };
+}
+
+async function threeFiles() {
+  const dir = await freshDir('queue');
+  const files = [];
+  for (const name of ['a.wav', 'b.wav', 'c.wav']) {
+    const file = path.join(dir, name);
+    await fs.writeFile(file, name);
+    files.push(file);
+  }
+  return { dir, files };
+}
+
+test('concurrency cap: never more than 2 generations in flight, FIFO order', async () => {
+  const { dir, files } = await threeFiles();
+  const tracker = { inFlight: 0, max: 0, started: [] };
+  const service = createPeaksService({ generate: slowGenerate(tracker) });
+  const results = await Promise.all(files.map((filePath) => service.ensurePeaks({ filePath, candidates: [dir] })));
+  assert.equal(tracker.max, 2);
+  assert.deepEqual(tracker.started, ['a.wav', 'b.wav', 'c.wav']);
+  assert.ok(results.every((r) => r.generated === true));
+});
+
+test('maxConcurrent: 1 serialises, and a failed generation frees its slot', async () => {
+  const { dir, files } = await threeFiles();
+  const tracker = { inFlight: 0, max: 0, started: [] };
+  const service = createPeaksService({ maxConcurrent: 1, generate: slowGenerate(tracker, { delayMs: 15, failFor: 'a.wav' }) });
+  const settled = await Promise.allSettled(files.map((filePath) => service.ensurePeaks({ filePath, candidates: [dir] })));
+  assert.equal(tracker.max, 1);
+  assert.deepEqual(settled.map((r) => r.status), ['rejected', 'fulfilled', 'fulfilled']);
+  assert.equal(settled[0].reason.code, 'peaks_unavailable');
+});
+
+test('size cap: an oversize source is refused before generation', async () => {
+  const { dir, file } = await tinyAudio('big.wav', Buffer.alloc(100));
+  let generations = 0;
+  const service = createPeaksService({
+    maxAudioBytes: 99,
+    generate: async () => { generations += 1; throw new Error('should not run'); },
+  });
+  await assert.rejects(
+    service.ensurePeaks({ filePath: file, candidates: [dir] }),
+    (e) => e instanceof PeaksError && e.code === 'audio_too_large' && !e.message.includes('big.wav'),
+  );
+  assert.equal(generations, 0);
+  assert.deepEqual(await fs.readdir(dir), ['big.wav']);
+
+  // exactly at the cap is allowed
+  const atCap = createPeaksService({ maxAudioBytes: 100, generate: slowGenerate({ inFlight: 0, max: 0, started: [] }, { delayMs: 1 }) });
+  const out = await atCap.ensurePeaks({ filePath: file, candidates: [dir] });
+  assert.equal(out.generated, true);
+});
+
+test('write order: peaks land before the header, and the header never shows without its peaks', async () => {
+  const { dir, file } = await tinyAudio('order.wav');
+  const seen = [];
+  const service = createPeaksService({
+    generate: slowGenerate({ inFlight: 0, max: 0, started: [] }, { delayMs: 1 }),
+    beforeHeaderWrite: async ({ dir: where }) => {
+      seen.push((await fs.readdir(where)).filter((n) => n.startsWith('order.wav.')).sort());
+    },
+  });
+  const out = await service.ensurePeaks({ filePath: file, candidates: [dir] });
+  assert.deepEqual(seen, [['order.wav.peaks']], 'only the peaks file exists when the header is about to be written');
+  assert.deepEqual((await fs.readdir(dir)).sort(), ['order.wav', 'order.wav.peaks', 'order.wav.peaks.json']);
+  assert.equal((await fs.readFile(out.peaksPath)).length, out.header.blocks * out.header.channels * 2);
+});
+
+test('a crash between the two writes leaves no orphan header and no temp files', async () => {
+  const { dir, file } = await tinyAudio('crash.wav');
+  let crash = true;
+  const service = createPeaksService({
+    generate: slowGenerate({ inFlight: 0, max: 0, started: [] }, { delayMs: 1 }),
+    beforeHeaderWrite: async () => {
+      if (crash) throw new Error('simulated crash');
+    },
+  });
+  await assert.rejects(service.ensurePeaks({ filePath: file, candidates: [dir] }), (e) => e.code === 'peaks_unavailable' || /simulated/.test(e.message));
+  const names = await fs.readdir(dir);
+  assert.ok(!names.some((n) => n.endsWith('.peaks.json')), 'no header');
+  assert.ok(!names.some((n) => n.endsWith('.tmp')), 'no temp files');
+
+  // A lone peaks file (hard crash before cleanup) is never trusted: the next call regenerates.
+  await fs.writeFile(path.join(dir, 'crash.wav.peaks'), Buffer.alloc(2));
+  crash = false;
+  const again = await service.ensurePeaks({ filePath: file, candidates: [dir] });
+  assert.equal(again.generated, true);
+  assert.deepEqual((await fs.readdir(dir)).sort(), ['crash.wav', 'crash.wav.peaks', 'crash.wav.peaks.json']);
+});
+
+test('a peaks file whose length disagrees with the header is stale', async () => {
+  const { dir, file } = await tinyAudio('stale.wav');
+  let generations = 0;
+  const inner = slowGenerate({ inFlight: 0, max: 0, started: [] }, { delayMs: 1 });
+  const service = createPeaksService({ generate: (o) => { generations += 1; return inner(o); } });
+  const first = await service.ensurePeaks({ filePath: file, candidates: [dir] });
+  await fs.appendFile(first.peaksPath, Buffer.alloc(2)); // one value too long
+  const second = await service.ensurePeaks({ filePath: file, candidates: [dir] });
+  assert.equal(second.generated, true);
+  assert.equal(generations, 2);
+  assert.equal((await fs.stat(second.peaksPath)).size, second.header.blocks * second.header.channels * 2);
+});
+
+test('a readOnly candidate object is searched but never written, even when its directory is writable', async () => {
+  const { dir, file } = await tinyAudio('ro.wav');
+  const cache = path.join(await freshDir('ro-cache-parent'), 'cache');
+  const service = createPeaksService({
+    cachePath: cache,
+    generate: slowGenerate({ inFlight: 0, max: 0, started: [] }, { delayMs: 1 }),
+  });
+  const out = await service.ensurePeaks({ filePath: file, candidates: [{ dir, readOnly: true }] });
+  assert.equal(out.generated, true);
+  assert.equal(out.kind, 'cache');
+  assert.equal(out.dir, cache);
+  assert.equal(out.location, 1);
+  assert.deepEqual(await fs.readdir(dir), ['ro.wav'], 'nothing written into the readOnly directory');
+
+  // Lookup in a readOnly location still works: seed one with a writable service, then read it.
+  const seed = createPeaksService({ generate: slowGenerate({ inFlight: 0, max: 0, started: [] }, { delayMs: 1 }) });
+  const { dir: dir2, file: file2 } = await tinyAudio('seeded.wav');
+  await seed.ensurePeaks({ filePath: file2, candidates: [dir2] });
+  let generations = 0;
+  const reader = createPeaksService({ cachePath: cache, generate: async () => { generations += 1; throw new Error('no'); } });
+  const found = await reader.ensurePeaks({ filePath: file2, candidates: [{ dir: dir2, readOnly: true }] });
+  assert.equal(found.generated, false);
+  assert.equal(found.location, 0);
+  assert.equal(found.kind, 'beside');
+  assert.equal(generations, 0);
+});
+
+test('every candidate readOnly and no cache: no writable location', async () => {
+  const { dir, file } = await tinyAudio('ro-only.wav');
+  const service = createPeaksService({ generate: slowGenerate({ inFlight: 0, max: 0, started: [] }, { delayMs: 1 }) });
+  await assert.rejects(
+    service.ensurePeaks({ filePath: file, candidates: [{ dir, readOnly: true }] }),
+    (e) => e.code === 'peaks_unavailable',
+  );
+  assert.deepEqual(await fs.readdir(dir), ['ro-only.wav']);
+});
+
+test('string and object candidates mix, and a readOnly flag falls through to the next entry', async () => {
+  const { dir, file } = await tinyAudio('mix.wav');
+  const dest = path.join(await freshDir('mix-dest'), 'peaks');
+  const service = createPeaksService({ generate: slowGenerate({ inFlight: 0, max: 0, started: [] }, { delayMs: 1 }) });
+  const out = await service.ensurePeaks({ filePath: file, candidates: [{ dir, readOnly: true }, dest, null, { nodir: true }] });
+  assert.equal(out.location, 1);
+  assert.equal(out.kind, 'destination');
+  assert.equal(out.dir, dest);
+});
+
+const ENCODERS = {
+  '.flac': ['-c:a', 'flac'],
+  '.mp3': ['-c:a', 'libmp3lame'],
+  '.m4a': ['-c:a', 'aac'],
+  '.aac': ['-c:a', 'aac'],
+  '.ogg': ['-c:a', 'libvorbis'],
+  '.opus': ['-c:a', 'libopus'],
+  '.aiff': ['-c:a', 'pcm_s16be'],
+};
+
+test('forced demuxers decode real files of each supported format', { skip: tools }, async () => {
+  const dir = await freshDir('formats');
+  let checked = 0;
+  for (const [ext, codecArgs] of Object.entries(ENCODERS)) {
+    const file = path.join(dir, `tone${ext}`);
+    try {
+      execFileSync(FFMPEG, ['-nostdin', '-v', 'error', '-y', '-i', monoWav, ...codecArgs, file], { stdio: 'ignore' });
+    } catch {
+      continue; // encoder not built in on this host
+    }
+    const { header } = await generatePeaks({ ffmpegPath: FFMPEG, ffprobePath: FFPROBE, filePath: file });
+    assert.equal(header.channels, 1, ext);
+    assert.ok(header.frames >= 44100 - 5000 && header.frames <= 48000 + 5000, `${ext} frames ${header.frames}`);
+    checked += 1;
+  }
+  assert.ok(checked >= 3, `only ${checked} formats could be encoded`);
 });
