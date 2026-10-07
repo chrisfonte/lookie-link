@@ -4163,6 +4163,11 @@ function startServer() {
   }));
   let customThemes = [];
   const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss: '', accessConfig, managedReposConfig, formsConfig });
+  // Keep the app's own refresh: the watcher below replaces app.locals.refreshAppearance with its
+  // run(), and calling that from inside reload() recursed until the stack overflowed, logging one
+  // warning per level on every watch event (found 2026-10-07 on a candidate whose log lived in
+  // the watched config directory).
+  const refreshAppearanceOnce = app.locals.refreshAppearance;
 
   // Themes and wallpapers reload live: edit a palette, an alias, a wallpaper
   // key, or drop images into a folder, and the next page load has it. The
@@ -4171,7 +4176,7 @@ function startServer() {
     fs: require('node:fs'),
     path,
     reload() {
-      customThemes = app.locals.refreshAppearance();
+      customThemes = refreshAppearanceOnce() || [];
       const catalog = wallpaperCatalogForApi();
       const folders = customThemes.flatMap((t) => t.wallpapers ? [t.wallpapers.dark, t.wallpapers.light] : []);
       const configPath = getConfigPath();

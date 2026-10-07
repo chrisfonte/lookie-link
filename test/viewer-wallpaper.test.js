@@ -232,3 +232,26 @@ test('wallpaper images revalidate instead of pinning for a day', async () => {
     assert.equal(again.statusCode, 304);
   } finally { server.close(); wallpaper.setWallpaperCatalog({}); }
 });
+
+test('watchWallpapers refresh does not recurse when reload calls refresh again', () => {
+  const { watchWallpapers } = require('../lib/viewer-wallpaper');
+  const warnings = [];
+  let calls = 0;
+  let watcher = null;
+  watcher = watchWallpapers({
+    fs: { watch: () => ({ on() {}, close() {} }) },
+    path: require('node:path'),
+    log: () => {},
+    warn: (m) => warnings.push(m),
+    reload() {
+      calls += 1;
+      if (watcher) watcher.refresh();
+      return { watch: [], summary: `call ${calls}` };
+    },
+  });
+  calls = 0;
+  watcher.refresh();
+  assert.equal(calls, 1);
+  assert.deepEqual(warnings, []);
+  watcher.close();
+});
