@@ -2056,7 +2056,7 @@
         text: `${stillInTarget.length} deleted marker${stillInTarget.length === 1 ? '' : 's'} still hold a value in the target (${stillInTarget.join(', ')}). Deleting never clears the target; the write-back skips absent markers.` }));
     }
     if (state.preview) {
-      root.append(previewPanel(state.preview));
+      root.append(previewPanel(state.preview.projection || state.preview));
     }
 
     function applyButtonState() {
@@ -2089,7 +2089,7 @@
     }
   }
 
-  function previewPanel(result) {
+  function previewPanel(result.projection || result) {
     const panel = h('div', { class: 'am-preview', 'data-am': 'preview-result' }, h('h4', { text: 'Write-back preview (nothing written)' }));
     const list = h('dl', { class: 'am-kv' });
     if (Array.isArray(result.pointers)) {
