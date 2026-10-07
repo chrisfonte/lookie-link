@@ -103,6 +103,8 @@ test('aif and aiff are served by the audio viewer', () => {
 
 test('the viewer client script parses as a standalone script', () => {
   const vm = require('node:vm');
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'audio-viewer.js'), 'utf8');
+  const nodeFs = require('node:fs');
+  const nodePath = require('node:path');
+  const source = nodeFs.readFileSync(nodePath.join(__dirname, '..', 'public', 'audio-viewer.js'), 'utf8');
   assert.doesNotThrow(() => new vm.Script(source, { filename: 'audio-viewer.js' }));
 });
