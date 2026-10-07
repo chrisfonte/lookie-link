@@ -169,6 +169,50 @@ test('a read uses the unit declared by its source select, else samples', async (
   assert.deepEqual(context.reads, { cross: 235200 });
 });
 
+const ALPHA_44K = { ...ALPHA, sampleRate: 44100 };
+const msReads = () => [
+  { id: 'first', label: 'First', kind: 'point', color: '#112233', read: { source: 'target', pointer: '/analysis/first_event_sample' } },
+  { id: 'win', label: 'Win', kind: 'region', color: '#112233', read: { source: 'target', pointer: '/analysis/window' } },
+  { id: 'decision', label: 'Decision', kind: 'region', color: '#223344', read: { source: 'target', pointer: '/analysis/decision' } },
+];
+
+test('reads in a millisecond template convert to samples with the audio rate (template unit fallback)', async (t) => {
+  const { resolver } = await setup(t);
+  const asMs = template({ unit: 'ms' });
+  asMs.markers = msReads();
+  const context = await resolver.resolveContext({ template: asMs, audio: ALPHA_44K });
+  const expected = {
+    first: Math.round(177888 * 44.1),
+    win: { startSample: Math.round(1000 * 44.1), endSample: Math.round(2000 * 44.1) },
+    decision: { startSample: Math.round(4800 * 44.1), endSample: Math.round(9600 * 44.1) },
+  };
+  assert.deepEqual(context.reads, expected);
+  assert.deepEqual(context.targetValues, expected);
+  assert.deepEqual(context.problems.filter((p) => p.markerId), []);
+  // The same record read as a samples template keeps the raw numbers (the old, unconverted result).
+  const asSamples = template({ unit: 'samples' });
+  asSamples.markers = msReads();
+  const raw = await resolver.resolveContext({ template: asSamples, audio: ALPHA_44K });
+  assert.equal(raw.reads.first, 177888);
+  assert.notEqual(raw.reads.first, context.reads.first);
+});
+
+test('read unit precedence: explicit read.unit, then source select.unit, then template unit', async (t) => {
+  const { resolver } = await setup(t);
+  const tpl = template({ unit: 'ms' });
+  tpl.markers = [
+    { id: 'win', label: 'Win', kind: 'region', color: '#112233', read: { source: 'target', pointer: '/analysis/window', unit: 'seconds' } },
+    { id: 'cross', label: 'Cross', kind: 'point', color: '#112233', read: { source: 'cue', pointer: '/cross_start' } },
+    { id: 'cross-ms', label: 'Cross ms', kind: 'point', color: '#112233', read: { source: 'cue', pointer: '/cross_start', unit: 'ms' } },
+    { id: 'first', label: 'First', kind: 'point', color: '#112233', read: { source: 'target', pointer: '/analysis/first_event_sample', unit: 'samples' } },
+  ];
+  const context = await resolver.resolveContext({ template: tpl, audio: ALPHA_44K });
+  assert.deepEqual(context.reads.win, { startSample: 1000 * 44100, endSample: 2000 * 44100 });
+  assert.equal(context.reads.cross, Math.round(4.9 * 44100)); // the source select unit (seconds) beats the template ms
+  assert.equal(context.reads['cross-ms'], Math.round(4.9 * 44.1)); // an explicit unit beats the source select unit
+  assert.equal(context.reads.first, 177888);
+});
+
 test('image keeps the plot box unchanged (right and bottom exclusive) and returns a root-relative path', async (t) => {
   const { dir, resolver } = await setup(t);
   const context = await resolver.resolveContext({ template: template(), audio: ALPHA });

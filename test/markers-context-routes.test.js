@@ -24,7 +24,7 @@ function fullTemplate() {
     source: 'stored',
     writable: true,
     markers: [
-      { id: 'first', label: 'First', kind: 'point', color: '#112233', read: { source: 'target', pointer: '/analysis/first_event_sample' } },
+      { id: 'first', label: 'First', kind: 'point', color: '#112233', read: { source: 'target', pointer: '/analysis/first_event_sample', unit: 'samples' } },
     ],
     sources: [
       {

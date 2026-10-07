@@ -25,6 +25,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const fixtures = path.join(here, '..', 'fixtures', 'markers', 'projection');
 const REPO = 'station-audio';
 const FILE = 'clicks.wav';
+const FILE_44K = 'clicks-44k.wav';
+const RATE_44K = 44100;
 const SAMPLE_RATE = 48000;
 const DURATION_S = 6;
 const CLICKS_S = [1, 2, 3];
@@ -40,12 +42,12 @@ function haveFfmpeg() {
   }
 }
 
-function writeClickWav(file) {
-  // 5 ms bursts of a 1 kHz tone at 0.8 amplitude at 1.000, 2.000 and 3.000 s; 48 kHz stereo.
+function writeClickWav(file, rate = SAMPLE_RATE) {
+  // 5 ms bursts of a 1 kHz tone at 0.8 amplitude at 1.000, 2.000 and 3.000 s; stereo.
   const gate = CLICKS_S.map((t) => `between(t\\,${t}\\,${t + 0.005})`).join('+');
   const expr = `0.8*sin(2*PI*1000*t)*(${gate})`;
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', `aevalsrc=${expr}|${expr}:s=${SAMPLE_RATE}:d=${DURATION_S}`,
-    '-c:a', 'pcm_s16le', file]);
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', `aevalsrc=${expr}|${expr}:s=${rate}:d=${DURATION_S}`,
+    '-ar', String(rate), '-c:a', 'pcm_s16le', file]);
 }
 
 async function freePort() {
@@ -101,6 +103,9 @@ const PROJECTION_TEMPLATE = (sourceRoot) => ({
   }],
 });
 
+// Millisecond values in the synthetic target record of the 44.1 kHz file.
+const MS_READS = {cue: 1501, span: [2003, 3999]};
+
 /** A temp world: audio root, marker stores, projection root and a running app. */
 async function stage(base) {
   const audioDir = path.join(base, 'audio');
@@ -130,6 +135,31 @@ async function stage(base) {
       {id: 'tail', label: 'Tail', kind: 'point', color: '#e1886e', required: true},
     ],
     keys: {hook: 'h', tail: 't'},
+  }, null, 2));
+  // A 44.1 kHz file whose target record holds millisecond values, read by an ms-unit template.
+  writeClickWav(path.join(audioDir, FILE_44K), RATE_44K);
+  const sha44k = sha256(await fs.readFile(path.join(audioDir, FILE_44K)));
+  await fs.mkdir(path.join(projectionRoot, 'pieces', 'ms44'), {recursive: true});
+  await fs.writeFile(path.join(projectionRoot, 'pieces', 'ms44', 'record.yaml'),
+    `asset:\n  sha256: ${sha44k}\nresult:\n  zero_ms: 0\n  cue_ms: ${MS_READS.cue}\n  span_ms:\n    - ${MS_READS.span[0]}\n    - ${MS_READS.span[1]}\n`);
+  await fs.writeFile(path.join(templatesDir, 'ms-reads.json'), JSON.stringify({
+    contractVersion: 1,
+    resourceKind: 'marker-template',
+    templateId: 'ms-reads',
+    revision: 1,
+    title: 'Millisecond reads',
+    unit: 'ms',
+    groups: [],
+    markers: [
+      {id: 'zero', label: 'Zero', kind: 'point', color: '#4fd8e8', read: {source: 'target', pointer: '/result/zero_ms'}},
+      {id: 'cue', label: 'Cue', kind: 'point', color: '#e1886e', read: {source: 'target', pointer: '/result/cue_ms'}},
+      {id: 'span', label: 'Span', kind: 'region', color: '#a0c85a', read: {source: 'target', pointer: '/result/span_ms'}},
+    ],
+    keys: {},
+    sources: [
+      {id: 'target', kind: 'yaml', root: 'demo', locate: {glob: 'pieces/*/record.yaml', match: {pointer: '/asset/sha256', equals: '$audio.sha256'}}},
+    ],
+    pickers: [],
   }, null, 2));
   await fs.writeFile(path.join(templatesDir, 'broken-template.json'), '{ this is not a template');
   const cliLog = path.join(base, 'cli.log');
@@ -206,13 +236,13 @@ const TAP_PROBE = () => {
   };
 };
 
-async function openViewer(browser, origin, viewport, query = '', {probe = false} = {}) {
+async function openViewer(browser, origin, viewport, query = '', {probe = false, file = FILE} = {}) {
   const context = await browser.newContext({viewport});
   const page = await context.newPage();
   const problems = [];
   page.on('pageerror', (error) => problems.push(error.message));
   if (probe) await page.addInitScript(TAP_PROBE);
-  const response = await page.goto(`${origin}/view/${REPO}/${FILE}${query}`);
+  const response = await page.goto(`${origin}/view/${REPO}/${file}${query}`);
   assert.equal(response.status(), 200);
   await page.waitForFunction(() => window.__audioMarkers && window.__audioMarkers.ready, null, {timeout: 30000});
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'no horizontal overflow');
@@ -753,6 +783,42 @@ async function flagsStayInside(browser, env, viewport, label) {
   await context.close();
 }
 
+async function millisecondReads(browser, env, viewport, label) {
+  const {context, page} = await openViewer(browser, env.origin, viewport, '?template=ms-reads', {file: FILE_44K});
+  assert.equal(await page.evaluate(() => window.__audioMarkers.state.template.templateId), 'ms-reads');
+  const ms = (value) => Math.round(value * RATE_44K / 1000);
+  const markers = await markersOf(page);
+  const byType = Object.fromEntries(markers.map((m) => [m.type, m]));
+  assert.equal(byType.zero.sample, 0, `${label}: a zero ms read lands at sample 0`);
+  assert.equal(byType.cue.sample, ms(MS_READS.cue), `${label}: ${MS_READS.cue} ms is ${ms(MS_READS.cue)} samples at 44.1 kHz, not ${MS_READS.cue}`);
+  assert.equal(byType.span.startSample, ms(MS_READS.span[0]), `${label}: region start in ms`);
+  assert.equal(byType.span.endSample, ms(MS_READS.span[1]), `${label}: region end in ms`);
+  assert.ok(markers.every((m) => m.origin === 'target'), `${label}: all seeded from the target record`);
+
+  // The flag at x=0 must not hide its lane name: the name is above it, inside the stage, and hit-testable.
+  const name = page.locator('[data-lane="__other"] .am-lane-label');
+  await name.waitFor();
+  assert.equal(await page.getByText('Other', {exact: true}).count() >= 1, true, `${label}: the lane name is found`);
+  const stageBox = await page.locator('[data-am="stage"]').boundingBox();
+  const box = await name.boundingBox();
+  assert.ok(box.x >= stageBox.x - 0.5 && box.x + box.width <= stageBox.x + stageBox.width + 0.5, `${label}: the lane name is inside the stage`);
+  const flagBox = await page.locator('[data-marker-id] .am-flag', {hasText: 'Zero'}).boundingBox();
+  assert.ok(flagBox.x <= stageBox.x + 2, `${label}: the Zero flag sits at x=0`);
+  assert.ok(flagBox.x < box.x + box.width && box.x < flagBox.x + flagBox.width, `${label}: the flag and the lane name overlap`);
+  const style = await name.evaluate((el) => {
+    const css = getComputedStyle(el);
+    return {z: css.zIndex, background: css.backgroundColor};
+  });
+  assert.ok(Number(style.z) > 1, `${label}: the lane name is stacked above the flags (z-index ${style.z})`);
+  assert.doesNotMatch(style.background, /rgba\(.*, 0\)$|transparent/, `${label}: the lane name has a solid background`);
+  const hit = await page.evaluate(({x, y}) => {
+    const el = document.elementFromPoint(x, y);
+    return el ? {cls: el.className, inside: Boolean(el.closest('.am-lane-label'))} : null;
+  }, {x: box.x + box.width / 2, y: box.y + box.height / 2});
+  assert.ok(hit && hit.inside, `${label}: the point under the lane name returns the name, not the flag (${hit && hit.cls})`);
+  await context.close();
+}
+
 async function hintStates(browser, env, viewport, label) {
   const hintOf = (page) => page.locator('[data-am="reason-hint"]');
   // Nothing changed and saved: "All changes saved."
@@ -826,7 +892,8 @@ try {
     await recordNotes(browser, env, viewport, label);
     await flagsStayInside(browser, env, viewport, label);
     await hintStates(browser, env, viewport, label);
-    console.log(`Audio markers ${label}: no-template point/region/label/save/reload, song-structure, projection write-back, stale tab 409, tap sync real tone and arithmetic, select-seeks, tap edge, Add buttons heard time, save hint states, record panel, skipped notice, flipped flags PASS`);
+    await millisecondReads(browser, env, viewport, label);
+    console.log(`Audio markers ${label}: no-template point/region/label/save/reload, song-structure, projection write-back, stale tab 409, tap sync real tone and arithmetic, select-seeks, tap edge, Add buttons heard time, save hint states, record panel, skipped notice, flipped flags, millisecond reads at 44.1 kHz and lane name over a flag at x=0 PASS`);
   }
 } catch (error) {
   failed = true;

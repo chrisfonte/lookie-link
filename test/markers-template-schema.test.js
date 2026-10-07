@@ -230,6 +230,20 @@ test('snap and read must name declared sources', () => {
   assertRejected(ok, 'read.source');
 });
 
+test('a marker read accepts an optional unit and refuses an unknown one', () => {
+  for (const unit of ['samples', 'ms', 'seconds']) {
+    const ok = withSources();
+    ok.markers[0].read = { source: 'target', pointer: '/analysis/x', unit };
+    assert.deepEqual(messages(ok), [], unit);
+  }
+  const bad = withSources();
+  bad.markers[0].read = { source: 'target', pointer: '/analysis/x', unit: 'frames' };
+  assertRejected(bad, 'markers[0].read.unit');
+  const extra = withSources();
+  extra.markers[0].read = { source: 'target', pointer: '/analysis/x', scale: 2 };
+  assertRejected(extra, 'markers[0].read');
+});
+
 test('projection kind, write markers, pointers and receipts are checked', () => {
   const kind = withSources();
   kind.projections[0].kind = 'shell';

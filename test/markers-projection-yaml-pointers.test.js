@@ -508,6 +508,35 @@ test('unit conversion: ms rounds, seconds keeps six decimals', async (t) => {
   assert.equal(result.status, 'applied');
 });
 
+test('unit precedence: a write without unit follows the template unit; an unchanged marker yields no pointer', async (t) => {
+  const s = setup(t);
+  const msProjection = {
+    ...PROJECTION,
+    write: [
+      { marker: 'start', pointer: '/result/body_start_ms' },
+      { marker: 'end', unit: 'samples', pointer: '/result/end_sample' },
+    ],
+  };
+  const msTemplate = { ...TEMPLATE, unit: 'ms', projections: [msProjection] };
+  // start = 48000 samples = 1000 ms = the target value; end = 250000 samples (explicit samples unit).
+  const unchanged = markers({ start: { id: 'start', type: 'start', kind: 'point', sample: 48000 }, end: { id: 'end', type: 'end', kind: 'point', sample: 240000 } });
+  const same = await s.run({ template: msTemplate, projection: msProjection, record: recordFor({ markers: unchanged }) });
+  assert.equal(same.status, 'skipped');
+  assert.deepEqual(same.pointers || [], []);
+
+  const moved = markers({ start: { id: 'start', type: 'start', kind: 'point', sample: 96000 } });
+  const result = await s.run({
+    template: msTemplate, projection: msProjection, record: recordFor({ markers: moved }),
+    mode: 'live', expectedTargetSha256: sha(SOURCE), predecessor: recordFor({ markers: unchanged }),
+  });
+  assert.equal(result.status, 'applied');
+  const doc = yaml.load(fs.readFileSync(s.target, 'utf8'));
+  assert.equal(doc.result.body_start_ms, 2000); // 96000 samples at 48 kHz, written in the template's ms
+  assert.equal(doc.result.end_sample, 240000); // the explicit unit still wins
+  assert.ok(result.pointers.includes('/result/body_start_ms'));
+  assert.ok(!result.pointers.includes('/result/end_sample'));
+});
+
 test('a write pointer that does not exist in the target is 422 and the projection never creates paths', async (t) => {
   const s = setup(t);
   for (const pointer of ['/result/not_there', '/nowhere/start', '/result/windows/5/start_sample']) {
