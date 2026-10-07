@@ -1887,13 +1887,21 @@
     const t = tap.heard;
     const def = state.active.kind === kind ? activeDef() : typeDef(freeTypeFor(kind));
     const sample = tap.sample;
+    const focusNew = () => {
+      // Take focus off the toolbar button so Enter means "play from here", not "add again".
+      const sel = state.selection;
+      if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
+      if (sel && sel.id) setTimeout(() => focusMarker(sel.id), 0);
+    };
     if (kind === POINT) {
       addPointAt(def, sample);
+      focusNew();
       return;
     }
     const end = Math.min(state.frames, sample + sampleOf(Math.min(1, Math.max(0.05, state.duration - t))));
     placeMarker(def, REGION, sample, Math.max(end, sample + 1));
     redrawMarkers();
+    focusNew();
   }
 
   // ---------------------------------------------------------------- inspector

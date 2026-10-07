@@ -567,7 +567,19 @@ async function addButtonsUseHeardTime(browser, env, viewport, label) {
   await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 1.5; });
   await page.locator('[data-am="add-point"]').click();
   assert.ok((await markersOf(page)).some((m) => m.origin === 'new' && m.kind === 'point' && m.sample === 72000), `${label}: paused Add point is the playhead`);
-  await context.close();
+    // Delta-review canary: after Add point, Enter must play from the new marker, not add another one.
+  {
+    const before = (await markersOf(page)).length;
+    await page.locator('[data-am="add-point"]').click();
+    const added = (await markersOf(page)).length;
+    assert.equal(added, before + 1, `${label}: Add point adds one marker`);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(150);
+    const after = (await markersOf(page)).length;
+    assert.equal(after, added, `${label}: Enter after Add point adds nothing`);
+    assert.equal(await page.evaluate(() => window.__audioMarkers.audio.paused), false, `${label}: Enter after Add point plays`);
+  }
+await context.close();
 }
 
 async function reasonHint(browser, env, viewport, label) {
