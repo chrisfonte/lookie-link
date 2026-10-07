@@ -111,6 +111,7 @@
   const freeTypeFor = (kind) => (kind === REGION ? SPAN_TYPE : NOTE_TYPE);
   const CAL_KEY = 'lookie.audio.calibrationMs';
   const NAME_KEY = 'lookie.audio.operatorName';
+  const TAP_EDGE_KEY = 'lookie.audio.tapOnRelease';
   // Keys the viewer keeps for itself; a template key is never bound to these.
   const RESERVED_KEYS = new Set([' ', 'm', '[', ']', 's', 'l', '+', '=', '-', '0', '?', 'Delete', 'Backspace',
     'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Escape', 'Enter', 'Tab']);
@@ -227,6 +228,7 @@
     snapOn: false,
     ctx: null,
     calibrationMs: 0,
+    tapOnRelease: false,
     lastTap: null,
     preview: null,
     sizes: { w: 0, waveH: 0, rulerH: 28, imageH: 0 },
@@ -293,6 +295,23 @@
       window.localStorage.setItem(CAL_KEY, String(value));
     } catch (_error) {
       // Storage may be blocked; the value still applies to this page.
+    }
+  }
+
+  function loadTapEdge() {
+    try {
+      state.tapOnRelease = window.localStorage.getItem(TAP_EDGE_KEY) === '1';
+    } catch (_error) {
+      state.tapOnRelease = false;
+    }
+  }
+
+  function saveTapEdge(value) {
+    state.tapOnRelease = Boolean(value);
+    try {
+      window.localStorage.setItem(TAP_EDGE_KEY, state.tapOnRelease ? '1' : '0');
+    } catch (_error) {
+      // Storage may be blocked; the choice still applies to this page.
     }
   }
 
@@ -724,6 +743,31 @@
     updatePlayhead();
   }
 
+  // Selecting a marker moves the playhead to it (a region's start) and leaves the
+  // play state alone. Called on selection, never on drag movement.
+  function selectMarker(m, part) {
+    state.selection = { id: m.id, part: part || 'whole' };
+    seek(secOf(startOf(m)));
+  }
+
+  // Play from the selected marker: a paused player starts there, a playing one restarts there.
+  function playFromSelected() {
+    const m = selectedMarker();
+    if (!m) {
+      return false;
+    }
+    seek(secOf(startOf(m)));
+    if (audio.paused) {
+      ensureContext().catch(() => {});
+      const playing = audio.play();
+      if (playing && playing.catch) {
+        playing.catch((error) => setAlert(`Playback did not start: ${error.message}`));
+      }
+    }
+    setStatus(`Playing from ${fmtTime(secOf(startOf(m)))}.`);
+    return true;
+  }
+
   // ---------------------------------------------------------------- view geometry
   function minSpan() {
     return Math.max(0.001, (Math.max(state.sizes.w, 64) / 8) / state.sampleRate);
@@ -1088,7 +1132,7 @@
     }
     node.addEventListener('focus', () => {
       if (!state.selection || state.selection.id !== m.id) {
-        state.selection = { id: m.id, part: 'whole' };
+        selectMarker(m, 'whole');
         drawOverlay();
         renderInspector();
       }
@@ -1291,11 +1335,12 @@
         return;
       }
       const part = m.kind === POINT ? 'whole' : partEl.getAttribute('data-part');
-      state.selection = { id: m.id, part };
+      selectMarker(m, part);
       if (isReadOnly(m)) {
         event.preventDefault();
         drawOverlay();
         renderInspector();
+        focusMarker(m.id);
         return;
       }
       drag = {
@@ -1391,6 +1436,18 @@
       state.selection = { id: finished.id, part: 'whole' };
     }
     redrawMarkers();
+    if (finished && (finished.kind === 'move' || finished.kind === 'create') && finished.id) {
+      focusMarker(finished.id);
+    }
+  }
+
+  // The pointer handlers stop the browser's own focus change, so the selected marker
+  // takes focus here; Enter then plays from it instead of pressing the last button used.
+  function focusMarker(id) {
+    const node = ui.lanes.querySelector(`[data-marker-id="${id}"]`);
+    if (node) {
+      node.focus({ preventScroll: true });
+    }
   }
 
   function attachDrag() {
@@ -1574,6 +1631,7 @@
     ['[  ]', 'Start and end a region at the heard time'],
     ['Template keys', 'Add that marker type at the heard time (a region type opens on the first press and closes on the second)'],
     ['Arrow keys', 'Nudge the selection 1 ms; Shift 10 ms; Alt 1 sample (no selection: seek 1 s, Shift 5 s)'],
+    ['Enter', 'Play from the selected marker (selecting a marker also moves the playhead to it)'],
     ['Delete', 'Remove the selected marker'],
     ['l', 'Loop the selected region'],
     ['s', 'Snap to the reference source named by the marker type'],
@@ -1630,9 +1688,7 @@
       && Object.keys(keys).find((id) => keys[id] === key && (id === NOTE_TYPE || (state.template.markers || []).some((t) => t.id === id)));
     if (templateType && key !== ' ') {
       event.preventDefault();
-      if (!event.repeat) {
-        tapType(templateType, event);
-      }
+      armTap(event, (tapEvent) => tapType(templateType, tapEvent));
       return;
     }
     let handled = true;
@@ -1641,19 +1697,20 @@
         togglePlay();
         break;
       case 'm':
-        if (!event.repeat) {
-          tapType(NOTE_TYPE, event, POINT);
-        }
+        armTap(event, (tapEvent) => tapType(NOTE_TYPE, tapEvent, POINT));
         break;
       case '[':
-        if (!event.repeat) {
-          regionStartKey(event);
-        }
+        armTap(event, regionStartKey);
         break;
       case ']':
-        if (!event.repeat) {
-          regionEndKey(event);
+        armTap(event, regionEndKey);
+        break;
+      case 'Enter':
+        // A focused button or link keeps its own Enter.
+        if (event.target.closest && event.target.closest('button, a, summary')) {
+          return;
         }
+        handled = playFromSelected();
         break;
       case 's':
         toggleSnap();
@@ -1706,7 +1763,30 @@
     }
   }
 
+  // Tap keys: by default the press is the tap (keydown timeStamp). With "Tap on
+  // release" the press only arms the key and the keyup timeStamp is the tap.
+  // Auto-repeat never taps; each press and release is its own tap.
+  const armed = new Map(); // event.code -> action
+
+  function armTap(event, action) {
+    if (event.repeat) {
+      return;
+    }
+    if (state.tapOnRelease) {
+      armed.set(event.code || event.key, action);
+      return;
+    }
+    action(event);
+  }
+
   function onKeyUp(event) {
+    const action = armed.get(event.code || event.key);
+    if (action) {
+      armed.delete(event.code || event.key);
+      action(event);
+      event.preventDefault();
+      return;
+    }
     // A focused button would otherwise click on Space release.
     if (event.key === ' ' && !isTyping(event.target)) {
       event.preventDefault();
@@ -1801,17 +1881,27 @@
     }
   }
 
-  function addAtPlayhead(kind) {
-    const t = audio.currentTime;
+  // The Add buttons take the same heard time as the keys, from the click event.
+  function addAtPlayhead(kind, event) {
+    const tap = heardTime(event);
+    const t = tap.heard;
     const def = state.active.kind === kind ? activeDef() : typeDef(freeTypeFor(kind));
-    const sample = clamp(sampleOf(t), 0, state.frames);
+    const sample = tap.sample;
+    const focusNew = () => {
+      // Take focus off the toolbar button so Enter means "play from here", not "add again".
+      const sel = state.selection;
+      if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
+      if (sel && sel.id) setTimeout(() => focusMarker(sel.id), 0);
+    };
     if (kind === POINT) {
       addPointAt(def, sample);
+      focusNew();
       return;
     }
     const end = Math.min(state.frames, sample + sampleOf(Math.min(1, Math.max(0.05, state.duration - t))));
     placeMarker(def, REGION, sample, Math.max(end, sample + 1));
     redrawMarkers();
+    focusNew();
   }
 
   // ---------------------------------------------------------------- inspector
@@ -1918,6 +2008,7 @@
         })),
         h('div', { class: 'am-actions' },
           h('button', { type: 'button', class: 'am-btn', onclick: () => seek(secOf(startOf(m))), text: 'Go to' }),
+          h('button', { type: 'button', class: 'am-btn', 'data-am': 'play-from', title: 'Play from this marker (Enter)', onclick: playFromSelected, text: 'Play from here' }),
           h('button', { type: 'button', class: 'am-btn am-btn-danger', 'data-am': 'delete', onclick: deleteSelected, text: 'Delete' })),
       );
       if (markerState(m) === 'target') {
@@ -1981,7 +2072,10 @@
         h('ul', {}, problems.map((p) => h('li', {
           text: p.message,
           class: 'am-check',
-          onclick: () => { if (p.markerId) { state.selection = { id: p.markerId, part: 'whole' }; redrawMarkers(); } },
+          onclick: () => {
+            const target = p.markerId ? findMarker(p.markerId) : null;
+            if (target) { selectMarker(target, 'whole'); redrawMarkers(); }
+          },
         }))));
     }
     root.append(checks);
@@ -2040,6 +2134,8 @@
         h('button', { type: 'button', class: 'am-btn am-btn-primary', 'data-am': 'save-write', text: 'Save and write back', onclick: () => doSaveAll(true) }),
       );
     }
+    const reasonHint = h('span', { class: 'am-muted am-reason-hint', 'data-am': 'reason-hint', role: 'status', hidden: 'hidden' });
+    buttons.append(reasonHint);
     buttons.append(h('span', { class: `am-dirty${isDirty(main) ? ' am-on' : ''}`, text: isDirty(main) ? 'Unsaved changes' : 'All changes saved' }));
     root.append(buttons);
 
@@ -2075,6 +2171,8 @@
       buttons.querySelectorAll('[data-am="preview"],[data-am="save-write"]').forEach((b) => { b.disabled = !ok; });
       const why = mainProblems.length ? 'Fix the listed problems first.' : (!reasonOk ? 'A reason is required for this template.' : '');
       buttons.querySelectorAll('button').forEach((b) => { b.title = b.disabled ? why : ''; });
+      reasonHint.textContent = reasonOk ? '' : 'Type a reason to enable Save.';
+      reasonHint.hidden = reasonOk;
       if (notesButton) {
         const notesOk = validate('notes').length === 0;
         notesButton.disabled = !notesOk || !needsSave(notes);
@@ -2338,6 +2436,7 @@
     const markersOn = boot.markersEnabled !== false;
     if (!markersOn) document.documentElement.classList.add('audio-markers-off');
     loadCalibration();
+    loadTapEdge();
     loadOperatorName();
     app.hidden = false;
     setStatus('Loading waveform...');
@@ -2421,6 +2520,12 @@
       ui.cal.value = String(state.calibrationMs);
       renderLatency();
     });
+    ui['tap-release'].checked = state.tapOnRelease;
+    ui['tap-release'].addEventListener('change', () => {
+      saveTapEdge(ui['tap-release'].checked);
+      armed.clear();
+      setStatus(state.tapOnRelease ? 'Taps register when the key is released.' : 'Taps register when the key is pressed.');
+    });
     ui.play.addEventListener('click', togglePlay);
     audio.addEventListener('play', () => { ui.play.textContent = 'Pause'; ui.play.setAttribute('aria-pressed', 'true'); });
     audio.addEventListener('pause', () => { ui.play.textContent = 'Play'; ui.play.setAttribute('aria-pressed', 'false'); });
@@ -2448,8 +2553,8 @@
       });
     });
     ui.type.addEventListener('change', () => applyActive(ui.type.value));
-    ui['add-point'].addEventListener('click', () => addAtPlayhead(POINT));
-    ui['add-region'].addEventListener('click', () => addAtPlayhead(REGION));
+    ui['add-point'].addEventListener('click', (event) => addAtPlayhead(POINT, event));
+    ui['add-region'].addEventListener('click', (event) => addAtPlayhead(REGION, event));
     ui.pan.addEventListener('input', () => {
       const range = state.duration - state.view.span;
       setView((Number(ui.pan.value) / 1000) * range, state.view.span);
@@ -2472,6 +2577,7 @@
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
     window.addEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener('blur', () => armed.clear());
   }
 
   // ---------------------------------------------------------------- test hook
@@ -2480,7 +2586,7 @@
     // { pressed (seconds), playing?, outputLatency?, baseLatency? }.
     // The values the heard-time formula would use right now:
     // { now, playing, outputLatency, baseLatency, calibrationMs, latency } (seconds, except calibrationMs).
-    getClock: () => clockValues(),
+    getClock: () => ({ ...clockValues(), tapEdge: state.tapOnRelease ? 'release' : 'press' }),
     // setClock({ now, playing, outputLatency, baseLatency, calibrationMs }) replaces any of
     // those with a number or a function(event); setClock(null) restores the live clock.
     setClock(spec) {

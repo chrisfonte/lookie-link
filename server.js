@@ -908,8 +908,12 @@ function createApp(options = {}) {
   const rawPublishConfig = options.publishConfig === undefined ? getPublishConfig() : options.publishConfig;
   const formsConfig = options.formsConfig === undefined ? getFormsConfig() : options.formsConfig;
   const kitsConfig = options.kitsConfig === undefined ? getKitsConfig() : options.kitsConfig;
-  const audioRoots = options.audioRoots === undefined ? getAudioRootsConfig() : (options.audioRoots || {});
-  const markersConfig = options.markersConfig === undefined ? getMarkersConfig() : (options.markersConfig || { enabled: false });
+  // A caller that injects its own mappings (tests, candidate servers) gets no audio roots and no
+  // markers unless it passes them: the host config must never leak into an injected app.
+  // main() passes both explicitly from the config.
+  const injected = options.mappings !== undefined;
+  const audioRoots = options.audioRoots === undefined ? (injected ? {} : getAudioRootsConfig()) : (options.audioRoots || {});
+  const markersConfig = options.markersConfig === undefined ? (injected ? { enabled: false } : getMarkersConfig()) : (options.markersConfig || { enabled: false });
   const refreshKits = () => loadKits({
     folders: kitsConfig.folders || [],
     managedFolder: kitsConfig.managedFolder === undefined ? null : kitsConfig.managedFolder,
@@ -4162,7 +4166,7 @@ function startServer() {
     label: slug.split('-').map((w) => w[0].toUpperCase() + w.slice(1)).join(' '),
   }));
   let customThemes = [];
-  const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss: '', accessConfig, managedReposConfig, formsConfig });
+  const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss: '', accessConfig, managedReposConfig, formsConfig, audioRoots: getAudioRootsConfig(), markersConfig: getMarkersConfig() });
   // Keep the app's own refresh: the watcher below replaces app.locals.refreshAppearance with its
   // run(), and calling that from inside reload() recursed until the stack overflowed, logging one
   // warning per level on every watch event (found 2026-10-07 on a candidate whose log lived in
