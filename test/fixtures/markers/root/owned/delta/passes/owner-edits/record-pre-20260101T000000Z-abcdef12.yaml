@@ -1,0 +1,6 @@
+schema: sample-record-v1
+asset:
+  digest: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+  name: delta.wav
+analysis:
+  first_event_sample: 4800

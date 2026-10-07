@@ -290,20 +290,111 @@ test('a failed update (stale or invalid) writes no history', async (t) => {
   await assert.rejects(fs.readdir(path.join(templatesPath, '.history')), { code: 'ENOENT' });
 });
 
-test('remove keeps the final revision in history and a recreated id starts clean', async (t) => {
+test('remove is a tombstone: history stays, getRevision works, get is null, recreate is refused', async (t) => {
+  const { store, templatesPath } = await setup(t);
+  await store.create(sample());
+  await store.update('sample', 1, { title: 'Two' });
+  assert.equal(await store.remove('sample', 2), true);
+
+  assert.equal(await store.get('sample'), null);
+  assert.deepEqual((await store.list()).map((e) => e.templateId), ['freeform', 'radio-imaging', 'song-structure']);
+  assert.equal((await store.getRevision('sample', 1)).title, 'Sample');
+  const last = await store.getRevision('sample', 2);
+  assert.equal(last.title, 'Two');
+  assert.equal(last.writable, false);
+  assert.equal(await store.getRevision('sample', 3), null);
+
+  const historyDir = path.join(templatesPath, '.history', 'sample');
+  assert.deepEqual((await fs.readdir(historyDir)).sort(), ['r1.json', 'r2.json', 'tombstone.json']);
+  assert.equal(JSON.parse(await fs.readFile(path.join(historyDir, 'tombstone.json'), 'utf8')).revision, 2);
+  await assert.rejects(fs.lstat(path.join(templatesPath, 'sample.json')), { code: 'ENOENT' });
+  assert.equal((await fs.readdir(path.join(templatesPath, '.history'))).filter((n) => n.includes('removed')).length, 0);
+
+  await rejects(store.create(sample({ title: 'Again' })), 'ECONFLICT');
+  await rejects(store.update('sample', 2, { title: 'x' }), 'ENOTFOUND');
+  await rejects(store.remove('sample', 2), 'ENOTFOUND');
+  assert.equal(await store.get('sample'), null);
+});
+
+test('create with restore revives a tombstone at the next revision and keeps history', async (t) => {
   const { store, templatesPath } = await setup(t);
   await store.create(sample());
   await store.update('sample', 1, { title: 'Two' });
   await store.remove('sample', 2);
-  assert.equal(await store.getRevision('sample', 1), null);
-  const archived = (await fs.readdir(path.join(templatesPath, '.history'))).filter((n) => n.startsWith('sample.removed-'));
-  assert.equal(archived.length, 1);
-  assert.deepEqual((await fs.readdir(path.join(templatesPath, '.history', archived[0]))).sort(), ['r1.json', 'r2.json']);
 
-  await store.create(sample({ title: 'Again' }));
-  const updated = await store.update('sample', 1, { title: 'Again two' });
-  assert.equal(updated.revision, 2);
-  assert.equal((await store.getRevision('sample', 1)).title, 'Again');
+  await rejects(store.create(sample({ revision: 1 }), { restore: true }), 'EVALIDATION');
+  const restored = await store.create(sample({ title: 'Back' }), { restore: true });
+  assert.equal(restored.revision, 3);
+  assert.equal((await store.get('sample')).title, 'Back');
+  assert.equal((await store.getRevision('sample', 2)).title, 'Two');
+  assert.equal((await store.getRevision('sample', 1)).title, 'Sample');
+  assert.deepEqual((await fs.readdir(path.join(templatesPath, '.history', 'sample'))).sort(), ['r1.json', 'r2.json']);
+  const next = await store.update('sample', 3, { title: 'Four' });
+  assert.equal(next.revision, 4);
+  assert.equal((await store.getRevision('sample', 3)).title, 'Back');
+  // restore on an id that was never removed behaves like create
+  const fresh = await store.create(sample({ templateId: 'fresh' }), { restore: true });
+  assert.equal(fresh.revision, 1);
+});
+
+test('read-only template history is imported on load and served for older revisions', async (t) => {
+  const { store, writable, readOnly, write } = await setupMulti(t);
+  await write(readOnly, { templateId: 'shared', title: 'Rev one' });
+  const loaded = await store.load();
+  assert.equal(loaded.find((e) => e.templateId === 'shared').title, 'Rev one');
+  const historyFile = path.join(writable, '.history', 'shared', 'r1.json');
+  const bytes = await fs.readFile(historyFile, 'utf8');
+  assert.equal(bytes, await fs.readFile(path.join(readOnly, 'shared.json'), 'utf8'));
+  assert.equal((await fs.stat(historyFile)).mode & 0o777, 0o600);
+
+  // git moves the read-only file to revision 2; the old revision stays renderable
+  await write(readOnly, { templateId: 'shared', title: 'Rev two', revision: 2 });
+  assert.equal((await store.get('shared')).revision, 2);
+  assert.equal((await store.getRevision('shared', 1)).title, 'Rev one');
+  assert.equal((await store.getRevision('shared', 2)).title, 'Rev two');
+  assert.deepEqual((await fs.readdir(path.join(writable, '.history', 'shared'))).sort(), ['r1.json', 'r2.json']);
+  // reading again is idempotent
+  assert.equal((await store.list()).find((e) => e.templateId === 'shared').revision, 2);
+});
+
+test('a read-only template whose revision has different history bytes is skipped with a warning', async (t) => {
+  const { store, writable, readOnly, warnings, write } = await setupMulti(t);
+  await write(readOnly, { templateId: 'shared', title: 'Original' });
+  await store.load();
+  await write(readOnly, { templateId: 'shared', title: 'Edited without a bump' });
+
+  assert.equal((await store.list()).some((e) => e.templateId === 'shared'), false);
+  assert.equal(await store.get('shared'), null);
+  assert.ok(warnings.some((w) => /Refusing read-only/.test(w.message) && w.details.templateId === 'shared'));
+  // pinned records still render the original bytes
+  assert.equal((await store.getRevision('shared', 1)).title, 'Original');
+  assert.equal(JSON.parse(await fs.readFile(path.join(writable, '.history', 'shared', 'r1.json'), 'utf8')).title, 'Original');
+  // a refused id is not handed to a later entry, and the warning is not repeated
+  assert.equal(warnings.filter((w) => /Refusing read-only/.test(w.message)).length, 1);
+});
+
+test('a refused read-only template still claims its id against later entries', async (t) => {
+  const { store, readOnly, second, write } = await setupMulti(t);
+  await write(readOnly, { templateId: 'shared', title: 'Original' });
+  await store.load();
+  await write(readOnly, { templateId: 'shared', title: 'Edited' });
+  await write(second, { templateId: 'shared', title: 'Other' });
+  assert.equal(await store.get('shared'), null);
+  assert.equal((await store.list()).some((e) => e.templateId === 'shared'), false);
+});
+
+test('ids are unique across entries: the first read-only entry wins and the collision is logged', async (t) => {
+  const { store, writable, readOnly, second, warnings, write } = await setupMulti(t);
+  await write(readOnly, { templateId: 'dup', title: 'First' });
+  await write(second, { templateId: 'dup', title: 'Second' });
+  const entries = await store.load();
+  assert.equal(entries.find((e) => e.templateId === 'dup').title, 'First');
+  assert.equal((await store.get('dup')).title, 'First');
+  assert.ok(warnings.some((w) => /already provided/.test(w.message) && w.details.file === 'dup.json'));
+  // only the winner's history is imported
+  assert.equal(JSON.parse(await fs.readFile(path.join(writable, '.history', 'dup', 'r1.json'), 'utf8')).title, 'First');
+  await rejects(store.create(sample({ templateId: 'dup' })), 'ECONFLICT');
+  await rejects(store.update('dup', 1, { title: 'x' }), 'EREADONLY');
 });
 
 test('an existing history file with different bytes refuses the update', async (t) => {

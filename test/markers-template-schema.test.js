@@ -292,3 +292,45 @@ test('isMarkerTemplateId and summarizeTemplate', () => {
   assert.equal(summarizeTemplate(withSources()).hasProjections, true);
   assert.equal(summarizeTemplate({ ...minimal(), projections: [] }).hasProjections, false);
 });
+
+test('yaml-pointers write entries: edge is required on regions and refused on points', () => {
+  const ok = withSources();
+  ok.projections[0].write = [
+    { marker: 'a', pointer: '/p' },
+    { marker: 'r', pointer: '/r/start', edge: 'start', unit: 'ms' },
+    { marker: 'r', pointer: '/r/end', edge: 'end', unit: 'seconds' },
+    { marker: 'a', pointer: '/q', unit: 'samples' },
+  ];
+  assert.deepEqual(messages(ok), []);
+
+  const missing = withSources();
+  missing.projections[0].write = [{ marker: 'r', pointer: '/r/start' }];
+  assertRejected(missing, 'write[0].edge');
+
+  const onPoint = withSources();
+  onPoint.projections[0].write = [{ marker: 'a', pointer: '/p', edge: 'start' }];
+  assertRejected(onPoint, 'write[0].edge');
+
+  const badEdge = withSources();
+  badEdge.projections[0].write = [{ marker: 'r', pointer: '/p', edge: 'middle' }];
+  assertRejected(badEdge, 'write[0].edge');
+});
+
+test('yaml-pointers write entries: unit enum, multiple refused, pointer must start with a slash', () => {
+  const unit = withSources();
+  unit.projections[0].write = [{ marker: 'a', pointer: '/p', unit: 'frames' }];
+  assertRejected(unit, 'write[0].unit');
+
+  const multiple = withSources();
+  multiple.markers[0].multiple = true;
+  multiple.projections[0].write = [{ marker: 'a', pointer: '/p' }];
+  assertRejected(multiple, 'write[0].marker');
+  const multipleRegion = withSources();
+  multipleRegion.markers[1].multiple = true;
+  multipleRegion.projections[0].write = [{ marker: 'r', pointer: '/p', edge: 'start' }];
+  assertRejected(multipleRegion, 'write[0].marker');
+
+  const pointer = withSources();
+  pointer.projections[0].write = [{ marker: 'a', pointer: 'p' }];
+  assertRejected(pointer, 'write[0].pointer');
+});

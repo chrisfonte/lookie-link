@@ -429,3 +429,71 @@ test('normalizeRelative accepts only safe relative paths', () => {
     assert.equal(normalizeRelative(bad), null, String(bad));
   }
 });
+
+const DELTA = { sha256: 'd'.repeat(64), basename: 'delta.wav', sampleRate: 48000, frames: 96000 };
+
+function receiptsTemplate(glob, dir) {
+  const tpl = template();
+  tpl.sources[0].locate.glob = glob;
+  tpl.projections[0].receipts.dir = dir;
+  return tpl;
+}
+
+async function copyRecord(root, from, to) {
+  await fs.mkdir(path.dirname(path.join(root, to)), { recursive: true });
+  await fs.copyFile(path.join(root, from), path.join(root, to));
+}
+
+test('a receipt copy of the target under the target directory is not a second match', async (t) => {
+  const { resolver } = await setup(t);
+  const tpl = receiptsTemplate('owned/*/record.yaml', '{target.dir}/passes/owner-edits');
+  const context = await resolver.resolveContext({ template: tpl, audio: DELTA });
+  assert.equal(context.target.relPath, 'owned/delta/record.yaml');
+  const located = await resolver.locateTarget(tpl, 'target', DELTA);
+  assert.equal(located.target.relPath, 'owned/delta/record.yaml');
+});
+
+test('receipt copies reached by the glob are dropped, wildcard substitutions match one segment', async (t) => {
+  const { root, resolver } = await setup(t);
+  await copyRecord(root, 'owned/delta/record.yaml', 'rec/a/record.yaml');
+  await copyRecord(root, 'owned/delta/record.yaml', 'rec/snap/record.yaml');
+  const literal = receiptsTemplate('rec/*/record.yaml', '{target.dir}/../snap');
+  assert.equal((await resolver.locateTarget(literal, 'target', DELTA)).target.relPath, 'rec/a/record.yaml');
+  // Without a receipts directory covering the copy, the same files are ambiguous.
+  const unrelated = receiptsTemplate('rec/*/record.yaml', '{target.dir}/passes/owner-edits');
+  await assert.rejects(resolver.locateTarget(unrelated, 'target', DELTA), (error) => error.status === 409 && error.code === 'ambiguous_target');
+  await copyRecord(root, 'owned/delta/record.yaml', 'wild/a/record.yaml');
+  await copyRecord(root, 'owned/delta/record.yaml', 'wild/20260101-snap/record.yaml');
+  const wild = receiptsTemplate('wild/*/record.yaml', '{target.dir}/../{stamp}-snap');
+  assert.equal((await resolver.locateTarget(wild, 'target', DELTA)).target.relPath, 'wild/a/record.yaml');
+  // A wildcard stands for one path segment only.
+  await copyRecord(root, 'owned/delta/record.yaml', 'deep/a/record.yaml');
+  await copyRecord(root, 'owned/delta/record.yaml', 'deep/b/record.yaml');
+  const segment = receiptsTemplate('deep/*/record.yaml', 'deep/{stamp}/x');
+  await assert.rejects(resolver.locateTarget(segment, 'target', DELTA), (error) => error.code === 'ambiguous_target');
+});
+
+test('two genuine records with the same match value stay ambiguous with a receipts directory declared', async (t) => {
+  const { root, resolver } = await setup(t);
+  await copyRecord(root, 'owned/delta/record.yaml', 'owned/delta-copy/record.yaml');
+  const tpl = receiptsTemplate('owned/*/record.yaml', '{target.dir}/passes/owner-edits');
+  await assert.rejects(resolver.locateTarget(tpl, 'target', DELTA), (error) => error.status === 409 && error.code === 'ambiguous_target');
+  await assert.rejects(resolver.resolveContext({ template: tpl, audio: DELTA }), (error) => error.code === 'ambiguous_target');
+});
+
+test('matches inside .history or .lookie-tmp directories are never targets', async (t) => {
+  const { root, resolver } = await setup(t);
+  for (const reserved of ['.history', '.lookie-tmp']) {
+    await copyRecord(root, 'owned/delta/record.yaml', `keep/${reserved}/one/record.yaml`);
+    await copyRecord(root, 'owned/delta/record.yaml', `keep/${reserved}/two/record.yaml`);
+    const tpl = receiptsTemplate(`keep/${reserved}/*/record.yaml`, '{target.dir}/passes/owner-edits');
+    const located = await resolver.locateTarget(tpl, 'target', DELTA);
+    assert.equal(located.target, null, reserved);
+    assert.match(located.problem, /no target found/, reserved);
+  }
+  // A live record next to such a directory is the only target.
+  await copyRecord(root, 'owned/delta/record.yaml', 'mix/live/record.yaml');
+  await copyRecord(root, 'owned/delta/record.yaml', 'mix/live/.history/record.yaml');
+  const tpl = receiptsTemplate('mix/live/record.yaml', '{target.dir}/passes/owner-edits');
+  assert.equal((await resolver.locateTarget(tpl, 'target', DELTA)).target.relPath, 'mix/live/record.yaml');
+});
