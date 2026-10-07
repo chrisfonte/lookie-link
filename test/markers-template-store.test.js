@@ -182,4 +182,139 @@ test('invalid, mismatched, symlinked and bundled-id files are skipped and logged
 
 test('missing templatesPath option throws', () => {
   assert.throws(() => new MarkerTemplateStore({}), /templatesPath/);
+  assert.throws(() => new MarkerTemplateStore({ templatesPaths: [] }), /templatesPath/);
+  assert.throws(() => new MarkerTemplateStore({ templatesPaths: ['/x', ''] }), /templatesPath/);
+});
+
+async function setupMulti(t) {
+  const dir = await fs.mkdtemp(path.join(process.env.TMPDIR || os.tmpdir(), 'marker-templates-multi-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const warnings = [];
+  const logger = { warn: (message, details) => warnings.push({ message, details }) };
+  const writable = path.join(dir, 'writable');
+  const readOnly = path.join(dir, 'read-only');
+  const second = path.join(dir, 'second');
+  await fs.mkdir(readOnly, { recursive: true });
+  await fs.mkdir(second, { recursive: true });
+  const store = new MarkerTemplateStore({ templatesPaths: [writable, readOnly, second], logger });
+  const write = (directory, overrides) => fs.writeFile(
+    path.join(directory, `${overrides.templateId}.json`),
+    canonicalize({ contractVersion: 1, resourceKind: 'marker-template', revision: 1, ...sample(overrides) }),
+  );
+  return { store, writable, readOnly, second, warnings, write };
+}
+
+test('read-only extra directories list as file templates and refuse mutation', async (t) => {
+  const { store, readOnly, second, warnings, write } = await setupMulti(t);
+  await write(readOnly, { templateId: 'shared', title: 'From first' });
+  await write(second, { templateId: 'shared', title: 'From second' });
+  await write(second, { templateId: 'extra' });
+  await write(readOnly, { templateId: 'freeform' });
+
+  const entries = await store.list();
+  assert.deepEqual(entries.map((e) => e.templateId), ['extra', 'freeform', 'radio-imaging', 'shared', 'song-structure']);
+  const shared = entries.find((e) => e.templateId === 'shared');
+  assert.equal(shared.source, 'file');
+  assert.equal(shared.writable, false);
+  assert.equal(shared.title, 'From first');
+  assert.equal(entries.find((e) => e.templateId === 'freeform').source, 'bundled');
+  assert.ok(warnings.length >= 2);
+  const got = await store.get('extra');
+  assert.equal(got.source, 'file');
+  assert.equal(got.writable, false);
+
+  await rejects(store.update('extra', 1, { title: 'x' }), 'EREADONLY');
+  await rejects(store.remove('extra', 1), 'EREADONLY');
+  await rejects(store.create(sample({ templateId: 'extra' })), 'ECONFLICT');
+  await rejects(store.update('ghost', 1, { title: 'x' }), 'ENOTFOUND');
+  assert.equal((await store.get('extra')).revision, 1);
+});
+
+test('a writable template wins over a read-only one with the same id and logs a warning', async (t) => {
+  const { store, writable, readOnly, warnings, write } = await setupMulti(t);
+  await fs.mkdir(writable, { recursive: true });
+  await write(readOnly, { templateId: 'clash', title: 'Read only' });
+  await write(writable, { templateId: 'clash', title: 'Writable' });
+
+  const entries = await store.list();
+  const clash = entries.find((e) => e.templateId === 'clash');
+  assert.equal(clash.title, 'Writable');
+  assert.equal(clash.source, 'stored');
+  assert.equal(clash.writable, true);
+  assert.ok(warnings.some((w) => w.details && w.details.file === 'clash.json'));
+  assert.equal((await store.get('clash')).title, 'Writable');
+  assert.ok(warnings.some((w) => /shadows/.test(w.message)));
+  const updated = await store.update('clash', 1, { title: 'Edited' });
+  assert.equal(updated.title, 'Edited');
+});
+
+test('update copies the replaced revision to .history and getRevision reads it', async (t) => {
+  const { store, templatesPath } = await setup(t);
+  await store.create(sample());
+  const v1Bytes = await fs.readFile(path.join(templatesPath, 'sample.json'), 'utf8');
+  await store.update('sample', 1, { title: 'Two' });
+  await store.update('sample', 2, { title: 'Three' });
+
+  const historyDir = path.join(templatesPath, '.history', 'sample');
+  assert.deepEqual((await fs.readdir(historyDir)).sort(), ['r1.json', 'r2.json']);
+  assert.equal(await fs.readFile(path.join(historyDir, 'r1.json'), 'utf8'), v1Bytes);
+  assert.equal((await fs.stat(path.join(historyDir, 'r1.json'))).mode & 0o777, 0o600);
+  assert.equal(JSON.parse(await fs.readFile(path.join(historyDir, 'r2.json'), 'utf8')).title, 'Two');
+
+  const first = await store.getRevision('sample', 1);
+  assert.equal(first.title, 'Sample');
+  assert.equal(first.revision, 1);
+  assert.equal(first.writable, false);
+  assert.equal((await store.getRevision('sample', 2)).title, 'Two');
+  const current = await store.getRevision('sample', 3);
+  assert.equal(current.title, 'Three');
+  assert.equal(current.writable, true);
+  assert.equal(await store.getRevision('sample', 4), null);
+  assert.equal(await store.getRevision('sample', 0), null);
+  assert.equal(await store.getRevision('sample', '1'), null);
+  assert.equal(await store.getRevision('ghost', 1), null);
+  assert.equal(await store.getRevision('../x', 1), null);
+  assert.equal((await store.getRevision('freeform', 1)).source, 'bundled');
+  assert.equal(await store.getRevision('freeform', 2), null);
+
+  // .history is not scanned as a template and leaves no temp files behind
+  assert.deepEqual((await store.list()).map((e) => e.templateId), ['freeform', 'radio-imaging', 'sample', 'song-structure']);
+  assert.deepEqual((await fs.readdir(historyDir)).filter((n) => n.endsWith('.tmp')), []);
+});
+
+test('a failed update (stale or invalid) writes no history', async (t) => {
+  const { store, templatesPath } = await setup(t);
+  await store.create(sample());
+  await rejects(store.update('sample', 5, { title: 'x' }), 'ESTALE');
+  await rejects(store.update('sample', 1, { markers: [] }), 'EVALIDATION');
+  await assert.rejects(fs.readdir(path.join(templatesPath, '.history')), { code: 'ENOENT' });
+});
+
+test('remove keeps the final revision in history and a recreated id starts clean', async (t) => {
+  const { store, templatesPath } = await setup(t);
+  await store.create(sample());
+  await store.update('sample', 1, { title: 'Two' });
+  await store.remove('sample', 2);
+  assert.equal(await store.getRevision('sample', 1), null);
+  const archived = (await fs.readdir(path.join(templatesPath, '.history'))).filter((n) => n.startsWith('sample.removed-'));
+  assert.equal(archived.length, 1);
+  assert.deepEqual((await fs.readdir(path.join(templatesPath, '.history', archived[0]))).sort(), ['r1.json', 'r2.json']);
+
+  await store.create(sample({ title: 'Again' }));
+  const updated = await store.update('sample', 1, { title: 'Again two' });
+  assert.equal(updated.revision, 2);
+  assert.equal((await store.getRevision('sample', 1)).title, 'Again');
+});
+
+test('an existing history file with different bytes refuses the update', async (t) => {
+  const { store, templatesPath } = await setup(t);
+  await store.create(sample());
+  const historyDir = path.join(templatesPath, '.history', 'sample');
+  await fs.mkdir(historyDir, { recursive: true });
+  await fs.writeFile(path.join(historyDir, 'r1.json'), '{"other":true}');
+  await rejects(store.update('sample', 1, { title: 'x' }), 'ECONFLICT');
+  assert.equal((await store.get('sample')).revision, 1);
+  // identical bytes (a retry after a crash) are accepted
+  await fs.writeFile(path.join(historyDir, 'r1.json'), canonicalize(await store.getRevision('sample', 1).then(({ source, writable, ...doc }) => doc)));
+  assert.equal((await store.update('sample', 1, { title: 'x' })).revision, 2);
 });

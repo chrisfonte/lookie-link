@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const {
   BUNDLED_IDS,
+  RESERVED_KEYS,
   isMarkerTemplateId,
   summarizeTemplate,
   validateMarkerTemplate,
@@ -65,6 +66,12 @@ function assertRejected(doc, pathFragment) {
   assert.equal(result.valid, false, 'expected invalid');
   assert.ok(result.errors.some((error) => error.path.includes(pathFragment)), `no error at ${pathFragment}: ${JSON.stringify(result.errors)}`);
 }
+
+test('region marker types in radio-imaging allow multiple occurrences', () => {
+  const regions = bundled('radio-imaging').markers.filter((m) => m.kind === 'region');
+  assert.deepEqual(regions.map((m) => m.id), ['voice', 'music', 'effect', 'silence']);
+  for (const marker of regions) assert.equal(marker.multiple, true, marker.id);
+});
 
 test('every bundled template is valid and ids match BUNDLED_IDS', () => {
   assert.deepEqual([...BUNDLED_IDS].sort(), fs.readdirSync(BUNDLED_DIR).map((n) => n.replace(/\.json$/, '')).sort());
@@ -159,7 +166,30 @@ test('keys must be unique single printable characters naming markers', () => {
   assertRejected(minimal({ keys: { a: 'ab' } }), 'keys.a');
   assertRejected(minimal({ keys: { a: ' ' } }), 'keys.a');
   assertRejected(minimal({ keys: { ghost: '1' } }), 'keys.ghost');
-  assert.deepEqual(messages(minimal({ keys: { a: 'm', r: '[' } })), []);
+  assert.deepEqual(messages(minimal({ keys: { a: 'q', r: 'n' } })), []);
+});
+
+test('viewer-reserved keys are refused', () => {
+  assert.deepEqual([...RESERVED_KEYS].sort(), [' ', '+', '-', '0', '?', '[', ']', 'l', 'm', 's']);
+  for (const key of RESERVED_KEYS) {
+    assertRejected(minimal({ keys: { a: key } }), 'keys.a');
+  }
+  assert.deepEqual(messages(minimal({ keys: { a: 'M', r: '1' } })), []);
+});
+
+test('allowZeroLength is an optional boolean on region markers only', () => {
+  const markers = (extra) => [
+    { id: 'a', label: 'A', kind: 'point', color: '#112233' },
+    { id: 'r', label: 'R', kind: 'region', color: '#445566', ...extra },
+  ];
+  assert.deepEqual(messages(minimal({ groups: undefined, markers: markers({ allowZeroLength: true }) })), []);
+  assert.deepEqual(messages(minimal({ groups: undefined, markers: markers({ allowZeroLength: false }) })), []);
+  assertRejected(minimal({ groups: undefined, markers: markers({ allowZeroLength: 'yes' }) }), 'markers[1].allowZeroLength');
+  const onPoint = minimal({
+    groups: undefined,
+    markers: [{ id: 'a', label: 'A', kind: 'point', color: '#112233', allowZeroLength: true }],
+  });
+  assertRejected(onPoint, 'markers[0].allowZeroLength');
 });
 
 test('constraint references must resolve', () => {
@@ -254,7 +284,11 @@ test('isMarkerTemplateId and summarizeTemplate', () => {
   assert.equal(isMarkerTemplateId('../x'), false);
   assert.equal(isMarkerTemplateId(5), false);
   assert.deepEqual(summarizeTemplate(bundled('song-structure'), { source: 'bundled', writable: false }), {
-    templateId: 'song-structure', revision: 1, title: 'Song structure', unit: 'ms', markerCount: 5, source: 'bundled', writable: false,
+    templateId: 'song-structure', revision: 1, title: 'Song structure', unit: 'ms', markerCount: 5, hasProjections: false, source: 'bundled', writable: false,
   });
   assert.equal(summarizeTemplate(minimal()).writable, true);
+  assert.equal(summarizeTemplate(minimal(), { source: 'file' }).writable, false);
+  assert.equal(summarizeTemplate(minimal()).hasProjections, false);
+  assert.equal(summarizeTemplate(withSources()).hasProjections, true);
+  assert.equal(summarizeTemplate({ ...minimal(), projections: [] }).hasProjections, false);
 });

@@ -67,7 +67,7 @@ test('list and get serve bundled templates with summaries', async (t) => {
   assert.equal(list.body.ok, true);
   assert.deepEqual(list.body.templates.map((x) => x.templateId), ['freeform', 'radio-imaging', 'song-structure']);
   assert.deepEqual(list.body.templates[2], {
-    templateId: 'song-structure', revision: 1, title: 'Song structure', unit: 'ms', markerCount: 5, source: 'bundled', writable: false,
+    templateId: 'song-structure', revision: 1, title: 'Song structure', unit: 'ms', markerCount: 5, hasProjections: false, source: 'bundled', writable: false,
   });
   const one = await call('GET', '/api/markers/templates/song-structure');
   assert.equal(one.status, 200);
@@ -239,3 +239,86 @@ async function setupRaw(t) {
   });
   return `http://127.0.0.1:${server.address().port}`;
 }
+
+test('PATCH and DELETE accept expectedRevision, revision as alias, and refuse a mismatch', async (t) => {
+  const { call } = await setup(t);
+  await call('POST', '/api/markers/templates', sample());
+  const canonical = await call('PATCH', '/api/markers/templates/sample', { expectedRevision: 1, title: 'B' });
+  assert.equal(canonical.status, 200);
+  assert.equal(canonical.body.template.revision, 2);
+  assert.equal(canonical.body.template.expectedRevision, undefined);
+  const both = await call('PATCH', '/api/markers/templates/sample', { expectedRevision: 2, revision: 2, title: 'C' });
+  assert.equal(both.status, 200);
+  assert.equal(both.body.template.revision, 3);
+  const alias = await call('PATCH', '/api/markers/templates/sample', { revision: 3, title: 'D' });
+  assert.equal(alias.status, 200);
+
+  const mismatch = await call('PATCH', '/api/markers/templates/sample', { expectedRevision: 4, revision: 3, title: 'E' });
+  assert.equal(mismatch.status, 400);
+  assert.equal(mismatch.body.error.code, 'invalid_request');
+  const badCanonical = await call('PATCH', '/api/markers/templates/sample', { expectedRevision: '4', title: 'E' });
+  assert.equal(badCanonical.status, 400);
+  assert.equal((await call('GET', '/api/markers/templates/sample')).body.template.title, 'D');
+
+  const deleteMismatch = await call('DELETE', '/api/markers/templates/sample', { expectedRevision: 4, revision: 1 });
+  assert.equal(deleteMismatch.status, 400);
+  assert.equal(deleteMismatch.body.error.code, 'invalid_request');
+  const stale = await call('DELETE', '/api/markers/templates/sample', { expectedRevision: 1 });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.currentRevision, 4);
+  const deleted = await call('DELETE', '/api/markers/templates/sample', { expectedRevision: 4 });
+  assert.equal(deleted.status, 200);
+});
+
+test('GET ?revision=N returns the historical document', async (t) => {
+  const { call } = await setup(t);
+  await call('POST', '/api/markers/templates', sample());
+  await call('PATCH', '/api/markers/templates/sample', { expectedRevision: 1, title: 'Two' });
+  const old = await call('GET', '/api/markers/templates/sample?revision=1');
+  assert.equal(old.status, 200);
+  assert.equal(old.body.template.title, 'Sample');
+  assert.equal(old.body.template.revision, 1);
+  assert.equal(old.body.writable, false);
+  const current = await call('GET', '/api/markers/templates/sample?revision=2');
+  assert.equal(current.body.template.title, 'Two');
+  assert.equal((await call('GET', '/api/markers/templates/sample?revision=9')).status, 404);
+  assert.equal((await call('GET', '/api/markers/templates/ghost?revision=1')).status, 404);
+  for (const bad of ['0', 'x', '1.5', '-1', '']) {
+    const response = await call('GET', `/api/markers/templates/sample?revision=${bad}`);
+    assert.equal(response.status, 400, bad);
+    assert.equal(response.body.error.code, 'invalid_request');
+  }
+});
+
+test('non-admin callers do not see sources, projections or image; admins do', async (t) => {
+  const { call, state } = await setup(t);
+  const full = sample({
+    markers: [{ id: 'a', label: 'A', kind: 'point', color: '#112233', snap: 'peaks-src' }],
+    sources: [{ id: 'peaks-src', kind: 'json', root: 'station-audio', locate: { glob: 'x/*.json', match: { pointer: '/id', equals: 'a' } } }],
+    image: { source: 'peaks-src', pathFrom: '/image', plot: { left: 1, right: 10, top: 1, bottom: 10 } },
+    projections: [{ id: 'p', kind: 'rivendell', map: { a: 'START_POINT' } }],
+  });
+  const created = await call('POST', '/api/markers/templates', full);
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  await call('PATCH', '/api/markers/templates/sample', { expectedRevision: 1, title: 'Two' });
+
+  const admin = await call('GET', '/api/markers/templates/sample');
+  assert.ok(admin.body.template.sources && admin.body.template.projections && admin.body.template.image);
+  const adminList = await call('GET', '/api/markers/templates');
+  assert.equal(adminList.body.templates.find((x) => x.templateId === 'sample').hasProjections, true);
+  assert.equal(adminList.body.templates.find((x) => x.templateId === 'freeform').hasProjections, false);
+
+  state.admin = false;
+  for (const route of ['/api/markers/templates/sample', '/api/markers/templates/sample?revision=1']) {
+    const plain = await call('GET', route);
+    assert.equal(plain.status, 200, route);
+    assert.equal(plain.body.template.sources, undefined, route);
+    assert.equal(plain.body.template.projections, undefined, route);
+    assert.equal(plain.body.template.image, undefined, route);
+    assert.equal(plain.body.template.markers[0].id, 'a');
+  }
+  const list = await call('GET', '/api/markers/templates');
+  const summary = list.body.templates.find((x) => x.templateId === 'sample');
+  assert.equal(summary.hasProjections, true);
+  for (const key of ['sources', 'projections', 'image']) assert.equal(summary[key], undefined);
+});

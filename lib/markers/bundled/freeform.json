@@ -10,5 +10,5 @@
     { "id": "note", "label": "Note", "kind": "point", "color": "#4fd8e8", "multiple": true },
     { "id": "span", "label": "Span", "kind": "region", "color": "#9d96f3", "multiple": true }
   ],
-  "keys": { "note": "m" }
+  "keys": { "note": "n" }
 }
