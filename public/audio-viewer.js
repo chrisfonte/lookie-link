@@ -106,6 +106,9 @@
   const REGION = 'region';
   const POINT = 'point';
   const NOTE_TYPE = 'note';
+  const SPAN_TYPE = 'span'; // the free-form region type of the bundled freeform template
+  const isFreeform = (typeId) => typeId === NOTE_TYPE || typeId === SPAN_TYPE;
+  const freeTypeFor = (kind) => (kind === REGION ? SPAN_TYPE : NOTE_TYPE);
   const CAL_KEY = 'lookie.audio.calibrationMs';
   const NAME_KEY = 'lookie.audio.operatorName';
   // Keys the viewer keeps for itself; a template key is never bound to these.
@@ -240,7 +243,7 @@
   });
 
   function setOf(m) {
-    return state.sets.notes && m.type === NOTE_TYPE ? state.sets.notes : state.sets.main;
+    return state.sets.notes && isFreeform(m.type) ? state.sets.notes : state.sets.main;
   }
 
   function setMarkers(set) {
@@ -248,7 +251,7 @@
   }
 
   function isReadOnly(m) {
-    return m.type !== NOTE_TYPE && !(state.template.markers || []).some((t) => t.id === m.type);
+    return !isFreeform(m.type) && !(state.template.markers || []).some((t) => t.id === m.type);
   }
 
   function minLen(m) {
@@ -340,7 +343,8 @@
     if (found) {
       return found;
     }
-    return { id: typeId, label: typeId === NOTE_TYPE ? 'Note' : typeId, kind: null, freeform: true };
+    if (typeId === SPAN_TYPE) return { id: typeId, label: 'Span', kind: REGION, multiple: true, freeform: true };
+    return { id: typeId, label: typeId === NOTE_TYPE ? 'Note' : typeId, kind: typeId === NOTE_TYPE ? POINT : null, multiple: true, freeform: true };
   }
 
   function typeColor(m) {
@@ -370,7 +374,7 @@
   }
 
   function laneIdOf(lanes, m) {
-    if (m.type === NOTE_TYPE) {
+    if (isFreeform(m.type)) {
       return '__notes';
     }
     const lane = lanes.find((l) => l.types.some((type) => type.id === m.type));
@@ -398,7 +402,7 @@
     const kind = raw.kind === REGION || raw.startSample !== undefined ? REGION : POINT;
     const m = {
       id: raw.id || newId(),
-      type: raw.type || NOTE_TYPE,
+      type: raw.type || freeTypeFor(kind),
       kind,
       label: raw.label || '',
       note: raw.note || '',
@@ -500,11 +504,11 @@
   // Add or move a marker. A single-instance type is moved rather than duplicated.
   function placeMarker(def, kind, a, b) {
     const typeId = def.id;
-    let m = !def.multiple && typeId !== NOTE_TYPE ? state.markers.find((x) => x.type === typeId) : null;
+    let m = !def.multiple && !isFreeform(typeId) ? state.markers.find((x) => x.type === typeId) : null;
     if (!m) {
-      state.deleted.delete(!def.multiple && typeId !== NOTE_TYPE ? typeId : '');
+      state.deleted.delete(!def.multiple && !isFreeform(typeId) ? typeId : '');
       m = {
-        id: !def.multiple && typeId !== NOTE_TYPE ? typeId : newId(), type: typeId, kind, label: '', note: '', origin: 'new',
+        id: !def.multiple && !isFreeform(typeId) ? typeId : newId(), type: typeId, kind, label: '', note: '', origin: 'new',
       };
       state.markers.push(m);
     }
@@ -1321,7 +1325,7 @@
   function laneRegionType(laneId) {
     const lane = lanes.find((l) => l.id === laneId);
     if (!lane || lane.notes) {
-      return typeDef(NOTE_TYPE);
+      return typeDef(SPAN_TYPE);
     }
     const active = state.active;
     const preferred = lane.types.find((t) => t.id === active.typeId && t.kind === REGION);
@@ -1437,8 +1441,8 @@
 
   // ---------------------------------------------------------------- marker actions
   function activeDef() {
-    if (state.active.typeId === NOTE_TYPE) {
-      return typeDef(NOTE_TYPE);
+    if (isFreeform(state.active.typeId)) {
+      return typeDef(freeTypeFor(state.active.kind));
     }
     return typeDef(state.active.typeId);
   }
@@ -1485,7 +1489,7 @@
   }
 
   function regionStartKey(event) {
-    const def = state.active.kind === REGION ? activeDef() : typeDef(NOTE_TYPE);
+    const def = state.active.kind === REGION ? activeDef() : typeDef(SPAN_TYPE);
     const tap = heardTime(event);
     state.pending = { typeId: def.id, startSample: tap.sample };
     setStatus(`Region open from ${fmtTime(tap.heard)}. Press ] to close it.`);
@@ -1790,7 +1794,7 @@
 
   function applyActive(value) {
     if (value === 'note:point' || value === 'note:region') {
-      state.active = { typeId: NOTE_TYPE, kind: value === 'note:region' ? REGION : POINT };
+      state.active = value === 'note:region' ? { typeId: SPAN_TYPE, kind: REGION } : { typeId: NOTE_TYPE, kind: POINT };
     } else {
       const def = typeDef(value);
       state.active = { typeId: def.id, kind: def.kind === REGION ? REGION : POINT };
@@ -1799,7 +1803,7 @@
 
   function addAtPlayhead(kind) {
     const t = audio.currentTime;
-    const def = state.active.kind === kind ? activeDef() : typeDef(NOTE_TYPE);
+    const def = state.active.kind === kind ? activeDef() : typeDef(freeTypeFor(kind));
     const sample = clamp(sampleOf(t), 0, state.frames);
     if (kind === POINT) {
       addPointAt(def, sample);
@@ -1895,7 +1899,7 @@
         },
       });
       sameKind.forEach((t) => typeSelect.append(h('option', { value: t.id, text: t.label || t.id })));
-      typeSelect.append(h('option', { value: NOTE_TYPE, text: 'Note' }));
+      typeSelect.append(h('option', { value: freeTypeFor(m.kind), text: m.kind === REGION ? 'Span' : 'Note' }));
       typeSelect.value = m.type;
       root.append(
         h('h3', { text: `${def.label || m.type} (${m.kind})` }),
