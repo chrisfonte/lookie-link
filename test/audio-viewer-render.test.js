@@ -129,3 +129,46 @@ test('the client builds the reason hint and the play-from-here action with textC
   assert.match(source, /lookie\.audio\.tapOnRelease/);
   assert.ok(!/\.innerHTML\s*=/.test(source), 'no innerHTML assignment');
 });
+
+test('the page carries the record panel, the skipped-template notice and the problems list', () => {
+  const html = renderAudioPage(OPTIONS);
+  assert.match(html, /<section class="am-recordpanel" aria-label="Record details">/);
+  assert.match(html, /<button[^>]*data-am="record-toggle"[^>]*aria-expanded="true"[^>]*aria-controls="am-record-body"/);
+  assert.match(html, /<div class="am-record-body" id="am-record-body" data-am="record-details"><\/div>/);
+  assert.match(html, /<p class="am-notice" data-am="skipped" role="status" hidden><\/p>/);
+  assert.match(html, /data-am="checks" hidden/);
+  // The record panel sits in the side column, under the inspector.
+  assert.ok(html.indexOf('data-am="inspector"') < html.indexOf('data-am="record-details"'));
+  // The status line has no block-size note; that moved to the help panel and the waveform title.
+  assert.ok(!/data-am="resnote"/.test(html));
+});
+
+test('the toolbar groups transport, view and tap controls on one row', () => {
+  const html = renderAudioPage(OPTIONS);
+  const first = html.indexOf('aria-label="Playback and view"');
+  const second = html.indexOf('aria-label="Marker set"');
+  const row = html.slice(first, second);
+  for (const group of ['am-transport', 'am-view', 'am-taps']) {
+    assert.ok(row.includes(group), `${group} group in the first row`);
+  }
+  for (const hook of ['play', 'loop', 'rate', 'zoom-out', 'zoom-fit', 'zoom-in', 'cal', 'tap-release', 'snap', 'help']) {
+    assert.ok(row.includes(`data-am="${hook}"`), `${hook} in the first row`);
+  }
+  for (const hook of ['template', 'record', 'type', 'add-point', 'add-region']) {
+    assert.ok(html.slice(second).includes(`data-am="${hook}"`), `${hook} in the second row`);
+  }
+});
+
+test('the client renders details, documents, notes and the skipped notice through textContent', () => {
+  const nodeFs = require('node:fs');
+  const nodePath = require('node:path');
+  const source = nodeFs.readFileSync(nodePath.join(__dirname, '..', 'public', 'audio-viewer.js'), 'utf8');
+  assert.match(source, /function renderRecordPanel\(/);
+  assert.match(source, /function renderSkipped\(/);
+  assert.match(source, /template file\$\{list\.length === 1 \? '' : 's'\} skipped: /);
+  assert.match(source, /No record notes\./);
+  assert.match(source, /'truncated'/);
+  assert.match(source, /Saving\\u2026/);
+  assert.match(source, /No record found for this file; save without write-back or pick another template\./);
+  assert.ok(!/\.innerHTML\s*=|insertAdjacentHTML/.test(source), 'no HTML injection');
+});

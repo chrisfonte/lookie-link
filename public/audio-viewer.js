@@ -231,7 +231,9 @@
     tapOnRelease: false,
     lastTap: null,
     preview: null,
-    sizes: { w: 0, waveH: 0, rulerH: 28, imageH: 0 },
+    saving: false,
+    skipped: [],
+    sizes: { w: 0, waveH: 0, rulerH: 26, imageH: 0 },
     ready: false,
   };
 
@@ -822,9 +824,9 @@
     const box = ui.stage.getBoundingClientRect();
     state.sizes.w = Math.max(0, Math.floor(box.width));
     const narrow = state.sizes.w < 600;
-    const perChannel = narrow ? 64 : 96;
-    state.sizes.waveH = Math.max(1, state.channels) * perChannel;
-    state.sizes.imageH = state.context && state.context.image ? (narrow ? 72 : 96) : 0;
+    const total = narrow ? 168 : 240;
+    state.sizes.waveH = Math.max(1, state.channels) * Math.floor(total / Math.max(1, state.channels));
+    state.sizes.imageH = state.context && state.context.image ? (narrow ? 64 : 72) : 0;
   }
 
   function drawWave() {
@@ -862,14 +864,18 @@
             v = value;
           }
         }
+        if (v === 0) {
+          continue; // true silence stays the quiet centre line instead of a bright bar
+        }
         const half = (v / 32768) * (chH / 2);
         ctx.fillRect(px, cy - half, 1, Math.max(1, half * 2));
       }
     }
     const blockPx = ((bs / sr) / view.span) * w;
-    ui.resnote.textContent = blockPx > 2
-      ? `${((bs / sr) * 1000).toFixed(0)} ms blocks: flat steps, no detail below this. Use typed samples, nudge or snap for precision.`
-      : '';
+    const base = 'Click or drag to scrub. Wheel zooms.';
+    ui['wave-box'].title = blockPx > 2
+      ? `${base} Drawn in ${((bs / sr) * 1000).toFixed(0)} ms blocks: flat steps, no detail below this.`
+      : base;
   }
 
   function niceStep(span, w) {
@@ -1220,20 +1226,36 @@
       }
     });
     lanes.forEach((lane) => ghostEls(lane.id).forEach((g) => laneEls.get(lane.id).append(g)));
-    // Point flags that would overlap drop to a second row so each stays clickable.
+    // Point flags that would overlap drop to a second row so each stays clickable. A flag that
+    // would run past the right edge flips to the left of its line, so it is never clipped.
+    const laneW = state.sizes.w;
     laneEls.forEach((el) => {
       const rowEnd = [-Infinity, -Infinity];
-      Array.from(el.querySelectorAll('.am-point.am-marker')).sort((a, b) => parseFloat(a.style.left) - parseFloat(b.style.left)).forEach((node) => {
+      let stacked = false;
+      const flags = Array.from(el.querySelectorAll('.am-point.am-marker')).map((node) => {
         const x = parseFloat(node.style.left);
-        const width = Math.min(176, 18 + (node.textContent || '').length * 6.4);
-        let row = rowEnd.findIndex((end) => x >= end);
+        const flag = node.querySelector('.am-flag');
+        const width = (flag && flag.offsetWidth) || Math.min(176, 18 + (node.textContent || '').length * 6.4);
+        const flip = laneW > 0 && x + width > laneW - 2 && x - width >= 0;
+        if (flip) {
+          node.classList.add('am-flip');
+        }
+        return { node, start: flip ? x - width : x, end: flip ? x : x + width };
+      }).sort((a, b) => a.start - b.start);
+      flags.forEach(({ node, start, end }) => {
+        let row = rowEnd.findIndex((limit) => start >= limit);
         if (row < 0) {
           row = rowEnd[0] <= rowEnd[1] ? 0 : 1;
         }
-        rowEnd[row] = x + width;
+        rowEnd[row] = end + 2;
+        stacked = stacked || row > 0;
         node.style.setProperty('--am-row', String(row));
       });
+      el.classList.toggle('am-lane-stacked', stacked);
     });
+    if (!state.markers.length && laneEls.has('__notes')) {
+      laneEls.get('__notes').append(h('span', { class: 'am-lane-empty', text: 'No markers yet. Press m while playing to add one.' }));
+    }
     const sources = (state.context && state.context.sources) || [];
     sources.forEach((source) => {
       const as = source.as || {};
@@ -1652,6 +1674,7 @@
         h('dl', {}, HELP.map(([key, text]) => [h('dt', { text: key }), h('dd', { text })])),
         h('p', { class: 'am-muted', text: 'Taps while playing are corrected for output latency: the heard time is the pressed time minus the output and base latency and your calibration offset.' }),
         h('p', { class: 'am-muted', text: 'Set the Cal (ms) field in the top bar to shift taps earlier (positive) or later (negative) for your output device.' }),
+        h('p', { class: 'am-muted', text: `The waveform is drawn from ${((state.blockSize / state.sampleRate) * 1000).toFixed(0)} ms blocks, so zoomed in far it shows flat steps and no detail below a block. Use typed samples, nudge or snap for precision.` }),
       );
     }
   }
@@ -1837,6 +1860,21 @@
     }
   }
 
+  const SKIPPED_SHOWN = 4;
+
+  // "<n> template file(s) skipped: <file> (<reason>)"; every value goes in through textContent.
+  function renderSkipped() {
+    const list = (Array.isArray(state.skipped) ? state.skipped : []).filter((item) => item && item.file);
+    ui.skipped.hidden = list.length === 0;
+    if (!list.length) {
+      ui.skipped.textContent = '';
+      return;
+    }
+    const shown = list.slice(0, SKIPPED_SHOWN).map((item) => `${item.file}${item.reason ? ` (${item.reason})` : ''}`);
+    const more = list.length > SKIPPED_SHOWN ? `; and ${list.length - SKIPPED_SHOWN} more` : '';
+    ui.skipped.textContent = `${list.length} template file${list.length === 1 ? '' : 's'} skipped: ${shown.join('; ')}${more}`;
+  }
+
   function renderPickers() {
     const templateSelect = ui.template;
     templateSelect.textContent = '';
@@ -1977,7 +2015,6 @@
     const root = ui.inspector;
     root.textContent = '';
     const m = selectedMarker();
-    const problems = validate();
     if (m) {
       const def = typeDef(m.type);
       const sameKind = (state.template.markers || []).filter((t) => t.kind === m.kind);
@@ -1994,10 +2031,10 @@
       root.append(
         h('h3', { text: `${def.label || m.type} (${m.kind})` }),
         field('Type', typeSelect),
-        m.kind === REGION
+        ...(m.kind === REGION
           ? [positionRow(m, 'startSample', 'Start'), positionRow(m, 'endSample', 'End'),
             h('p', { class: 'am-muted', text: `Length ${fmtUnit(m.endSample - m.startSample)}` })]
-          : positionRow(m, 'sample', 'Position'),
+          : [positionRow(m, 'sample', 'Position')]),
         field('Label', h('input', {
           type: 'text', value: m.label || '', 'data-am-field': 'label', maxlength: '200',
           oninput: (event) => { m.label = event.target.value; drawOverlay(); renderLanes(); renderSavebar(); },
@@ -2066,20 +2103,94 @@
       });
       root.append(box);
     }
-    const checks = h('div', { class: 'am-checks', 'data-am': 'checks' });
-    if (problems.length) {
-      checks.append(h('h4', { text: `${problems.length} problem${problems.length === 1 ? '' : 's'} blocking Save` }),
-        h('ul', {}, problems.map((p) => h('li', {
-          text: p.message,
-          class: 'am-check',
-          onclick: () => {
-            const target = p.markerId ? findMarker(p.markerId) : null;
-            if (target) { selectMarker(target, 'whole'); redrawMarkers(); }
-          },
-        }))));
-    }
-    root.append(checks);
+    renderChecks();
   }
+
+  // The problems that block Save, listed under the lanes so they are never hidden in a collapsed panel.
+  function renderChecks() {
+    const root = ui.checks;
+    const problems = validate();
+    root.textContent = '';
+    root.hidden = problems.length === 0;
+    if (!problems.length) {
+      return;
+    }
+    root.append(h('h4', { text: `${problems.length} marker problem${problems.length === 1 ? '' : 's'} blocking Save` }),
+      h('ul', {}, problems.map((p) => {
+        const target = p.markerId ? findMarker(p.markerId) : null;
+        const item = h('li', { class: 'am-check' });
+        if (target) {
+          item.append(h('button', {
+            type: 'button', class: 'am-check-link', text: p.message,
+            title: 'Select this marker',
+            onclick: () => { selectMarker(target, 'whole'); redrawMarkers(); focusMarker(target.id); },
+          }));
+        } else {
+          item.textContent = p.message;
+        }
+        return item;
+      })));
+  }
+
+  // ---------------------------------------------------------------- record details panel
+  function detailValue(detail) {
+    const value = detail.value;
+    if (detail.kind === 'list') {
+      const items = Array.isArray(value) ? value : (value === undefined || value === null || value === '' ? [] : [value]);
+      if (!items.length) {
+        return null;
+      }
+      return h('ul', { class: 'am-detail-list' }, items.map((item) => h('li', { text: typeof item === 'string' ? item : JSON.stringify(item) })));
+    }
+    if (value === undefined || value === null || value === '') {
+      return null;
+    }
+    if (detail.kind === 'yaml') {
+      return h('pre', { class: 'am-detail-pre', tabindex: '0', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) });
+    }
+    return h('span', { text: typeof value === 'string' ? value : (typeof value === 'object' ? JSON.stringify(value) : String(value)) });
+  }
+
+  function noteRows() {
+    return state.markers
+      .filter((m) => m.origin === 'record' && (m.label || m.note))
+      .map((m) => ({ label: m.label || typeDef(m.type).label || m.type, note: m.note || '', at: fmtUnit(startOf(m)) }));
+  }
+
+  function renderRecordPanel() {
+    const root = ui['record-details'];
+    root.textContent = '';
+    const context = state.context || {};
+    const details = Array.isArray(context.details) ? context.details : [];
+    const documents = Array.isArray(context.documents) ? context.documents : [];
+    const rows = details.map((detail) => ({ detail, node: detailValue(detail) })).filter((row) => row.node);
+    if (rows.length) {
+      const list = h('dl', { class: 'am-kv am-details', 'data-am': 'details' });
+      rows.forEach(({ detail, node }) => {
+        list.append(h('dt', { text: detail.label || detail.id }), h('dd', { 'data-detail-id': detail.id }, node));
+      });
+      root.append(list);
+    }
+    documents.forEach((doc) => {
+      const head = h('div', { class: 'am-doc-head' }, h('span', { class: 'am-doc-label', text: doc.label || doc.id, title: doc.path || '' }));
+      if (doc.truncated) {
+        head.append(h('span', { class: 'am-badge', text: 'truncated', title: 'Only the start of this document is shown.' }));
+      }
+      root.append(h('div', { class: 'am-doc', 'data-doc-id': doc.id },
+        head, h('pre', { class: 'am-detail-pre am-doc-text', tabindex: '0', text: String(doc.text === undefined || doc.text === null ? '' : doc.text) })));
+    });
+    if (!rows.length && !documents.length) {
+      const notes = noteRows();
+      if (notes.length) {
+        const list = h('dl', { class: 'am-kv am-details', 'data-am': 'record-notes' });
+        notes.forEach((n) => list.append(h('dt', { text: `${n.label} at ${n.at}` }), h('dd', { text: n.note || 'No note' })));
+        root.append(list);
+      } else {
+        root.append(h('p', { class: 'am-muted', 'data-am': 'record-empty', text: 'No record notes.' }));
+      }
+    }
+  }
+
 
   // ---------------------------------------------------------------- save bar
   function projectionDefs() {
@@ -2110,42 +2221,46 @@
       onchange: (event) => saveOperatorName(event.target.value.trim()),
       oninput: (event) => { state.operatorName = event.target.value; },
     });
-    root.append(h('div', { class: 'am-save-row' }, field('Reason', reason), field('Saved as (display name)', operator)));
+    root.append(h('div', { class: 'am-save-row' }, field('Reason', reason), field('Saved as', operator)));
 
+    let projectionSelect = null;
+    let accept = null;
     if (projections.length) {
-      const projectionSelect = h('select', { 'aria-label': 'Write-back target', 'data-am-field': 'projection' },
+      projectionSelect = h('select', { 'aria-label': 'Write-back target', 'data-am-field': 'projection' },
         projections.map((p) => h('option', { value: p.id, text: p.label || p.id })));
       projectionSelect.value = projections.some((p) => p.id === projValue) ? projValue : projections[0].id;
       const acceptable = projections.some((p) => p.status || p.acceptable || p.canAccept);
-      let accept = null;
       if (acceptable) {
         accept = h('input', { type: 'checkbox', 'data-am-field': 'accept' });
         accept.checked = acceptValue;
       }
-      root.append(h('div', { class: 'am-save-row' }, field('Write back to', projectionSelect),
-        accept ? h('label', { class: 'am-check-inline' }, accept, ' Mark accepted') : null));
+      const row = [field('Write back to', projectionSelect)];
+      if (accept) {
+        row.push(h('label', { class: 'am-check-inline am-accept' }, accept, ' Mark accepted'));
+      }
+      root.append(h('div', { class: 'am-save-row am-save-target' }, row));
     }
 
-    const buttons = h('div', { class: 'am-actions' },
-      h('button', { type: 'button', class: 'am-btn am-btn-primary', 'data-am': 'save', text: 'Save', onclick: () => doSaveAll(false) }));
+    // One strong action: with a projection it is "Save and write back"; the plain save is a quiet alternative.
+    const buttons = h('div', { class: 'am-actions' });
     if (projections.length) {
       buttons.append(
-        h('button', { type: 'button', class: 'am-btn', 'data-am': 'preview', text: 'Preview write-back', onclick: () => doPreview() }),
         h('button', { type: 'button', class: 'am-btn am-btn-primary', 'data-am': 'save-write', text: 'Save and write back', onclick: () => doSaveAll(true) }),
+        h('button', { type: 'button', class: 'am-btn am-btn-text', 'data-am': 'preview', text: 'Preview write-back', onclick: () => doPreview() }),
+        h('button', { type: 'button', class: 'am-btn am-btn-text', 'data-am': 'save', text: 'Save without write-back', onclick: () => doSaveAll(false) }),
       );
+    } else {
+      buttons.append(h('button', { type: 'button', class: 'am-btn am-btn-primary', 'data-am': 'save', text: 'Save', onclick: () => doSaveAll(false) }));
     }
-    const reasonHint = h('span', { class: 'am-muted am-reason-hint', 'data-am': 'reason-hint', role: 'status', hidden: 'hidden' });
-    buttons.append(reasonHint);
-    buttons.append(h('span', { class: `am-dirty${isDirty(main) ? ' am-on' : ''}`, text: isDirty(main) ? 'Unsaved changes' : 'All changes saved' }));
     root.append(buttons);
+    const reasonHint = h('p', { class: 'am-muted am-save-hint', 'data-am': 'reason-hint', role: 'status', hidden: 'hidden' });
+    root.append(reasonHint);
 
     let notesButton = null;
-    if (notes) {
-      notesButton = h('button', { type: 'button', class: 'am-btn', 'data-am': 'save-notes', text: 'Save notes', onclick: () => doSave(notes, false) });
-      root.append(h('div', { class: 'am-actions am-actions-notes' },
-        notesButton,
-        h('span', { class: 'am-muted', text: 'Notes are their own freeform set.' }),
-        h('span', { class: `am-dirty${isDirty(notes) ? ' am-on' : ''}`, text: isDirty(notes) ? 'Unsaved notes' : 'Notes saved' })));
+    if (notes && needsSave(notes)) {
+      notesButton = h('button', { type: 'button', class: 'am-btn am-btn-text', 'data-am': 'save-notes', text: 'Save notes', onclick: () => doSave(notes, false) });
+      root.append(h('div', { class: 'am-actions am-actions-notes' }, notesButton,
+        h('span', { class: 'am-muted', text: 'Notes are their own freeform set.' })));
     }
     if (main.record && main.latestId && main.record.recordId !== main.latestId) {
       root.append(h('p', { class: 'am-muted', text: 'You are viewing an older set. Saving writes a new set on top of the latest.' }));
@@ -2159,23 +2274,38 @@
       root.append(previewPanel(state.preview.projection || state.preview));
     }
 
+    // The hint names the one thing that currently stops Save (or Save and write back), updated live.
     function applyButtonState() {
       const reasonOk = !needsReason || reason.value.trim().length > 0;
       const mainProblems = validate('main');
-      const save = buttons.querySelector('[data-am="save"]');
+      const allProblems = validate();
+      const noTarget = projections.length > 0 && Boolean(state.context) && !state.context.target;
       const ok = mainProblems.length === 0 && reasonOk;
       const notesOk = !notes || validate('notes').length === 0;
       const mainNeeds = needsSave(main);
       const notesNeeds = needsSave(notes);
-      save.disabled = !(mainNeeds ? ok && notesOk : notesNeeds && notesOk);
-      buttons.querySelectorAll('[data-am="preview"],[data-am="save-write"]').forEach((b) => { b.disabled = !ok; });
-      const why = mainProblems.length ? 'Fix the listed problems first.' : (!reasonOk ? 'A reason is required for this template.' : '');
-      buttons.querySelectorAll('button').forEach((b) => { b.title = b.disabled ? why : ''; });
-      reasonHint.textContent = reasonOk ? '' : 'Type a reason to enable Save.';
-      reasonHint.hidden = reasonOk;
+      const save = buttons.querySelector('[data-am="save"]');
+      let hint = '';
+      if (state.saving) {
+        hint = 'Saving\u2026';
+      } else if (allProblems.length) {
+        hint = `Fix the ${allProblems.length} marker problem${allProblems.length === 1 ? '' : 's'} above to save.`;
+      } else if (!reasonOk) {
+        hint = 'Type a reason to enable Save.';
+      } else if (!mainNeeds && !notesNeeds) {
+        hint = 'All changes saved.';
+      } else if (noTarget) {
+        hint = 'No record found for this file; save without write-back or pick another template.';
+      } else if (isDirty()) {
+        hint = 'Unsaved changes.';
+      }
+      save.disabled = state.saving || !(mainNeeds ? ok && notesOk : notesNeeds && notesOk);
+      buttons.querySelectorAll('[data-am="preview"],[data-am="save-write"]').forEach((b) => { b.disabled = state.saving || !ok || noTarget; });
+      buttons.querySelectorAll('button').forEach((b) => { b.title = b.disabled && hint ? hint : ''; });
+      reasonHint.textContent = hint;
+      reasonHint.hidden = !hint;
       if (notesButton) {
-        const notesOk = validate('notes').length === 0;
-        notesButton.disabled = !notesOk || !needsSave(notes);
+        notesButton.disabled = state.saving || !notesOk || !needsSave(notes);
         notesButton.title = notesButton.disabled && !notesOk ? 'Fix the listed problems first.' : '';
       }
     }
@@ -2295,7 +2425,8 @@
     }
     state.preview = null;
     const p = result.record && result.record.projection;
-    setStatus(`Saved record ${shortHash(result.record && result.record.recordId)}${p ? `; write-back ${p.status || 'applied'}` : ''}.`);
+    const recordId = shortHash(result.record && result.record.recordId);
+    setStatus(p ? `Saved and written back. Record ${recordId}, write-back ${p.status || 'applied'}.` : `Saved record ${recordId}.`);
     refreshHistory(set);
   }
 
@@ -2319,7 +2450,8 @@
       setAlert('Fix the listed problems before saving.');
       return;
     }
-    ui.savebar.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+    state.saving = true;
+    renderSavebar();
     for (let i = 0; i < steps.length; i += 1) {
       try {
         // eslint-disable-next-line no-await-in-loop
@@ -2332,8 +2464,10 @@
         break;
       }
     }
+    state.saving = false;
     redrawMarkers();
     renderPickers();
+    renderRecordPanel();
   }
 
   async function doSave(set, useProjection) {
@@ -2342,14 +2476,17 @@
       setAlert('Fix the listed problems before saving.');
       return;
     }
-    ui.savebar.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+    state.saving = true;
+    renderSavebar();
     try {
       await saveOne(set, useProjection);
     } catch (error) {
       showError(error);
     }
+    state.saving = false;
     redrawMarkers();
     renderPickers();
+    renderRecordPanel();
   }
 
   function adoptRecord(set, record) {
@@ -2468,6 +2605,7 @@
       (!markersOn || boot.templateId === 'freeform') ? Promise.resolve(null) : api.template('freeform').catch(() => null),
     ]);
     state.templates = templateList.templates || [];
+    state.skipped = Array.isArray(templateList.skipped) ? templateList.skipped : [];
     state.template = (template && template.template) || (boot.templateId === 'freeform' ? FREEFORM_TEMPLATE : { ...FREEFORM_TEMPLATE, templateId: boot.templateId });
     if (!template && boot.templateId !== 'freeform') {
       setAlert(`Template ${boot.templateId} could not be loaded; showing it as freeform.`);
@@ -2490,6 +2628,7 @@
     loadImage();
 
     renderPickers();
+    renderSkipped();
     bindEvents();
     new ResizeObserver(() => drawAll()).observe(ui.stage);
     new MutationObserver(() => drawAll()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-color-scheme'] });
@@ -2499,6 +2638,7 @@
     }
     drawAll();
     redrawMarkers();
+    renderRecordPanel();
     renderLatency();
     const bits = [`${state.template.title || state.template.templateId}${state.template.revision ? ` rev ${state.template.revision}` : ''}`];
     if (state.record) {
@@ -2564,9 +2704,16 @@
       ui['inspector-toggle'].setAttribute('aria-expanded', String(open));
       app.classList.toggle('am-inspector-closed', !open);
     });
+    ui['record-toggle'].addEventListener('click', () => {
+      const open = ui['record-toggle'].getAttribute('aria-expanded') !== 'true';
+      ui['record-toggle'].setAttribute('aria-expanded', String(open));
+      app.classList.toggle('am-record-closed', !open);
+    });
     if (window.matchMedia('(max-width: 800px)').matches) {
       ui['inspector-toggle'].setAttribute('aria-expanded', 'false');
       app.classList.add('am-inspector-closed');
+      ui['record-toggle'].setAttribute('aria-expanded', 'false');
+      app.classList.add('am-record-closed');
     }
     ui['wave-box'].addEventListener('pointerdown', onScrubDown);
     ui.ruler.addEventListener('pointerdown', onScrubDown);

@@ -118,6 +118,20 @@ async function stage(base) {
   await fs.writeFile(targetPath, source);
   await fs.writeFile(path.join(projectionRoot, 'notes', 'first-pass.yaml'), 'earlier pass\n');
   await fs.writeFile(path.join(templatesDir, 'demo-projection.json'), JSON.stringify(PROJECTION_TEMPLATE('demo'), null, 2));
+  await fs.writeFile(path.join(templatesDir, 'needs-markers.json'), JSON.stringify({
+    contractVersion: 1,
+    resourceKind: 'marker-template',
+    templateId: 'needs-markers',
+    revision: 1,
+    title: 'Needs markers',
+    unit: 'ms',
+    markers: [
+      {id: 'hook', label: 'Hook', kind: 'point', color: '#4fd8e8', required: true},
+      {id: 'tail', label: 'Tail', kind: 'point', color: '#e1886e', required: true},
+    ],
+    keys: {hook: 'h', tail: 't'},
+  }, null, 2));
+  await fs.writeFile(path.join(templatesDir, 'broken-template.json'), '{ this is not a template');
   const cliLog = path.join(base, 'cli.log');
   process.env.FAKE_LOG = cliLog;
   process.env.FAKE_VALIDATOR_LOG = path.join(base, 'validator.log');
@@ -221,6 +235,11 @@ async function statusIs(page, pattern) {
     }));
     throw new Error(`status never matched ${pattern}: ${JSON.stringify(seen)}`, {cause: error});
   }
+}
+
+// The hint is redrawn once a save settles, a beat after the status line changes.
+async function hintIs(page, text) {
+  await page.waitForFunction((want) => document.querySelector('[data-am="reason-hint"]').textContent.trim() === want, text, {timeout: 15000});
 }
 
 async function openInspector(page) {
@@ -339,7 +358,8 @@ async function projection(browser, env, viewport, label) {
   assert.deepEqual(await fs.readdir(path.join(env.projectionRoot, 'pieces', 'alpha')), ['record.yaml'], 'no receipts from a preview');
 
   await page.locator('[data-am="save-write"]').click();
-  await statusIs(page, /write-back applied/);
+  await statusIs(page, /Saved and written back/);
+  await hintIs(page, 'All changes saved.');
   const after = yaml.load(await fs.readFile(env.targetPath, 'utf8'));
   assert.equal(after.result.start_sample, moved, 'target start changed to the saved marker');
   assert.equal(after.result.windows[0].start_sample, moved);
@@ -583,21 +603,187 @@ await context.close();
 }
 
 async function reasonHint(browser, env, viewport, label) {
-  const {context, page} = await openViewer(browser, env.origin, viewport, '?template=song-structure');
+  const {context, page} = await openViewer(browser, env.origin, viewport, '?template=needs-markers');
   const hint = page.locator('[data-am="reason-hint"]');
-  assert.equal(await hint.isVisible(), true, `${label}: hint shows while the reason is empty`);
-  assert.equal((await hint.textContent()).trim(), 'Type a reason to enable Save.');
+  assert.equal(await hint.isVisible(), true, `${label}: hint shows while Save is disabled`);
   assert.equal(await page.locator('[data-am="save"]').isDisabled(), true);
+  // Constraint problems come first: the hint counts them and the list under the lanes names each one.
+  const problemCount = await page.locator('[data-am="checks"] li').count();
+  assert.ok(problemCount > 0, `${label}: the template starts with marker problems`);
+  assert.equal(await page.locator('[data-am="checks"]').isVisible(), true, `${label}: problems are listed near the lanes`);
+  assert.equal((await hint.textContent()).trim(), `Fix the ${problemCount} marker problem${problemCount === 1 ? '' : 's'} above to save.`);
+  for (const text of await page.locator('[data-am="checks"] li').allTextContents()) {
+    assert.match(text, /\S+: \S/, `${label}: each problem names the marker and the rule (${text})`);
+  }
   await page.locator('[data-am-field="reason"]').fill('Because');
-  assert.equal(await hint.isVisible(), false, `${label}: hint goes away once a reason is typed`);
-  assert.equal(await hint.textContent(), '');
+  assert.match(await hint.textContent(), /marker problems? above to save/, `${label}: a reason does not hide the problems`);
+  assert.equal(await page.locator('[data-am="save"]').isDisabled(), true);
+  // Place what the template requires: the problems clear, then only the reason can block Save.
+  for (const type of ['hook', 'tail']) {
+    await page.locator('[data-am="type"]').selectOption(type);
+    await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 1 + Math.random(); });
+    await page.locator('[data-am="add-point"]').click();
+  }
+  assert.equal(await page.locator('[data-am="checks"] li').count(), 0, `${label}: placing both clears the problems`);
+  assert.equal(await page.locator('[data-am="checks"]').isVisible(), false);
+  assert.equal((await hint.textContent()).trim(), 'Unsaved changes.', `${label}: nothing blocks Save once a reason is typed`);
+  assert.equal(await page.locator('[data-am="save"]').isDisabled(), false);
   await page.locator('[data-am-field="reason"]').fill('');
-  assert.equal(await hint.isVisible(), true, `${label}: hint returns when the reason is cleared`);
+  assert.equal((await hint.textContent()).trim(), 'Type a reason to enable Save.', `${label}: the reason hint returns when it is cleared`);
   await context.close();
 
   const free = await openViewer(browser, env.origin, viewport, '?template=freeform');
-  assert.equal(await free.page.locator('[data-am="reason-hint"]').isVisible(), false, `${label}: no hint for the freeform template`);
+  assert.doesNotMatch(await free.page.locator('[data-am="reason-hint"]').textContent(), /reason/, `${label}: no reason prompt for the freeform template`);
   await free.context.close();
+}
+
+
+// ---------------------------------------------------------------- batch 2: record panel, skipped notice, design pass
+
+// Lane K adds details/documents to the context response and skipped to the template list;
+// these helpers add the same shapes on top of whatever the server returns so the viewer is
+// proved against the contract either way.
+const DETAILS = [
+  {id: 'title', label: 'Title', kind: 'text', value: 'Demo piece'},
+  {id: 'tags', label: 'Tags', kind: 'list', value: ['alpha', 'beta']},
+  {id: 'raw', label: 'Raw block', kind: 'yaml', value: 'result:\n  start_sample: 48000\n'},
+  {id: 'hostile', label: 'Hostile', kind: 'text', value: '<img src=x onerror="window.__pwned=1">'},
+];
+const DOCUMENTS = [
+  {id: 'notes', label: 'Notes file', text: 'First line of the notes\nSecond line', truncated: true, path: 'notes/first-pass.yaml'},
+];
+
+async function stubContext(page, patch) {
+  await page.route('**/api/markers/context**', async (route) => {
+    const response = await route.fetch();
+    let body = {};
+    try { body = await response.json(); } catch { body = {}; }
+    await route.fulfill({response, json: patch(body)});
+  });
+}
+
+async function stubSkipped(page) {
+  await page.route('**/api/markers/templates', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    if (!Array.isArray(body.skipped) || !body.skipped.length) {
+      body.skipped = [{file: 'broken-template.json', source: 'templates', reason: 'not valid JSON'}];
+    }
+    await route.fulfill({response, json: body});
+  });
+}
+
+async function recordPanel(browser, env, viewport, label) {
+  const phone = viewport.width < 600;
+  const context = await browser.newContext({viewport});
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await stubContext(page, (body) => ({...body, details: DETAILS, documents: DOCUMENTS}));
+  await stubSkipped(page);
+  await page.goto(`${env.origin}/view/${REPO}/${FILE}?template=demo-projection`);
+  await page.waitForFunction(() => window.__audioMarkers && window.__audioMarkers.ready, null, {timeout: 30000});
+
+  const toggle = page.locator('[data-am="record-toggle"]');
+  assert.equal(await toggle.getAttribute('aria-expanded'), phone ? 'false' : 'true', `${label}: Record panel ${phone ? 'collapsed on phone' : 'expanded on desktop'}`);
+  assert.equal(await page.locator('[data-am="record-details"]').isVisible(), !phone);
+  if (phone) await toggle.click();
+  assert.equal(await page.locator('[data-am="record-details"]').isVisible(), true);
+
+  const details = page.locator('[data-am="record-details"]');
+  assert.equal(await details.locator('[data-detail-id="title"]').textContent(), 'Demo piece');
+  assert.deepEqual(await details.locator('[data-detail-id="tags"] li').allTextContents(), ['alpha', 'beta'], `${label}: list kind is a bulleted list`);
+  assert.match(await details.locator('[data-detail-id="raw"] pre').textContent(), /start_sample: 48000/, `${label}: yaml kind is a pre`);
+  assert.equal(await details.locator('[data-detail-id="hostile"] img').count(), 0, `${label}: values go in as text`);
+  assert.equal(await details.locator('[data-detail-id="hostile"]').textContent(), DETAILS[3].value);
+  assert.equal(await page.evaluate(() => window.__pwned === undefined), true);
+  const doc = details.locator('[data-doc-id="notes"]');
+  assert.match(await doc.locator('pre').textContent(), /Second line/, `${label}: document text shown`);
+  assert.equal(await doc.locator('.am-badge').textContent(), 'truncated');
+  assert.equal(await details.locator('input, textarea, select, button').count(), 0, `${label}: the Record panel is read-only`);
+  const overflow = await doc.locator('pre').evaluate((el) => getComputedStyle(el).overflow);
+  assert.equal(overflow, 'auto', `${label}: document text scrolls`);
+  if (phone) {
+    await toggle.click();
+    assert.equal(await page.locator('[data-am="record-details"]').isVisible(), false, `${label}: the toggle collapses it again`);
+  }
+
+  // The skipped-template notice sits near the picker and is text only.
+  const notice = page.locator('[data-am="skipped"]');
+  assert.equal(await notice.isVisible(), true, `${label}: skipped notice shows when the list carries skipped`);
+  assert.match(await notice.textContent(), /^1 template file skipped: broken-template\.json \(.+\)$/);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${label}: no horizontal overflow`);
+  assert.deepEqual(errors, [], `${label}: no page errors`);
+  await context.close();
+
+  // No target, no details: the panel says so plainly.
+  const plain = await openViewer(browser, env.origin, viewport, '?template=freeform');
+  assert.equal(await plain.page.locator('[data-am="skipped"]').isVisible(), await plain.page.evaluate(() => (window.__audioMarkers.state.skipped || []).length > 0));
+  if (phone) await plain.page.locator('[data-am="record-toggle"]').click();
+  assert.equal((await plain.page.locator('[data-am="record-details"]').textContent()).trim(), 'No record notes.', `${label}: neutral line with nothing to show`);
+  await plain.context.close();
+}
+
+async function recordNotes(browser, env, viewport, label) {
+  // After the no-template scenario saved a labelled region, the panel lists the saved marker notes.
+  const {context, page} = await openViewer(browser, env.origin, viewport, '?template=freeform');
+  if (viewport.width < 600) await page.locator('[data-am="record-toggle"]').click();
+  assert.match(await page.locator('[data-am="record-notes"]').textContent(), /Second hit/, `${label}: saved marker labels listed under Record`);
+  await context.close();
+}
+
+async function flagsStayInside(browser, env, viewport, label) {
+  const {context, page} = await openViewer(browser, env.origin, viewport, '?template=freeform');
+  await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 5.95; });
+  await page.locator('[data-am="add-point"]').click();
+  const added = (await markersOf(page)).find((m) => m.origin === 'new' && m.kind === 'point');
+  assert.ok(added, `${label}: a point at the end of the file`);
+  const flag = page.locator(`[data-marker-id="${added.id}"] .am-flag`);
+  const stage = await page.locator('[data-am="stage"]').boundingBox();
+  const box = await flag.boundingBox();
+  assert.ok(box.x >= stage.x - 0.5 && box.x + box.width <= stage.x + stage.width + 0.5, `${label}: the flag at the right edge is not clipped`);
+  assert.equal(await page.locator(`[data-marker-id="${added.id}"]`).evaluate((el) => el.classList.contains('am-flip')), true, `${label}: it flips to the left of its line`);
+  // A selected region shows its Start and End fields in the inspector (not a stringified node list).
+  await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 1; });
+  await page.locator('[data-am="add-region"]').click();
+  await openInspector(page);
+  assert.equal(await page.locator('[data-am-pos="startSample-samples"]').count(), 1, `${label}: region Start field`);
+  assert.equal(await page.locator('[data-am-pos="endSample-samples"]').count(), 1, `${label}: region End field`);
+  assert.doesNotMatch(await page.locator('[data-am="inspector"]').textContent(), /\[object /, `${label}: no stringified nodes in the inspector`);
+  await context.close();
+}
+
+async function hintStates(browser, env, viewport, label) {
+  const hintOf = (page) => page.locator('[data-am="reason-hint"]');
+  // Nothing changed and saved: "All changes saved."
+  const first = await openViewer(browser, env.origin, viewport, '?template=freeform');
+  assert.equal((await hintOf(first.page).textContent()).trim(), 'All changes saved.', `${label}: nothing changed`);
+  assert.equal(await first.page.locator('[data-am="save"]').isDisabled(), true);
+  // A change enables Save; the in-flight save says so, then the hint settles.
+  await first.page.locator('[data-am="add-point"]').click();
+  assert.equal(await first.page.locator('[data-am="save"]').isDisabled(), false);
+  await first.page.route('**/api/markers/records', async (route) => {
+    if (route.request().method() === 'POST') await new Promise((resolve) => setTimeout(resolve, 700));
+    await route.continue();
+  });
+  await first.page.locator('[data-am="save"]').click();
+  assert.equal((await hintOf(first.page).textContent()).trim(), 'Saving\u2026', `${label}: in-flight save`);
+  await statusIs(first.page, /Saved record/);
+  await hintIs(first.page, 'All changes saved.');
+  await first.context.close();
+
+  // A projection with no target found: Save and write back is off and the hint says why.
+  const context = await browser.newContext({viewport});
+  const page = await context.newPage();
+  await stubContext(page, (body) => ({...body, target: null}));
+  await page.goto(`${env.origin}/view/${REPO}/${FILE}?template=demo-projection`);
+  await page.waitForFunction(() => window.__audioMarkers && window.__audioMarkers.ready, null, {timeout: 30000});
+  await page.locator('[data-am="add-point"]').click();
+  await page.locator('[data-am-field="reason"]').fill('No target here');
+  assert.match(await hintOf(page).textContent(), /^No record found for this file; save without write-back or pick another template\.$/);
+  assert.equal(await page.locator('[data-am="save-write"]').isDisabled(), true, `${label}: write-back is off without a target`);
+  assert.equal(await page.locator('[data-am="preview"]').isDisabled(), true);
+  await context.close();
 }
 
 // ---------------------------------------------------------------- run
@@ -625,6 +811,7 @@ try {
     await fs.mkdir(world);
     const env = await stage(world);
     servers.push(env.server);
+    await recordPanel(browser, env, viewport, label);
     // Template sets first: a saved free-form "span" would ride along into a template save (known defect).
     await songStructure(browser, env, viewport, label);
     await projection(browser, env, viewport, label);
@@ -636,7 +823,10 @@ try {
     await tapEdgeModes(browser, env, viewport, label);
     await addButtonsUseHeardTime(browser, env, viewport, label);
     await reasonHint(browser, env, viewport, label);
-    console.log(`Audio markers ${label}: no-template point/region/label/save/reload, song-structure, projection write-back, stale tab 409, tap sync real tone and arithmetic, select-seeks, tap edge, Add buttons heard time, reason hint PASS`);
+    await recordNotes(browser, env, viewport, label);
+    await flagsStayInside(browser, env, viewport, label);
+    await hintStates(browser, env, viewport, label);
+    console.log(`Audio markers ${label}: no-template point/region/label/save/reload, song-structure, projection write-back, stale tab 409, tap sync real tone and arithmetic, select-seeks, tap edge, Add buttons heard time, save hint states, record panel, skipped notice, flipped flags PASS`);
   }
 } catch (error) {
   failed = true;
