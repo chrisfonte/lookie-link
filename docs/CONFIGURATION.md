@@ -123,6 +123,63 @@ Query semantics are the same on both backends: every whitespace-separated term m
 
 With a ripgrep binary available, `/api/search` searches every served repository in one process and is complete (the response says `backend: "ripgrep"`). Without one, the built-in walk is used: complete when scoped to one repo, fair-share sampled across a fleet (`backend: "walk"`, `truncated` says when a slice ran out). `maxEntries` applies to the walk only. The binary must be on the SERVICE's PATH (a shell alias or function does not count) or named explicitly.
 
+## Audio roots
+
+```yaml
+audioRoots:
+  station-audio:
+    path: /path/to/share
+    label: Station audio
+  field-recordings: ~/recordings     # shorthand: id -> path
+```
+
+An audio root is a read-only directory mapped like a repository: it appears in the Files picker, `/api/repos`, `/view`, `/asset` and the tree and changes APIs. Each id must match `^[a-z0-9][a-z0-9._-]{0,63}$`, and must not collide with a `repositories` key or a managed repository (the server refuses to start). `path` may start with `~`; `label` defaults to the id. Malformed entries fail startup with a message naming the id.
+
+Audio roots are served as audio only: `/asset` answers `415` for any file whose extension is not an audio type, and `/view` of such a file shows a "shown but not served" page (name, size, modified) rather than rendering it. `/api/repos/:repo/files/*` refuses non-text files (`415`). Editing, saving and annotation writes answer `403`, and the edit and annotation controls are hidden. `/api/repos` entries for audio roots carry `kind: "audio"`, `readOnly: true` and `label`; plain repositories are unchanged. `/raw` and `/embed` answer `415` for an audio root, so an HTML file placed there is never served as a page, and search and wiki-link resolution skip audio roots. Root paths are never disclosed to clients.
+
+## Markers
+
+```yaml
+markers:
+  enabled: true
+  templatesPath:                                     # string or list; the first entry is the writable store
+    - ~/.local/share/lookie-link/marker-templates
+    - /path/to/client-repo/marker-templates          # read-only
+  destinations:                                      # marker destinations: record directories only
+    default: ~/.local/share/lookie-link/marker-records
+  roots:                                             # projection, locate and evidence roots templates may name
+    records-repo:
+      path: /path/to/client-repo
+      allowProjections: true                         # default false
+      requireValidator: true                         # default true
+    evidence: /path/to/evidence                      # shorthand: alias -> path
+  peaksCachePath: ~/.local/share/lookie-link/peaks   # default
+  blockSize: 1152                                    # default; samples per peak block
+  ffmpegPath: ffmpeg                                 # default
+  ffprobePath: ffprobe                               # default
+  maxAudioBytes: 2147483648                          # default; largest audio file the viewer will analyse
+  operatorName: Operator                             # default save name for unrestricted browser saves
+  timezone: America/Chicago                          # optional; defaults to the server zone
+  yamlToolPath: ~/path/to/yaml-tool                  # optional
+  validators:
+    record-check: ["python3", "~/path/validate-record.py", "{candidate}"]
+  publicOrigins:
+    - http://lookie-host.local:3000
+```
+
+`enabled` is a boolean (default `false`). When `true`, `templatesPath` and at least one entry in `destinations` are required; otherwise startup fails.
+
+- `templatesPath` is one directory or a list of them. Each entry is resolved (a leading `~` is expanded). The first entry is the writable store; the rest are read-only. The reader also returns `templatesPaths` (the full list) and keeps `templatesPath` as the first entry.
+- `destinations` maps an alias to the directory where marker records are written (marker destinations; same rules as `forms.destinations`). It holds record directories only. A template can name a destination alias, never a path.
+- `roots` maps an alias (a definition id: lowercase letters, numbers and hyphens, starting with a letter) to the directories a template may project into, locate files in, or cite as evidence. An entry is a path or `{ path, allowProjections, requireValidator }`. `allowProjections` (default `false`) lets a template project into that root; a root without it is read-only for projections. `requireValidator` (default `true`) means a projection into that root must name a validator. With no `roots` block the reader returns an empty map.
+- `peaksCachePath`, `ffmpegPath` and `ffprobePath` default as shown. `blockSize` is a positive integer. `maxAudioBytes` is a positive integer; larger audio files are refused before analysis.
+- `operatorName` is the default display name offered for unrestricted browser saves, and `timezone` is an IANA zone name used when stamping dates; both are optional (`operatorName` reads as `null`, `timezone` as unset).
+- `yamlToolPath` is optional; without it, projections that need the YAML tool refuse.
+- `validators` maps an id (same pattern as audio root ids) to a non-empty command array of strings. Elements beginning with `~` are expanded. A template can only reference a validator by id, never supply a command.
+- `publicOrigins` are the exact browser-write origins and default to `forms.publicOrigins` when absent.
+
+Paths are deployment configuration: templates cannot declare them, and none is disclosed to clients.
+
 ## Custom themes
 
 > **Live-reloadable values (contributors).** Theme CSS, wallpapers, appearance and kits change at runtime without a restart. Any code that renders chrome must read them per request (the server hands out live getters); never copy one into a local at construction. `test/live-theme-every-page.test.js` sets theme CSS after startup and requires every HTML page family to carry it: add new page families to its `PAGES` list. (2026-09-25: the Trackers router copied it once and shipped every Trackers page without custom-theme tokens.)

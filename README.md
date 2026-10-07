@@ -5,7 +5,8 @@ Lookie-Link is a lightweight private-network viewer for local directories. Map a
 ## Implemented features
 
 - Sanitized Markdown and authored-HTML rendering, source toggles, heading/YAML anchors, portable cross-repo links, and local asset rewriting
-- Dedicated image, audio, video, PDF, CSV, and JSON viewers
+- Dedicated image, audio, video, PDF, CSV, and JSON viewers; a waveform player for every served audio file, with read-only audio roots
+- Opt-in audio marker editor: template-driven points and regions saved as immutable records, with guarded YAML write-back
 - Caller-scoped static tokens, hashed managed API keys, expiring managed grants, and repo/path permissions
 - Caller-safe runtime discovery through `/.well-known/agent.json`, `/api/whoami`, and `/api/repos`
 - OpenAPI 3.1 description at `/openapi.json` with an interactive try-it explorer at `/api/docs`
@@ -59,6 +60,15 @@ lookie search "release notes" --scope shared
 ```
 
 Run `lookie --help` for the implemented command grammar. The generated agent packages follow [the skill spec](docs/SKILL-SPEC.md). The older `lookie-read` and `lookie-annotations` executables remain available as compatibility shims; `lookie annotations` covers the same annotation operations.
+
+## System dependencies
+
+Node 22 and the npm packages in `package.json` are all a default install needs. Two optional external tools are invoked by configured path and are not bundled:
+
+- `ffmpeg` and `ffprobe` generate waveform peaks for the audio viewer and are required to save marker records (positions are validated against the file's frame count). Without them the audio page still plays the file and the audio info route answers `503 peaks_unavailable`. Paths come from `markers.ffmpegPath` and `markers.ffprobePath` (default: `ffmpeg` and `ffprobe` on `PATH`).
+- A guarded YAML command-line tool and any validator commands are needed only for marker projections; they are named in `markers.yamlToolPath` and `markers.validators`. Without them the projection answers `409 feature_disabled`.
+
+Both are declared as referenced system dependencies in `fossa-deps.yml`.
 
 ## Network and trust model
 

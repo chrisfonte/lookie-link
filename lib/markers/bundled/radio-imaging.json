@@ -1,0 +1,28 @@
+{
+  "contractVersion": 1,
+  "resourceKind": "marker-template",
+  "templateId": "radio-imaging",
+  "revision": 1,
+  "title": "Radio imaging boundaries",
+  "description": "Voice and tail boundaries plus an earliest-music-start floor for overlapping imaging with a song, with event regions for voice, music, effects and silence.",
+  "unit": "samples",
+  "groups": [{ "id": "events", "label": "Events" }],
+  "markers": [
+    { "id": "voice_end", "label": "Last voice end", "kind": "point", "color": "#4fd8e8" },
+    { "id": "tail_end", "label": "Voice tail end", "kind": "point", "color": "#9d96f3",
+      "constraints": { "after": "voice_end" } },
+    { "id": "protected_end", "label": "Protected end", "kind": "point", "color": "#f2695f",
+      "constraints": { "after": "tail_end" } },
+    { "id": "floor", "label": "Earliest music start (floor)", "kind": "point", "color": "#bfd22b", "tolerance": 96,
+      "constraints": { "after": "voice_end", "before": "protected_end" } },
+    { "id": "voice", "label": "Voice", "kind": "region", "group": "events", "color": "#4fd8e8", "multiple": true },
+    { "id": "music", "label": "Music", "kind": "region", "group": "events", "color": "#e1886e", "multiple": true },
+    { "id": "effect", "label": "Effect", "kind": "region", "group": "events", "color": "#9d96f3", "multiple": true },
+    { "id": "silence", "label": "Silence", "kind": "region", "group": "events", "color": "#888888", "multiple": true }
+  ],
+  "keys": { "floor": "f" },
+  "projections": [
+    { "id": "rivendell-points", "kind": "rivendell",
+      "map": { "voice_end": "TALK_END_POINT", "floor": "SEGUE_START_POINT", "protected_end": "SEGUE_END_POINT" } }
+  ]
+}

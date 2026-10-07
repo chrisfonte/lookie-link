@@ -3141,6 +3141,681 @@ html[data-wallpaper="on"] .content { border-radius: 18px; }
   border: 0;
 }
 
+/* audio markers */
+/* markers feature off: player and waveform only */
+.audio-markers-off .content.audio-markers .am-bar-markers,
+.audio-markers-off .content.audio-markers .am-lanes,
+.audio-markers-off .content.audio-markers .am-side,
+.audio-markers-off .content.audio-markers .am-save { display: none; }
+
+.layout.layout-audio {
+  max-width: 1400px;
+}
+
+.content.audio-markers {
+  --am-danger: color-mix(in srgb, #e5484d 62%, var(--text));
+  --am-ruler-h: 28px;
+  padding: 0.75rem;
+  overflow: visible;
+  color: var(--text);
+}
+
+.audio-markers .am-app[hidden],
+.audio-markers [hidden] {
+  display: none !important;
+}
+
+.audio-markers .am-muted {
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.audio-markers .am-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.audio-markers .am-group {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.audio-markers .am-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-code);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.35rem 0.8rem;
+  min-height: 2.2rem;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.audio-markers .am-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.audio-markers .am-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.audio-markers .am-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.audio-markers .am-btn.am-on,
+.audio-markers .am-btn[aria-pressed="true"]:not(.am-btn-primary) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.audio-markers .am-btn-danger {
+  color: var(--am-danger);
+}
+
+.audio-markers .am-btn:focus-visible,
+.audio-markers .am-marker:focus-visible,
+.audio-markers input:focus-visible,
+.audio-markers select:focus-visible,
+.audio-markers textarea:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+.audio-markers .am-time {
+  min-width: 5.6rem;
+  font: 600 1.05rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text);
+}
+
+.audio-markers .am-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-soft);
+}
+
+.audio-markers .am-field-block {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+  margin: 0.5rem 0;
+}
+
+.audio-markers .am-field-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-soft);
+}
+
+.audio-markers select,
+.audio-markers input[type="text"],
+.audio-markers input[type="number"],
+.audio-markers textarea {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.3rem 0.45rem;
+  font: inherit;
+  font-size: 0.88rem;
+  min-height: 2.1rem;
+  max-width: 100%;
+}
+
+.audio-markers textarea {
+  resize: vertical;
+}
+
+.audio-markers .am-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 19rem;
+  gap: 1rem;
+  align-items: start;
+}
+
+.audio-markers .am-main {
+  min-width: 0;
+}
+
+.audio-markers .am-stage {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.audio-markers .am-ruler {
+  height: var(--am-ruler-h);
+  border-bottom: 1px solid var(--border);
+  cursor: col-resize;
+  touch-action: pan-y;
+}
+
+.audio-markers canvas {
+  display: block;
+}
+
+.audio-markers .am-wave {
+  position: relative;
+  cursor: col-resize;
+  touch-action: pan-y;
+}
+
+.audio-markers .am-over {
+  position: absolute;
+  inset: 0 auto auto 0;
+  pointer-events: none;
+}
+
+.audio-markers .am-image {
+  border-top: 1px solid var(--border);
+  cursor: col-resize;
+  touch-action: pan-y;
+}
+
+.audio-markers .am-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--link);
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg) 60%, transparent);
+}
+
+.audio-markers .am-lanes {
+  border-top: 1px solid var(--border);
+}
+
+.audio-markers .am-lane {
+  position: relative;
+  height: 52px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.audio-markers .am-lane-source {
+  height: 26px;
+  background: var(--bg-code);
+}
+
+.audio-markers .am-lane-label {
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  z-index: 1;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-soft);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  pointer-events: none;
+}
+
+.audio-markers .am-marker {
+  --am-fill: var(--am-c, var(--accent));
+  --am-ink-c: var(--am-ink, var(--bg));
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.audio-markers .am-region {
+  top: 20px;
+  bottom: 4px;
+  border-radius: 5px;
+  background: var(--am-fill);
+  color: var(--am-ink-c);
+  display: flex;
+  align-items: center;
+  min-width: 2px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg) 70%, transparent);
+}
+
+.audio-markers .am-region .am-body {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  padding: 0 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: grab;
+}
+
+.audio-markers .am-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.audio-markers .am-edge-l {
+  left: -4px;
+  border-left: 3px solid color-mix(in srgb, var(--am-ink-c) 80%, transparent);
+  border-radius: 5px 0 0 5px;
+}
+
+.audio-markers .am-edge-r {
+  right: -4px;
+  border-right: 3px solid color-mix(in srgb, var(--am-ink-c) 80%, transparent);
+  border-radius: 0 5px 5px 0;
+}
+
+.audio-markers .am-point {
+  width: 0;
+}
+
+.audio-markers .am-pline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: var(--am-fill);
+}
+
+.audio-markers .am-flag {
+  position: absolute;
+  left: 0;
+  top: calc(18px + var(--am-row, 0) * 17px);
+  max-width: 11rem;
+  padding: 0 0.45rem;
+  line-height: 16px;
+  border-radius: 0 5px 5px 0;
+  background: var(--am-fill);
+  color: var(--am-ink-c);
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.audio-markers .am-point::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  cursor: ew-resize;
+}
+
+/* Unsaved edits: a solid fill with an accent ring. Recorded in the target:
+   translucent with a dashed outline. Saved: solid. */
+.audio-markers .am-unsaved {
+  outline: 2px solid var(--link);
+  outline-offset: 1px;
+}
+
+.audio-markers .am-target.am-region {
+  background: color-mix(in srgb, var(--am-fill) 28%, var(--bg));
+  border: 2px dashed var(--am-fill);
+  color: var(--text);
+}
+
+.audio-markers .am-target .am-flag {
+  background: color-mix(in srgb, var(--am-fill) 28%, var(--bg));
+  border: 2px dashed var(--am-fill);
+  border-left: 0;
+  color: var(--text);
+}
+
+.audio-markers .am-target .am-pline {
+  background: repeating-linear-gradient(to bottom, var(--am-fill) 0 5px, transparent 5px 8px);
+}
+
+.audio-markers .am-selected {
+  z-index: 3;
+  filter: brightness(1.12);
+}
+
+.audio-markers .am-selected.am-region,
+.audio-markers .am-selected .am-flag {
+  box-shadow: 0 0 0 2px var(--text);
+}
+
+.audio-markers .am-invalid.am-region,
+.audio-markers .am-invalid .am-flag {
+  box-shadow: 0 0 0 2px var(--am-danger);
+}
+
+.audio-markers .am-ghost {
+  position: absolute;
+  top: 18px;
+  bottom: 3px;
+  pointer-events: none;
+  border: 1px dashed var(--am-c, var(--text-soft));
+  opacity: 0.8;
+}
+
+.audio-markers .am-ghost.am-point {
+  width: 0;
+  top: 0;
+  bottom: 0;
+  border-width: 0 0 0 1px;
+}
+
+.audio-markers .am-src-tick {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 0;
+  border-left: 2px solid var(--am-c, var(--text-soft));
+}
+
+.audio-markers .am-src-band {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  border: 1px solid var(--am-c, var(--text-soft));
+  background: color-mix(in srgb, var(--am-c, var(--text-soft)) 20%, transparent);
+}
+
+.audio-markers .am-dashed {
+  border-style: dashed;
+}
+
+.audio-markers .am-pan {
+  width: 100%;
+  margin: 0.4rem 0 0;
+  accent-color: var(--accent);
+}
+
+.audio-markers .am-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 1rem;
+  margin: 0.4rem 0;
+  font-size: 0.84rem;
+}
+
+.audio-markers .am-alert {
+  margin: 0.4rem 0;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--am-danger);
+  border-radius: 6px;
+  color: var(--am-danger);
+  background: color-mix(in srgb, var(--am-danger) 10%, var(--bg-elev));
+  font-size: 0.88rem;
+}
+
+.audio-markers .am-save {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-code);
+}
+
+.audio-markers .am-save-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: flex-end;
+}
+
+.audio-markers .am-save-row .am-field-block {
+  flex: 1 1 14rem;
+  margin: 0.2rem 0;
+}
+
+.audio-markers .am-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.audio-markers .am-dirty {
+  align-self: center;
+  margin-left: auto;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.audio-markers .am-dirty.am-on {
+  color: var(--text);
+}
+
+.audio-markers .am-dirty.am-on::before {
+  content: "";
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  background: var(--link);
+}
+
+.audio-markers .am-preview {
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.audio-markers .am-diff {
+  max-height: 16rem;
+  overflow: auto;
+  margin: 0.4rem 0 0;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 0.78rem;
+  white-space: pre;
+}
+
+.audio-markers .am-inspector {
+  position: sticky;
+  top: 4.5rem;
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-code);
+}
+
+.audio-markers .am-inspector-toggle {
+  display: none;
+  width: 100%;
+  text-align: left;
+}
+
+.audio-markers .am-inspector h3,
+.audio-markers .am-help h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+}
+
+.audio-markers .am-inspector h4 {
+  margin: 0.2rem 0 0.3rem;
+  font-size: 0.85rem;
+  color: var(--am-danger);
+}
+
+.audio-markers .am-pos {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.audio-markers .am-pos input {
+  flex: 1;
+  min-width: 0;
+}
+
+.audio-markers .am-unit {
+  min-width: 3.4rem;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+}
+
+.audio-markers .am-kv {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.2rem 0.7rem;
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.audio-markers .am-kv dt {
+  color: var(--text-soft);
+}
+
+.audio-markers .am-kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.audio-markers .am-checks ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.84rem;
+  color: var(--am-danger);
+}
+
+.audio-markers .am-check {
+  cursor: pointer;
+}
+
+.audio-markers .am-help {
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-code);
+}
+
+.audio-markers .am-help dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.25rem 1rem;
+  margin: 0 0 0.6rem;
+  font-size: 0.86rem;
+}
+
+.audio-markers .am-help dt {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+}
+
+.audio-markers .am-help dd {
+  margin: 0;
+}
+
+@media (max-width: 800px) {
+  .layout.layout-audio {
+    padding: 0.5rem;
+  }
+
+  .content.audio-markers {
+    padding: 0.5rem;
+  }
+
+  .audio-markers .am-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .audio-markers .am-inspector {
+    position: static;
+  }
+
+  .audio-markers .am-inspector-toggle {
+    display: block;
+  }
+
+  .audio-markers .am-inspector-closed .am-inspector-body {
+    display: none;
+  }
+
+  .audio-markers .am-bar {
+    gap: 0.4rem 0.6rem;
+  }
+
+  .audio-markers .am-btn {
+    min-height: 2.5rem;
+  }
+
+  .audio-markers .am-help dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.audio-markers .am-cal {
+  width: 4.5rem;
+}
+
+.audio-markers .am-actions-notes {
+  align-items: center;
+  margin-top: 0.4rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.audio-markers .am-readonly {
+  opacity: 0.6;
+}
+
+.audio-markers .am-drift {
+  position: absolute;
+  top: -2px;
+  right: -9px;
+  z-index: 4;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  background: var(--am-danger);
+  color: var(--bg);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.1rem;
+  text-align: center;
+}
+
+.audio-markers .am-region .am-drift {
+  right: -6px;
+  top: -9px;
+}
+
+.audio-markers .am-driftbox {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--am-danger);
+  border-radius: 6px;
+}
 
 /* ============================================================================
    Document components
@@ -3288,3 +3963,4 @@ html[data-wallpaper="on"] .content { border-radius: 18px; }
   color: var(--text-soft);
   font-size: 0.8rem;
 }
+

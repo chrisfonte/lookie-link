@@ -162,13 +162,60 @@ API-key lifecycle routes require an API-key admin bearer token. Created and rota
 
 These routes intentionally use store-specific admin credentials rather than the caller's `view`, `write`, or `publish` permissions.
 
+## Audio and markers
+
+The authoritative route list and permissions are in [the capability matrix](CAPABILITIES.md#audio-and-markers); this section covers payloads and workflow. Audio info and peaks are always available for any served audio file (including read-only `audioRoots`); everything under `/api/markers/` exists only when `markers.enabled` is true, and `GET /api/whoami` then lists the `markers` capability and the `markerTemplates`, `markerRecords`, `markerContext` and `markerPreview` endpoint templates (`audioInfo` and `audioPeaks` appear with the `audio` capability).
+
+### Audio info and peaks
+
+- `GET /api/audio/:repo/*path` returns `{ ok, repo, path, viewUrl, assetUrl, peaksUrl, infoUrl, sampleRate, channels, frames, durationSeconds, sha256, blockSize, blocks, peakMode, sidecar: { location } }`. `sha256` is the hash of the audio bytes and is the key marker records bind to. The first request for a file generates a peaks sidecar (`.peaks` plus a `.peaks.json` header) beside the audio, or in a cache or destination directory when the audio directory is read-only; later requests reuse it until the file changes. `sidecar.location` is `beside`, `destination` or `cache`; no path is returned.
+- `GET /api/peaks/:repo/*path` returns the peaks as `application/octet-stream`: little-endian `uint16` pairs, one min/max pair per block per channel. `X-Peaks-*` response headers carry the header fields; `?header=1` returns them as JSON. The weak `ETag` is derived from `sha256`, so `If-None-Match` answers `304`.
+- Failures: `415 unsupported_media_type` for a non-audio extension, `413 audio_too_large` above `markers.maxAudioBytes`, `503 peaks_unavailable` when `ffmpeg` or `ffprobe` cannot run or the audio cannot be decoded.
+
+### Marker templates
+
+A template (`resourceKind: "marker-template"`) declares the marker types (`kind: point | region`), the unit (`samples`, `ms` or `seconds`), constraints, key bindings, reference `sources`, and optional `projections`. `freeform`, `song-structure` and `radio-imaging` are bundled and read-only; templates created through the API are stored in the first `markers.templatesPath` directory.
+
+- `GET /api/markers/templates` and `GET /api/markers/templates/:templateId` for any non-denied caller.
+- `POST /api/markers/templates` creates (`201`); `PATCH` and `DELETE` carry `expectedRevision` (`revision` is accepted as an alias); a stale value is `409 revision_conflict` with `currentRevision`. Deleting tombstones the id and keeps history. These need a template admin (an unrestricted caller, or a token with `write` and whole-fleet repository scope). Invalid documents are `422 validation_error` with `details`.
+
+### Marker records
+
+A record (`resourceKind: "marker-record"`) is immutable. A save never edits one; it creates a new record that `supersedesRecord` the previous latest, so the history is a chain. Records are keyed by the audio's `sha256` plus the template id, and store `audio { repo, path, sha256, sampleRate, channels, frames }`, the `markers`, `tags`, `reason`, the `actor`, and the template revision.
+
+```json
+{
+  "audio": { "repo": "station-audio", "path": "folder/clip.wav" },
+  "templateId": "freeform",
+  "templateRevision": 1,
+  "markers": [ { "id": "m1", "type": "note", "kind": "point", "sample": 48000 } ],
+  "supersedesRecord": { "id": "<latest recordId, when one exists>" },
+  "reason": "by ear"
+}
+```
+
+- `POST /api/markers/records` (`201`, `{ ok, record, targetSha256After? }`) needs `write` on the audio path and `templateRevision`. When a latest record already exists, `supersedesRecord` must name it; otherwise the save is `409 revision_conflict` with top-level `currentRecordId` (and `currentRecord`). A stale `templateRevision` is `409 revision_conflict` with `currentRevision`. Marker positions and constraints are validated against the file's frame count; failures are `422 validation_error` with `details`. Without `ffmpeg`/`ffprobe` a save is `503 peaks_unavailable`.
+- `actor.name` is recorded with a `nameSource`: `token` for bearer callers (the token's subject), `self-asserted` for a browser caller who sends `actor.name`, `config` for `markers.operatorName`.
+- `GET /api/markers/records?repo&path[&templateId][&all=1]` lists the latest record per template for the file's current bytes (`all=1`: every record). `GET /api/markers/records/:recordId` and `.../history` read one record and its supersession chain.
+- `POST /api/markers/preview` takes the same body and writes nothing durable: it returns the constraint result and, when `projection` names a projection, what that projection would write.
+
+### Context and projections
+
+`GET /api/markers/context?repo&path&template` resolves what the viewer overlays for a template: `sources` (reference points and regions, such as onset ticks), `reads` and `targetValues` (the marker values currently present in the projection target), `target { path, sha256, mtimeMs }` (root-relative), an optional `image` for a time-aligned strip, `projections[]` (`id`, `kind`, `label`, `acceptable`) and `problems[]` (neutral messages for a source that could not be read). More than one target match is `409 ambiguous_target`.
+
+A projection writes the saved values into a target file. Send `projection: { id, mode: "live", expectedTargetSha256, accept? }` on `POST /api/markers/records`; `expectedTargetSha256` (from the context route) is required and a target that changed since is `409 target_conflict` with top-level `currentTargetSha256`. The write goes through the configured guarded YAML tool: a candidate is built, proven and validated first, a snapshot and a receipt file are written under the template's receipts directory, and the record is saved only after the write is applied. Other codes: `409 feature_disabled` (tool or validator not configured), `403 projection_not_allowed`, `409 sidecar_conflict` (the audio changed after its peaks were generated), `501 not_implemented` (the `rivendell` projection is preview-only). A validator is referenced by id in the template (for example `record-check`) and defined in `markers.validators`.
+
+### Browser and agent writes
+
+Agents present a bearer token. Browsers use the cookie `lookie_markers_context` set when the viewer page is served, send its token as `X-CSRF-Token`, and must send an `Origin` matching `markers.publicOrigins` (falling back to `forms.publicOrigins`): `403 origin_rejected` or `403 csrf_rejected` name the missing piece, and a bearer together with the cookie is `400 ambiguous_credentials`. Mutations never accept `?token=`. Reads may.
+
 ## Stale-write guards
 
 Two guard styles exist, for historical reasons:
 
 | Guard | Used by | Semantics |
 |---|---|---|
-| `expectedRevision` (integer) | publish, forms templates, appearance | The standard for every new API. Compare with the resource's `revision`; a mismatch is `409 revision_conflict` and the body carries `currentRevision` (or the safe current projection). |
+| `expectedRevision` (integer) | publish, forms templates, marker templates, appearance | The standard for every new API. Compare with the resource's `revision`; a mismatch is `409 revision_conflict` and the body carries `currentRevision` (or the safe current projection). |
 | `expectedMtimeMs` (number) | managed files, `/api/save`, annotations | Legacy file-backed guard. Compare with the file's `mtimeMs`; a mismatch is `409 stale_write` with `currentMtimeMs`. Kept because those resources have no revision counter; not to be used for new resources. |
 
 ## Error conventions

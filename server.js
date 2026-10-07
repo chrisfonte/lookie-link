@@ -17,6 +17,8 @@ const {
   getPublishConfig,
   getFormsConfig,
   getKitsConfig,
+  getAudioRootsConfig,
+  getMarkersConfig,
   loadCustomThemes, getSearchConfig, getBaseConfig, getAppearanceOverlayPath, mergeAppearance, THEME_CSS_PROPERTIES, loadWallpaperCatalog, getWallpaperDefaults, reloadConfig, getConfigPath,
   generateCustomThemeCss,
   BUILT_IN_THEMES,
@@ -52,6 +54,7 @@ const {
   buildPreviewHref,
   buildRawHref,
   buildEmbedHref,
+  escapeHtml,
   formatFileSize,
   formatMTime,
   compareEntries,
@@ -71,7 +74,8 @@ const {
   renderAnnotationMarkdown,
   setThemeList,
   getThemeList,
-  setNavLinks, detectRenderMode } = require('./lib/renderer');
+  setNavLinks, detectRenderMode,
+  baseHtml, toolbarHtml, themeScript } = require('./lib/renderer');
 const {
   readAnnotationDocument,
   filterAnnotationsByState,
@@ -116,6 +120,19 @@ const {
   patchKitOverlay,
 } = require('./lib/kits');
 const { createFormsRouter } = require('./lib/forms/routes');
+const nodeCrypto = require('node:crypto');
+const nodeFs = require('node:fs');
+const nodeOs = require('node:os');
+const { createPeaksService } = require('./lib/audio/peaks');
+const { registerAudioRoutes } = require('./lib/audio/routes');
+const { createBrowserWriteGate } = require('./lib/browser-write-gate');
+const { MarkerTemplateStore } = require('./lib/markers/template-store');
+const { createMarkerTemplateRouter } = require('./lib/markers/routes-templates');
+const { MarkerRecordStore } = require('./lib/markers/record-store');
+const { createMarkerRecordRouter } = require('./lib/markers/routes-records');
+const { registerMarkerContextRoute } = require('./lib/markers/routes-context');
+const { createSourceResolver } = require('./lib/markers/sources');
+const { createProjectionRunner, createYamlPointersProjection, createRivendellProjection } = require('./lib/markers/projections');
 const { apiError } = require('./lib/api-error');
 
 const { version: LOOKIE_LINK_VERSION } = require('./package.json');
@@ -138,6 +155,8 @@ const AUDIO_MIME_TYPES = {
   '.opus': 'audio/ogg',
   '.flac': 'audio/flac',
   '.aac': 'audio/aac',
+  '.aif': 'audio/aiff',
+  '.aiff': 'audio/aiff',
 };
 
 const VIDEO_MIME_TYPES = {
@@ -221,6 +240,8 @@ const ASSET_MIME_TYPES = {
 };
 const IMAGE_EXTENSIONS = new Set(Object.keys(IMAGE_MIME_TYPES));
 const AUDIO_EXTENSIONS = new Set(Object.keys(AUDIO_MIME_TYPES));
+const TEXT_EXTENSIONS = new Set(Object.keys(TEXT_MIME_TYPES));
+const AUDIO_ROOT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const VIDEO_EXTENSIONS = new Set(Object.keys(VIDEO_MIME_TYPES));
 const PDF_EXTENSIONS = new Set(Object.keys(PDF_MIME_TYPES));
 const EDITABLE_EXTENSIONS = new Set([
@@ -841,7 +862,33 @@ function getRouteAvailability(app) {
     kit: has('get', '/api/kits/:name'),
     kitStylesheet: has('get', '/kit/:name/kit.css'),
     kitFile: has('get', '/kit/:name/files/:file'),
+    audioInfo: has('get', '/api/audio/:repo/*'),
+    audioPeaks: has('get', '/api/peaks/:repo/*'),
   };
+}
+
+// Audio roots list every file but serve only audio. A non-audio file there gets
+// this page (name, size, modified) instead of the document renderer.
+function renderShownNotServedPage({ repo, relativePath, parentHref, mtime, size, customThemeCss }) {
+  const name = path.posix.basename(relativePath);
+  const extension = path.extname(name).toLowerCase();
+  const body = `${toolbarHtml('')}
+  <main class="layout">
+    <header class="topbar">
+      <nav class="breadcrumbs"><a href="${escapeHtml(parentHref)}">${escapeHtml(repo)}</a><span class="sep">/</span><h1 class="crumb-title">${escapeHtml(name)}</h1></nav>
+    </header>
+    <article class="content shown-not-served">
+      <p>This file is shown but not served from an audio root.</p>
+      <dl>
+        <dt>Name</dt><dd>${escapeHtml(name)}</dd>
+        <dt>Size</dt><dd>${escapeHtml(size)}</dd>
+        <dt>Modified</dt><dd>${escapeHtml(mtime)}</dd>
+        <dt>Type</dt><dd>${escapeHtml(extension || 'unknown')}</dd>
+      </dl>
+    </article>
+  </main>
+  ${themeScript()}`;
+  return baseHtml({ title: `${repo}/${relativePath}`, body, customThemeCss });
 }
 
 function createApp(options = {}) {
@@ -861,6 +908,8 @@ function createApp(options = {}) {
   const rawPublishConfig = options.publishConfig === undefined ? getPublishConfig() : options.publishConfig;
   const formsConfig = options.formsConfig === undefined ? getFormsConfig() : options.formsConfig;
   const kitsConfig = options.kitsConfig === undefined ? getKitsConfig() : options.kitsConfig;
+  const audioRoots = options.audioRoots === undefined ? getAudioRootsConfig() : (options.audioRoots || {});
+  const markersConfig = options.markersConfig === undefined ? getMarkersConfig() : (options.markersConfig || { enabled: false });
   const refreshKits = () => loadKits({
     folders: kitsConfig.folders || [],
     managedFolder: kitsConfig.managedFolder === undefined ? null : kitsConfig.managedFolder,
@@ -886,6 +935,34 @@ function createApp(options = {}) {
   const managedRepoStore = options.managedRepoStore === undefined
     ? ManagedRepoStore.fromConfig(rawManagedReposConfig)
     : options.managedRepoStore;
+  // Audio roots are read-only mappings: browsable like repositories, never
+  // editable, and only audio bytes are served from them.
+  const readOnlyRepos = new Set();
+  const audioRootLabels = {};
+  for (const [audioId, root] of Object.entries(audioRoots)) {
+    if (!AUDIO_ROOT_ID_PATTERN.test(audioId)) {
+      throw new Error(`audioRoots id "${audioId}" must use only lowercase letters, numbers, dots, underscores, and hyphens.`);
+    }
+    if (!root || typeof root.path !== 'string' || !root.path) {
+      throw new Error(`audioRoots "${audioId}" must have a path.`);
+    }
+    if (Object.prototype.hasOwnProperty.call(mappings, audioId)) {
+      throw new Error(`audioRoots id "${audioId}" conflicts with a configured repository mapping.`);
+    }
+    if (managedRepoStore && managedRepoStore.isEnabled()
+      && managedRepoStore.listRepos().repos.some((repo) => repo.id === audioId)) {
+      throw new Error(`audioRoots id "${audioId}" conflicts with a managed repository.`);
+    }
+    mappings[audioId] = root.path;
+    readOnlyRepos.add(audioId);
+    audioRootLabels[audioId] = typeof root.label === 'string' && root.label ? root.label : audioId;
+  }
+  const isReadOnlyRepo = (repoId) => readOnlyRepos.has(repoId);
+  const READ_ONLY_MESSAGE = 'This repository is read-only.';
+  const isReadOnlyPath = (viewPath) => {
+    const requested = splitViewPath(viewPath || '');
+    return Boolean(requested && isReadOnlyRepo(requested.repo));
+  };
   // Every served repo (managed or plainly mapped) behind one read-only door
   // (API roadmap R2): tree / changes / file read / search work for all of them.
   const repoResolver = createRepoResolver({ mappings, managedRepoStore });
@@ -915,8 +992,10 @@ function createApp(options = {}) {
 
     return resolveCredentialAccess(req, accessConfig, apiKeyStore, grantStore);
   };
+  // Wiki-link resolution and search never reach into read-only audio roots.
+  const listSearchableRepos = () => repoResolver.listAll().filter((repo) => !isReadOnlyRepo(repo.id));
   const linkResolutionContext = (accessContext) => ({
-    repoMappings: mappings,
+    repoMappings: Object.fromEntries(Object.entries(mappings).filter(([id]) => !isReadOnlyRepo(id))),
     canResolveLink: (repo, relativePath, isDirectory) => canAccessPath(
       accessContext,
       'view',
@@ -1088,6 +1167,263 @@ function createApp(options = {}) {
       get customThemeCss() { return customThemeCss; },
     }));
   }
+
+  // ---- Audio info/peaks routes (always) and marker routes (markers.enabled) ----
+  const markersEnabled = Boolean(markersConfig && markersConfig.enabled === true);
+  const markerDestinations = (markersEnabled && markersConfig.destinations) || {};
+  const peaksCachePath = markersConfig.peaksCachePath
+    || path.join(nodeOs.homedir(), '.local', 'share', 'lookie-link', 'peaks');
+  const peaksService = options.peaksService || createPeaksService({
+    ffmpegPath: markersConfig.ffmpegPath || 'ffmpeg',
+    ffprobePath: markersConfig.ffprobePath || 'ffprobe',
+    blockSize: markersConfig.blockSize || 1152,
+    peakMode: 'max-abs',
+    cachePath: peaksCachePath,
+    maxAudioBytes: markersConfig.maxAudioBytes,
+    maxConcurrent: 2,
+    logger,
+  });
+  const requestAccessContext = (req) => req.accessContext || resolveAccessContext(req);
+
+  // Access context + view permission + mapping + containment + audio extension + stat.
+  const resolveAudioFile = async (req, repo, relativePath) => {
+    const context = requestAccessContext(req);
+    if (context.mode === 'denied') {
+      return { ok: false, status: context.denialStatus || 403, code: 'forbidden', message: context.denialMessage || 'Access denied.' };
+    }
+    const rootPath = mappings[repo];
+    if (!rootPath || isManagedInternalPath(repo, relativePath)) {
+      return { ok: false, status: 404, code: 'not_found', message: 'Audio file not found.' };
+    }
+    const extension = path.extname(relativePath).toLowerCase();
+    if (!AUDIO_EXTENSIONS.has(extension)) {
+      return { ok: false, status: 415, code: 'unsupported_media_type', message: 'Not an audio file.' };
+    }
+    if (!canAccessPath(context, 'view', repo, relativePath, 'file')) {
+      return getManagedRepo(repo)
+        ? { ok: false, status: 404, code: 'not_found', message: 'Audio file not found.' }
+        : { ok: false, status: 403, code: 'forbidden', message: 'Access denied.' };
+    }
+    let absPath;
+    try {
+      absPath = await safeResolve(rootPath, relativePath);
+    } catch (error) {
+      if (error && error.code === 'EACCES') return { ok: false, status: 403, code: 'forbidden', message: 'Invalid path.' };
+      throw error;
+    }
+    const stat = await statResolvedPath(absPath);
+    if (!stat || !stat.isFile()) {
+      return { ok: false, status: 404, code: 'not_found', message: 'Audio file not found.' };
+    }
+    return { ok: true, absPath, extension, mimeType: AUDIO_MIME_TYPES[extension] };
+  };
+  const peaksCandidates = (repo, relativePath, absPath) => {
+    const digest = nodeCrypto.createHash('sha256').update(`${repo}\0${relativePath}`).digest('hex');
+    const candidates = [{ dir: path.dirname(absPath), readOnly: isReadOnlyRepo(repo) }];
+    candidates.push(path.join(markerDestinations.default || peaksCachePath, 'peaks', digest));
+    return candidates;
+  };
+  registerAudioRoutes(app, {
+    resolveAudioFile,
+    peaksCandidates,
+    peaksService,
+    apiError,
+    buildViewHref: buildHref,
+    buildAssetHref,
+  });
+
+  let markerGate = null;
+  app.locals.markersReady = Promise.resolve();
+  if (markersEnabled) {
+    const markersAudit = typeof options.markersAudit === 'function'
+      ? options.markersAudit
+      : (event, req, details) => {
+        const persisted = recordApiKeyAuditEvent(event, req.accessContext, {
+          resourceKind: 'marker',
+          resourceId: (details && (details.templateId || details.recordId)) || null,
+        }, details || {});
+        if (!persisted) logger.info('Markers audit', { event, ...(details || {}) });
+      };
+    const markerTemplateStore = options.markerTemplateStore || new MarkerTemplateStore({
+      templatesPaths: markersConfig.templatesPaths,
+      logger,
+    });
+    // createApp is synchronous, so the template load starts here and its promise is
+    // exposed as app.locals.markersReady (tests and the entry point may await it).
+    // A failed load is logged; the store still serves bundled templates.
+    app.locals.markersReady = Promise.resolve(markerTemplateStore.load()).catch((error) => {
+      logger.error('Marker template load failed.', { error: error && error.message });
+    });
+    markerGate = createBrowserWriteGate({
+      publicOrigins: markersConfig.publicOrigins || (formsConfig && formsConfig.publicOrigins),
+      cookieName: 'lookie_markers_context',
+      contexts: options.markersCsrfContexts,
+      audit: markersAudit,
+      logger,
+    });
+    const authorizeAdmin = (req) => {
+      const context = requestAccessContext(req);
+      if (context.mode === 'unrestricted') return true;
+      return context.mode === 'scoped' && context.allRepos === true
+        && (context.permissions.write === true || context.permissions.edit === true);
+    };
+    const authorizeRead = (req, repo, relativePath) => canAccessPath(requestAccessContext(req), 'view', repo, relativePath, 'file');
+    const authorizeWrite = (req, repo, relativePath) => canAccessPath(requestAccessContext(req), 'write', repo, relativePath, 'file');
+    // A projection into a root that is also a served repository needs that repository's
+    // permission (whole-repo scope: the template names a root and a source, not a path
+    // known before the audio is located). Roots that are not served need template-admin.
+    const mappedRepoForRoot = (alias) => {
+      const root = markersConfig.roots && markersConfig.roots[alias];
+      const rootPath = root && (typeof root === 'string' ? root : root.path);
+      if (!rootPath) return null;
+      const resolvedRoot = path.resolve(rootPath);
+      return Object.keys(mappings).find((id) => path.resolve(mappings[id]) === resolvedRoot) || null;
+    };
+    const authorizeProjection = (req, { mode, projection }) => {
+      if (authorizeAdmin(req)) return true;
+      const repoId = projection ? mappedRepoForRoot(projection.root) : null;
+      return Boolean(repoId) && canAccessRepo(requestAccessContext(req), mode === 'live' ? 'write' : 'view', repoId);
+    };
+    const principalFor = (req) => {
+      const context = req.accessContext || {};
+      if (context.principal && typeof context.principal.id === 'string') {
+        return { id: context.principal.id, type: context.principal.kind || 'agent' };
+      }
+      if (context.subject && typeof context.subject.agentId === 'string') {
+        return { id: context.subject.agentId, type: 'agent' };
+      }
+      if (context.mode === 'unrestricted') return { id: 'operator', type: 'operator' };
+      return null;
+    };
+    const tokenSubjectFor = (req) => {
+      const context = req.accessContext || {};
+      const subject = context.subject;
+      if (typeof subject === 'string' && subject) return subject;
+      if (subject && typeof subject === 'object') {
+        const named = subject.name || subject.agentId || subject.id;
+        if (typeof named === 'string' && named) return named;
+      }
+      return typeof context.tokenName === 'string' && context.tokenName ? context.tokenName : null;
+    };
+    const recordStores = new Map();
+    const stores = {
+      forDestination(id) {
+        if (!Object.prototype.hasOwnProperty.call(markerDestinations, id)) {
+          throw new Error(`Marker destination "${id}" is not configured.`);
+        }
+        if (!recordStores.has(id)) {
+          recordStores.set(id, new MarkerRecordStore({ storageRoot: markerDestinations[id], logger }));
+        }
+        return recordStores.get(id);
+      },
+    };
+    const destinationIds = () => Object.keys(markerDestinations);
+    const resolveAudioWithPeaks = async (req, repo, relativePath) => {
+      const file = await resolveAudioFile(req, repo, relativePath);
+      if (!file.ok) return file;
+      try {
+        const peaks = await peaksService.ensurePeaks({
+          filePath: file.absPath,
+          candidates: peaksCandidates(repo, relativePath, file.absPath),
+        });
+        const { header } = peaks;
+        return {
+          ok: true,
+          sampleRate: header.sampleRate,
+          channels: header.channels,
+          frames: header.frames,
+          sha256: header.source.sha256,
+          absPath: file.absPath,
+        };
+      } catch (error) {
+        if (error && error.code === 'audio_too_large') {
+          return { ok: false, status: 413, code: 'audio_too_large', message: 'This audio file is too large to analyze.' };
+        }
+        return { ok: false, status: 503, code: 'peaks_unavailable', message: 'Audio analysis is unavailable on this instance; marker records cannot be validated.' };
+      }
+    };
+    const hashAudio = (absPath) => new Promise((resolve, reject) => {
+      const hash = nodeCrypto.createHash('sha256');
+      const stream = nodeFs.createReadStream(absPath);
+      stream.on('error', reject);
+      stream.on('data', (chunk) => hash.update(chunk));
+      stream.on('end', () => resolve(hash.digest('hex')));
+    });
+    const sourceResolver = createSourceResolver({ roots: markersConfig.roots || {} });
+    const loadRecord = async (recordId) => {
+      for (const id of destinationIds()) {
+        const record = await stores.forDestination(id).getRecord(recordId);
+        if (record) return record;
+      }
+      return null;
+    };
+    const projectionRunner = createProjectionRunner({
+      yamlPointers: createYamlPointersProjection({
+        roots: markersConfig.roots || {},
+        yamlToolPath: markersConfig.yamlToolPath || undefined,
+        validators: markersConfig.validators || {},
+        timezone: markersConfig.timezone,
+        locateTarget: sourceResolver.locateTarget,
+        loadRecord,
+        logger,
+      }),
+      rivendell: createRivendellProjection(),
+    });
+
+    app.use(createMarkerTemplateRouter({
+      store: markerTemplateStore,
+      authorizeAdmin,
+      gate: markerGate,
+      audit: markersAudit,
+      logger,
+    }));
+    app.use(createMarkerRecordRouter({
+      stores,
+      templateStore: markerTemplateStore,
+      gate: markerGate,
+      authorizeRead,
+      authorizeWrite,
+      authorizeProjection,
+      resolveAudio: resolveAudioWithPeaks,
+      hashAudio,
+      principalFor,
+      project: projectionRunner.project,
+      audit: markersAudit,
+      operatorName: markersConfig.operatorName || undefined,
+      tokenSubjectFor,
+      destinationIds,
+      logger,
+    }));
+    // The context route sits on its own router, like forms: discovery and OpenAPI
+    // describe it through the `markers` capability, not through app-level routes.
+    const markerContextRouter = express.Router();
+    registerMarkerContextRoute(markerContextRouter, {
+      resolver: sourceResolver,
+      templateStore: markerTemplateStore,
+      authorizeRead,
+      resolveAudio: async (req, repo, relativePath) => {
+        const resolved = await resolveAudioWithPeaks(req, repo, relativePath);
+        if (!resolved.ok) {
+          if (resolved.status === 404) return null;
+          const failure = new Error(resolved.message);
+          failure.status = resolved.status;
+          failure.code = resolved.code;
+          throw failure;
+        }
+        return {
+          sha256: resolved.sha256,
+          basename: path.posix.basename(relativePath),
+          sampleRate: resolved.sampleRate,
+          frames: resolved.frames,
+        };
+      },
+      assetUrlFor: (alias, relativePath) => {
+        const repoId = mappedRepoForRoot(alias);
+        return repoId ? buildAssetHref(repoId, relativePath) : null;
+      },
+    });
+    app.use(markerContextRouter);
+  }
   app.use(express.json({ limit: '2mb' }));
   app.use('/public', express.static(path.join(__dirname, 'public'), {
     etag: true,
@@ -1208,6 +1544,10 @@ function createApp(options = {}) {
     const found = resolveReadableRepo(req, res, relativePath, 'file');
     if (!found) return;
     const { repo, reader } = found;
+    if (isReadOnlyRepo(repo.id) && !TEXT_EXTENSIONS.has(path.extname(relativePath).toLowerCase())) {
+      apiError(res, 415, 'unsupported_media_type', 'Only text files can be read from a read-only audio root.');
+      return;
+    }
     try {
       const result = await reader.readFile(repo, relativePath);
       res.status(200).json({ ok: true, repo: repo.id, managed: repo.managed, ...result, viewUrl: buildHref(repo.id, result.path) });
@@ -1556,7 +1896,7 @@ function createApp(options = {}) {
       // empty result: a typo used to look like "nothing there" (2026-09-23).
       const requestedScopes = searchScope(req.query).flatMap((v) => String(v).split(',')).map((v) => v.trim()).filter(Boolean);
       if (requestedScopes.length) {
-        const searchable = new Set(repoResolver.listAll().filter((repo) => canView(repo.id, '', 'directory')).map((repo) => repo.id));
+        const searchable = new Set(listSearchableRepos().filter((repo) => canView(repo.id, '', 'directory')).map((repo) => repo.id));
         const unknown = requestedScopes.filter((id) => !searchable.has(id));
         if (unknown.length) {
           apiError(res, 400, null, `scope names no searchable repo: ${unknown.join(', ')}. See GET /api/repos for the repos you can search.`, unknown.map((id) => ({ path: 'scope', message: `not searchable: ${id}` })));
@@ -1566,7 +1906,7 @@ function createApp(options = {}) {
       const result = ripgrepBinary
         ? await searchWithRipgrep({
           binary: ripgrepBinary,
-          repos: repoResolver.listAll(),
+          repos: listSearchableRepos(),
           query,
           scope: searchScope(req.query),
           limit: req.query.limit,
@@ -1575,7 +1915,7 @@ function createApp(options = {}) {
         })
         : await searchManagedRepos({
           store: repoResolver.store,
-          repos: repoResolver.listAll(),
+          repos: listSearchableRepos(),
           query,
           scope: searchScope(req.query),
           limit: req.query.limit,
@@ -1607,7 +1947,7 @@ function createApp(options = {}) {
     try {
       const result = await suggestManagedRepos({
         store: repoResolver.store,
-        repos: repoResolver.listAll(),
+        repos: listSearchableRepos(),
         query,
         scope: searchScope(req.query),
         limit: req.query.limit,
@@ -1988,6 +2328,7 @@ function createApp(options = {}) {
     publishedRepo,
     routeAvailability: getRouteAvailability(app),
     formsEnabled: Boolean(formsConfig && formsConfig.enabled === true),
+    markersEnabled: Boolean(markersConfig && markersConfig.enabled === true),
     kitsEnabled: kitsEnabled(),
   });
 
@@ -2019,6 +2360,7 @@ function createApp(options = {}) {
     res.set('Cache-Control', 'no-cache');
     res.status(200).json(buildOpenApiDocument({
       formsEnabled: optionsForCaller.formsEnabled,
+      markersEnabled: optionsForCaller.markersEnabled,
       version: LOOKIE_LINK_VERSION,
       baseUrl: optionsForCaller.baseUrl,
     }));
@@ -2045,6 +2387,7 @@ function createApp(options = {}) {
         repo,
         viewUrl: `/view/${encodeURIComponent(repo)}/`,
         assetUrl: `/asset/${encodeURIComponent(repo)}/`,
+        ...(isReadOnlyRepo(repo) ? { kind: 'audio', readOnly: true, label: audioRootLabels[repo] } : {}),
       }));
     res.status(200).json({ ok: true, repos, count: repos.length });
   });
@@ -2170,6 +2513,19 @@ function createApp(options = {}) {
     }
 
     const extension = effectiveViewExtension(relativePath);
+    if (isReadOnlyRepo(repo) && !AUDIO_EXTENSIONS.has(extension)) {
+      const shownParent = parentPath(relativePath);
+      res.status(200).type('html').send(renderShownNotServedPage({
+        repo,
+        relativePath,
+        parentHref: appendAccessToken(shownParent === null ? '/view' : buildHref(repo, shownParent), accessContext),
+        mtime: formatMTime(stat.mtime),
+        size: formatFileSize(stat.size),
+        customThemeCss,
+        queryToken: accessContext.queryToken,
+      }));
+      return;
+    }
     if (parseBooleanQuery(req.query && req.query.validate) && HTML_EXTENSIONS.has(extension)) {
       let sourceBuffer;
       try {
@@ -2234,6 +2590,12 @@ function createApp(options = {}) {
         size: formatFileSize(stat.size),
         customThemeCss,
         queryToken: accessContext.queryToken,
+        markersEnabled,
+        csrfToken: markerGate && accessContext.mode !== 'denied' ? markerGate.issueContext(req, res) : null,
+        templateId: typeof req.query.template === 'string' ? req.query.template : null,
+        recordId: typeof req.query.record === 'string' ? req.query.record : null,
+        startSeconds: typeof req.query.t === 'string' ? req.query.t : null,
+        operatorName: markersEnabled ? (markersConfig.operatorName || null) : null,
       });
 
       res.status(200).type('html').send(html);
@@ -2294,7 +2656,7 @@ function createApp(options = {}) {
         rawHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
         mtime: formatMTime(stat.mtime),
         size: formatFileSize(stat.size),
-        editHref: editingEnabled && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
+        editHref: editingEnabled && !isReadOnlyRepo(repo) && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
           ? appendAccessToken(buildEditHref(repo, relativePath), accessContext)
           : null,
         customThemeCss,
@@ -2324,7 +2686,7 @@ function createApp(options = {}) {
         rawHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
         mtime: formatMTime(stat.mtime),
         size: formatFileSize(stat.size),
-        editHref: editingEnabled && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
+        editHref: editingEnabled && !isReadOnlyRepo(repo) && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
           ? appendAccessToken(buildEditHref(repo, relativePath), accessContext)
           : null,
         customThemeCss,
@@ -2371,7 +2733,7 @@ function createApp(options = {}) {
       parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
       mtime: formatMTime(stat.mtime),
       size: formatFileSize(stat.size),
-      editHref: editingEnabled && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
+      editHref: editingEnabled && !isReadOnlyRepo(repo) && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
         ? appendAccessToken(buildEditHref(repo, relativePath), accessContext)
         : null,
       rawHtmlHref: rawHtmlEnabled && isHtmlFile
@@ -2382,7 +2744,7 @@ function createApp(options = {}) {
         : null,
       customThemeCss,
       queryToken: accessContext.queryToken,
-      annotationsEnabled: annotationsEnabled && canAccessPath(accessContext, 'view', repo, relativePath, 'file'),
+      annotationsEnabled: annotationsEnabled && !isReadOnlyRepo(repo) && canAccessPath(accessContext, 'view', repo, relativePath, 'file'),
     });
 
     res.status(200).type('html').send(html);
@@ -2392,6 +2754,10 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
     if (!editingEnabled) {
       res.status(404).type('text/plain').send('Editing mode is disabled.');
+      return;
+    }
+    if (isReadOnlyPath(req.params[0])) {
+      res.status(403).type('text/plain').send(READ_ONLY_MESSAGE);
       return;
     }
 
@@ -2492,6 +2858,10 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
     if (!editingEnabled) {
       apiError(res, 404, 'feature_disabled', 'Editing mode is disabled.');
+      return;
+    }
+    if (isReadOnlyPath(req.params[0])) {
+      apiError(res, 403, 'read_only_repo', READ_ONLY_MESSAGE);
       return;
     }
 
@@ -2836,6 +3206,10 @@ function createApp(options = {}) {
       apiError(res, 404, 'feature_disabled', 'Annotations are disabled.');
       return;
     }
+    if (isReadOnlyRepo(req.params.repo)) {
+      apiError(res, 403, 'read_only_repo', READ_ONLY_MESSAGE);
+      return;
+    }
 
     const repo = req.params.repo;
     const relativePath = req.params[0] || '';
@@ -2923,6 +3297,10 @@ function createApp(options = {}) {
   app.patch('/api/annotations/:repo/*', async (req, res) => {
     if (!annotationsEnabled) {
       apiError(res, 404, 'feature_disabled', 'Annotations are disabled.');
+      return;
+    }
+    if (isReadOnlyRepo(req.params.repo)) {
+      apiError(res, 403, 'read_only_repo', READ_ONLY_MESSAGE);
       return;
     }
 
@@ -3406,7 +3784,7 @@ function createApp(options = {}) {
 
     const extension = path.extname(relativePath).toLowerCase();
     const mimeType = ASSET_MIME_TYPES[extension];
-    if (!mimeType) {
+    if (!mimeType || (isReadOnlyRepo(repo) && !AUDIO_EXTENSIONS.has(extension))) {
       res.status(415).type('text/plain').send('Unsupported asset type.');
       return;
     }
@@ -3472,10 +3850,23 @@ function createApp(options = {}) {
         return;
       }
 
-      console.error('Failed to serve asset', { resolved, error });
-      if (!res.headersSent) {
-        res.status(500).type('text/plain').send('Failed to read asset.');
+      if (res.headersSent) {
+        console.error('Failed to serve asset', { resolved, error });
+        return;
       }
+      // `send` reports an unsatisfiable Range as status 416 and a vanished file
+      // as ENOENT; answer those as such instead of a generic 500.
+      if (error.status === 416) {
+        if (error.headers && error.headers['Content-Range']) res.set('Content-Range', error.headers['Content-Range']);
+        res.status(416).type('text/plain').send('Requested range not satisfiable.');
+        return;
+      }
+      if (error.code === 'ENOENT' || error.status === 404) {
+        res.status(404).type('text/plain').send('Asset not found.');
+        return;
+      }
+      console.error('Failed to serve asset', { resolved, error });
+      res.status(500).type('text/plain').send('Failed to read asset.');
     });
   });
 
@@ -3487,6 +3878,10 @@ function createApp(options = {}) {
 
     const accessContext = resolveAccessContext(req);
     const repo = req.params.repo;
+    if (isReadOnlyRepo(repo)) {
+      res.status(415).type('text/plain').send('Not served from an audio root.');
+      return;
+    }
     const relativePath = req.params[0] || '';
     let rootPath = mappings[repo];
 
@@ -3581,7 +3976,7 @@ function createApp(options = {}) {
         mappings,
         queryToken: accessContext.queryToken,
         sensitiveValues: accessContext.source === 'header' ? [extractPresentedToken(req)] : [],
-        annotationsEnabled: annotationsEnabled && canAccessPath(accessContext, 'view', repo, relativePath, 'file'),
+        annotationsEnabled: annotationsEnabled && !isReadOnlyRepo(repo) && canAccessPath(accessContext, 'view', repo, relativePath, 'file'),
         themeMode: typeof req.query['lookie-theme'] === 'string' ? req.query['lookie-theme'] : 'dark',
         themeScheme: typeof req.query['lookie-scheme'] === 'string' ? req.query['lookie-scheme'] : 'slate',
         customThemeCss,
@@ -3614,6 +4009,10 @@ function createApp(options = {}) {
 
     const accessContext = resolveAccessContext(req);
     const repo = req.params.repo;
+    if (isReadOnlyRepo(repo)) {
+      res.status(415).type('text/plain').send('Not served from an audio root.');
+      return;
+    }
     const relativePath = req.params[0] || '';
     let rootPath = mappings[repo];
     let resolved;
@@ -3764,6 +4163,11 @@ function startServer() {
   }));
   let customThemes = [];
   const app = createApp({ mappings, editingEnabled, annotationsEnabled, rawHtmlEnabled, customThemeCss: '', accessConfig, managedReposConfig, formsConfig });
+  // Keep the app's own refresh: the watcher below replaces app.locals.refreshAppearance with its
+  // run(), and calling that from inside reload() recursed until the stack overflowed, logging one
+  // warning per level on every watch event (found 2026-10-07 on a candidate whose log lived in
+  // the watched config directory).
+  const refreshAppearanceOnce = app.locals.refreshAppearance;
 
   // Themes and wallpapers reload live: edit a palette, an alias, a wallpaper
   // key, or drop images into a folder, and the next page load has it. The
@@ -3772,7 +4176,7 @@ function startServer() {
     fs: require('node:fs'),
     path,
     reload() {
-      customThemes = app.locals.refreshAppearance();
+      customThemes = refreshAppearanceOnce() || [];
       const catalog = wallpaperCatalogForApi();
       const folders = customThemes.flatMap((t) => t.wallpapers ? [t.wallpapers.dark, t.wallpapers.light] : []);
       const configPath = getConfigPath();
