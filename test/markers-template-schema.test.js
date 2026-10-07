@@ -356,3 +356,50 @@ test('a yaml-pointers projection without receipts is refused', () => {
   assert.equal(result.valid, false);
   assert.ok(result.errors.some((e) => e.path.endsWith('receipts')), JSON.stringify(result.errors));
 });
+
+test('details and documents validate; kinds and bounds are enforced', () => {
+  const doc = withSources();
+  doc.details = [
+    { id: 'name', label: 'Name', source: 'target', pointer: '/asset/name' },
+    { id: 'kinds', label: 'Kinds', source: 'target', pointer: '/events[*]/kind', kind: 'list' },
+    { id: 'n', label: 'N', source: 'hits', pointer: '/count', kind: 'number' },
+    { id: 'blob', label: 'Blob', source: 'target', pointer: '/analysis', kind: 'yaml' },
+    { id: 't', label: 'T', source: 'target', pointer: '/x', kind: 'text' },
+  ];
+  doc.documents = [
+    { id: 'notes', label: 'Notes', source: 'target', pathFrom: '/evidence[id=notes]/path' },
+    { id: 'other', label: 'Other', source: 'target', pathFrom: { source: 'hits', pointer: '/doc' }, maxBytes: 1024 },
+  ];
+  assert.deepEqual(messages(doc), []);
+});
+
+test('details and documents refuse unknown keys, bad kinds and undeclared sources', () => {
+  const base = () => withSources();
+  const cases = [
+    [{ details: [{ id: 'a', label: 'A', source: 'target', pointer: '/x', extra: 1 }] }, 'details[0].extra'],
+    [{ details: [{ id: 'a', label: 'A', source: 'nowhere', pointer: '/x' }] }, 'details[0].source'],
+    [{ details: [{ id: 'a', label: 'A', source: 'target', pointer: 'x' }] }, 'details[0].pointer'],
+    [{ details: [{ id: 'a', label: 'A', source: 'target', pointer: '/x', kind: 'html' }] }, 'details[0].kind'],
+    [{ details: [{ id: 'a', label: 'A', source: 'target', pointer: '/x' }, { id: 'a', label: 'B', source: 'target', pointer: '/y' }] }, 'details[1].id'],
+    [{ documents: [{ id: 'd', label: 'D', source: 'target', pathFrom: '/p', extra: 1 }] }, 'documents[0].extra'],
+    [{ documents: [{ id: 'd', label: 'D', source: 'nowhere', pathFrom: '/p' }] }, 'documents[0].source'],
+    [{ documents: [{ id: 'd', label: 'D', source: 'target', pathFrom: { source: 'nowhere', pointer: '/p' } }] }, 'documents[0].pathFrom.source'],
+    [{ documents: [{ id: 'd', label: 'D', source: 'target', pathFrom: { source: 'target', pointer: '/p', extra: 1 } }] }, 'documents[0].pathFrom.extra'],
+    [{ documents: [{ id: 'd', label: 'D', source: 'target', pathFrom: 'p' }] }, 'documents[0].pathFrom'],
+    [{ documents: [{ id: 'd', label: 'D', source: 'target' }] }, 'documents[0].pathFrom'],
+    [{ documents: [{ id: 'd', label: 'D', source: 'target', pathFrom: '/p', maxBytes: 0 }] }, 'documents[0].maxBytes'],
+    [{ documents: [{ id: 'd', label: 'D', source: 'target', pathFrom: '/p', maxBytes: 99999999 }] }, 'documents[0].maxBytes'],
+  ];
+  for (const [change, expected] of cases) {
+    const result = validateMarkerTemplate({ ...base(), ...change });
+    assert.equal(result.valid, false, expected);
+    assert.ok(result.errors.some((e) => e.path === expected), `${expected}: ${JSON.stringify(result.errors)}`);
+  }
+});
+
+test('radio-imaging constrains only the floor, which must come before the protected end', () => {
+  const radio = bundled('radio-imaging');
+  const constrained = radio.markers.filter((marker) => marker.constraints).map((marker) => [marker.id, marker.constraints]);
+  assert.deepEqual(constrained, [['floor', { before: 'protected_end' }]]);
+  assert.deepEqual(validateMarkerTemplate(radio).errors, []);
+});

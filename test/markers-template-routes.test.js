@@ -323,3 +323,39 @@ test('non-admin callers do not see sources, projections or image; admins do', as
   assert.equal(summary.hasProjections, true);
   for (const key of ['sources', 'projections', 'image']) assert.equal(summary[key], undefined);
 });
+
+test('the list carries skipped template files, for admins and non-admins alike', async (t) => {
+  const { call, state, store } = await setup(t);
+  await fs.mkdir(store.templatesPath, { recursive: true });
+  await fs.writeFile(path.join(store.templatesPath, 'broken.json'), '{not json');
+  await fs.writeFile(path.join(store.templatesPath, 'invalid.json'), JSON.stringify({ templateId: 'invalid', unit: 'x' }));
+  for (const admin of [true, false]) {
+    state.admin = admin;
+    const list = await call('GET', '/api/markers/templates');
+    assert.equal(list.status, 200);
+    assert.deepEqual(list.body.skipped.map((entry) => entry.file), ['broken.json', 'invalid.json']);
+    assert.deepEqual(list.body.skipped[0], { file: 'broken.json', source: 'stored', reason: 'parse error: SyntaxError' });
+    assert.ok(!JSON.stringify(list.body.skipped).includes(store.templatesPath));
+  }
+  await fs.rm(path.join(store.templatesPath, 'broken.json'));
+  await fs.rm(path.join(store.templatesPath, 'invalid.json'));
+  assert.deepEqual((await call('GET', '/api/markers/templates')).body.skipped, []);
+});
+
+test('non-admin template reads omit details and documents along with sources', async (t) => {
+  const { call, state } = await setup(t);
+  const body = sample({
+    sources: [{ id: 'target', kind: 'yaml', root: 'work', locate: { glob: 'items/*/item.yaml', match: { pointer: '/id', equals: '$audio.sha256' } } }],
+    details: [{ id: 'name', label: 'Name', source: 'target', pointer: '/name' }],
+    documents: [{ id: 'notes', label: 'Notes', source: 'target', pathFrom: '/notes' }],
+  });
+  assert.equal((await call('POST', '/api/markers/templates', body)).status, 201);
+  const admin = await call('GET', '/api/markers/templates/sample');
+  assert.equal(admin.body.template.details.length, 1);
+  assert.equal(admin.body.template.documents.length, 1);
+  state.admin = false;
+  const reader = await call('GET', '/api/markers/templates/sample');
+  assert.equal(reader.body.template.details, undefined);
+  assert.equal(reader.body.template.documents, undefined);
+  assert.equal(reader.body.template.sources, undefined);
+});

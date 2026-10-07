@@ -174,10 +174,17 @@ The authoritative route list and permissions are in [the capability matrix](CAPA
 
 ### Marker templates
 
-A template (`resourceKind: "marker-template"`) declares the marker types (`kind: point | region`), the unit (`samples`, `ms` or `seconds`), constraints, key bindings, reference `sources`, and optional `projections`. `freeform`, `song-structure` and `radio-imaging` are bundled and read-only; templates created through the API are stored in the first `markers.templatesPath` directory.
+A template (`resourceKind: "marker-template"`) declares the marker types (`kind: point | region`), the unit (`samples`, `ms` or `seconds`), constraints, key bindings, reference `sources`, and optional `projections`, `details` and `documents` (below). `freeform`, `song-structure` and `radio-imaging` are bundled and read-only; templates created through the API are stored in the first `markers.templatesPath` directory.
 
-- `GET /api/markers/templates` and `GET /api/markers/templates/:templateId` for any non-denied caller.
+- `GET /api/markers/templates` and `GET /api/markers/templates/:templateId` for any non-denied caller. The list is `{ ok, templates[], skipped[] }`; each `skipped` entry is `{ file, source, reason }` for a template file that was present but not used (`file` is a base name, `source` is `stored` or `file`, `reason` is the first validation message or the parse error class), shown to every caller. Callers who are not template admins receive templates without `sources`, `projections`, `image`, `details` and `documents`.
 - `POST /api/markers/templates` creates (`201`); `PATCH` and `DELETE` carry `expectedRevision` (`revision` is accepted as an alias); a stale value is `409 revision_conflict` with `currentRevision`. Deleting tombstones the id and keeps history. These need a template admin (an unrestricted caller, or a token with `write` and whole-fleet repository scope). Invalid documents are `422 validation_error` with `details`.
+
+`details` and `documents` add read-only context for the person marking the file, resolved by the context route from the declared `sources`:
+
+- `details: [{ id, label, source, pointer, kind? }]` reads one value from a source's document. `kind` is `text` (default), `number`, `list` or `yaml`; `list` takes a selector with `[*]` (or a pointer to an array) and returns the items as strings, `yaml` returns a compact YAML string.
+- `documents: [{ id, label, source, pathFrom, maxBytes? }]` returns a text or markdown file found like a source's `pathFrom`: `pathFrom` is a pointer string read from `source`'s document, or `{ source, pointer }` naming another declared source. The path must be relative, free of `..`, and inside the root of `source` (symlinks that leave the root are refused). `maxBytes` defaults to `65536` and is at most `1048576`.
+
+Both reference only declared sources and use closed key sets; an unknown key or an undeclared source is `422 validation_error`.
 
 ### Marker records
 
@@ -201,7 +208,7 @@ A record (`resourceKind: "marker-record"`) is immutable. A save never edits one;
 
 ### Context and projections
 
-`GET /api/markers/context?repo&path&template` resolves what the viewer overlays for a template: `sources` (reference points and regions, such as onset ticks), `reads` and `targetValues` (the marker values currently present in the projection target), `target { path, sha256, mtimeMs }` (root-relative), an optional `image` for a time-aligned strip, `projections[]` (`id`, `kind`, `label`, `acceptable`) and `problems[]` (neutral messages for a source that could not be read). More than one target match is `409 ambiguous_target`.
+`GET /api/markers/context?repo&path&template` resolves what the viewer overlays for a template: `sources` (reference points and regions, such as onset ticks), `reads` and `targetValues` (the marker values currently present in the projection target), `target { path, sha256, mtimeMs }` (root-relative), an optional `image` for a time-aligned strip, `details[]` (`{ id, label, kind, value }`; `value` is a string, a number, an array of strings, or `null` when the value is absent) and `documents[]` (`{ id, label, text, truncated, path }`; `path` is root-relative, `truncated` is true when the file was cut at its byte limit), both empty when no target file is located, `projections[]` (`id`, `kind`, `label`, `acceptable`) and `problems[]` (neutral messages for a source that could not be read). More than one target match is `409 ambiguous_target`.
 
 A projection writes the saved values into a target file. Send `projection: { id, mode: "live", expectedTargetSha256, accept? }` on `POST /api/markers/records`; `expectedTargetSha256` (from the context route) is required and a target that changed since is `409 target_conflict` with top-level `currentTargetSha256`. The write goes through the configured guarded YAML tool: a candidate is built, proven and validated first, a snapshot and a receipt file are written under the template's receipts directory, and the record is saved only after the write is applied. Other codes: `409 feature_disabled` (tool or validator not configured), `403 projection_not_allowed`, `409 sidecar_conflict` (the audio changed after its peaks were generated), `501 not_implemented` (the `rivendell` projection is preview-only). A validator is referenced by id in the template (for example `record-check`) and defined in `markers.validators`.
 

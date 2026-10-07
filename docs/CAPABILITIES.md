@@ -315,12 +315,12 @@ Audio roots (`audioRoots`) are read-only mappings: they browse like repositories
 
 | Route | Method | Effective auth | Notes |
 |---|---|---|---|
-| `/api/markers/templates` | `GET` | Non-denied caller | Bundled and stored marker templates. |
+| `/api/markers/templates` | `GET` | Non-denied caller | Bundled and stored marker templates, plus `skipped[]` (`file`, `source`, `reason`) for template files that were present but not used; callers who are not template admins see no `sources`, `projections`, `image`, `details` or `documents` on a template. |
 | `/api/markers/templates/:templateId` | `GET` | Non-denied caller | One template with its revision. |
 | `/api/markers/templates` | `POST` | Template admin + browser gate | Creates a template; `201`. Template admin means an unrestricted caller, or a token with `write` and whole-fleet repo scope. |
 | `/api/markers/templates/:templateId` | `PATCH` | Template admin + browser gate | Body carries `expectedRevision` (`revision` is accepted as an alias); stale: `409 revision_conflict` with `currentRevision`. |
 | `/api/markers/templates/:templateId` | `DELETE` | Template admin + browser gate | Tombstones the template; history is kept; `expectedRevision` required. |
-| `/api/markers/context` | `GET` | Effective `view` on the audio file | Query `repo`, `path`, `template`. Resolved reference sources, target reads and the projection list (`id`, `kind`, `label`, `acceptable`); root-relative paths only. |
+| `/api/markers/context` | `GET` | Effective `view` on the audio file | Query `repo`, `path`, `template`. Resolved reference sources, target reads, `details[]` (`id`, `label`, `kind`, `value`), `documents[]` (`id`, `label`, `text`, `truncated`, `path`) and the projection list (`id`, `kind`, `label`, `acceptable`); root-relative paths only. |
 | `/api/markers/records` | `GET` | Effective `view` on the audio file | Query `repo`, `path`, optional `templateId`, `all=1`. Latest record per template, keyed by the audio SHA-256. |
 | `/api/markers/records/:recordId` | `GET` | Effective `view` on the record's audio | One immutable record. |
 | `/api/markers/records/:recordId/history` | `GET` | Effective `view` on the record's audio | The supersession chain. |

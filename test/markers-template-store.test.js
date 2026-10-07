@@ -409,3 +409,53 @@ test('an existing history file with different bytes refuses the update', async (
   await fs.writeFile(path.join(historyDir, 'r1.json'), canonicalize(await store.getRevision('sample', 1).then(({ source, writable, ...doc }) => doc)));
   assert.equal((await store.update('sample', 1, { title: 'x' })).revision, 2);
 });
+
+test('listWithSkipped names every skipped file by base name with a short reason', async (t) => {
+  const { dir, store, templatesPath } = await setup(t);
+  const readOnly = path.join(dir, 'shared');
+  const withShared = new MarkerTemplateStore({ templatesPath, templatesPaths: [templatesPath, readOnly], logger: { warn() {} } });
+  await fs.mkdir(templatesPath, { recursive: true });
+  await fs.mkdir(readOnly, { recursive: true });
+  const good = { contractVersion: 1, resourceKind: 'marker-template', revision: 1, ...sample({ templateId: 'good' }) };
+  await fs.writeFile(path.join(templatesPath, 'good.json'), canonicalize(good));
+  await fs.writeFile(path.join(templatesPath, 'broken.json'), '{not json');
+  await fs.writeFile(path.join(templatesPath, 'invalid.json'), canonicalize({ ...good, templateId: 'invalid', unit: 'x' }));
+  await fs.writeFile(path.join(templatesPath, 'wrong-name.json'), canonicalize({ ...good, templateId: 'other' }));
+  await fs.writeFile(path.join(templatesPath, 'freeform.json'), canonicalize({ ...good, templateId: 'freeform' }));
+  await fs.writeFile(path.join(templatesPath, 'Bad_Name.json'), '{}');
+  await fs.writeFile(path.join(templatesPath, 'notes.txt'), 'x');
+  await fs.writeFile(path.join(readOnly, 'shared-bad.json'), canonicalize({ ...good, templateId: 'shared-bad', markers: [] }));
+  await fs.writeFile(path.join(readOnly, 'good.json'), canonicalize(good));
+
+  for (const target of [store, withShared]) {
+    const { templates, skipped } = await target.listWithSkipped();
+    assert.ok(templates.some((entry) => entry.templateId === 'good'));
+    const byFile = Object.fromEntries(skipped.map((entry) => [entry.file, entry]));
+    assert.deepEqual(Object.keys(byFile).sort(), target === store
+      ? ['Bad_Name.json', 'broken.json', 'freeform.json', 'invalid.json', 'wrong-name.json']
+      : ['Bad_Name.json', 'broken.json', 'freeform.json', 'good.json', 'invalid.json', 'shared-bad.json', 'wrong-name.json']);
+    assert.equal(byFile['broken.json'].reason, 'parse error: SyntaxError');
+    assert.match(byFile['invalid.json'].reason, /^unit: must be one of/);
+    assert.equal(byFile['wrong-name.json'].reason, 'templateId does not match the file name');
+    assert.equal(byFile['freeform.json'].reason, 'id is reserved by a bundled template');
+    assert.equal(byFile['Bad_Name.json'].reason, 'invalid file name');
+    assert.equal(byFile['invalid.json'].source, 'stored');
+    for (const entry of skipped) {
+      assert.deepEqual(Object.keys(entry).sort(), ['file', 'reason', 'source']);
+      assert.ok(!entry.file.includes('/') && !entry.reason.includes(dir));
+    }
+    if (target === withShared) {
+      assert.deepEqual(byFile['shared-bad.json'], { file: 'shared-bad.json', source: 'file', reason: byFile['shared-bad.json'].reason });
+      assert.match(byFile['shared-bad.json'].reason, /^markers: /);
+      assert.equal(byFile['good.json'].source, 'file');
+      assert.equal(byFile['good.json'].reason, 'id is already provided by another template');
+    }
+  }
+  assert.deepEqual((await store.list()).map((e) => e.templateId), ['freeform', 'good', 'radio-imaging', 'song-structure']);
+});
+
+test('listWithSkipped is empty when every file is usable', async (t) => {
+  const { store } = await setup(t);
+  await store.create(sample());
+  assert.deepEqual((await store.listWithSkipped()).skipped, []);
+});

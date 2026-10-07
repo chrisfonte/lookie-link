@@ -129,7 +129,7 @@ test('a template without sources returns empty arrays and still succeeds', async
     { ...body, template: undefined },
     {
       ok: true, template: undefined, target: null, targetSha256: null, sources: [], reads: {}, targetValues: {},
-      image: null, projections: [], problems: [],
+      image: null, details: [], documents: [], projections: [], problems: [],
     },
   );
 });
@@ -202,4 +202,25 @@ test('registration requires its dependencies', () => {
     assert.throws(() => registerMarkerContextRoute(app, { ...ok, [key]: undefined }), TypeError, key);
   }
   assert.doesNotThrow(() => registerMarkerContextRoute(app, ok));
+});
+
+test('the response carries details and documents next to the existing fields', async (t) => {
+  const { get, root, templates } = await setup(t);
+  await fs.writeFile(path.join(root, 'pieces/alpha/notes.md'), 'Short notes.\n');
+  await fs.appendFile(path.join(root, 'pieces/alpha/record.yaml'), '  - id: notes\n    path: pieces/alpha/notes.md\n');
+  const tpl = fullTemplate();
+  tpl.details = [
+    { id: 'name', label: 'Name', source: 'target', pointer: '/asset/name' },
+    { id: 'kinds', label: 'Kinds', source: 'target', pointer: '/analysis/events[*]/kind', kind: 'list' },
+  ];
+  tpl.documents = [{ id: 'notes', label: 'Notes', source: 'target', pathFrom: '/evidence[id=notes]/path' }];
+  templates.set('sample', tpl);
+  const { status, body } = await get({ repo: 'station', path: 'station/alpha.wav', template: 'sample' });
+  assert.equal(status, 200);
+  assert.deepEqual(body.details, [
+    { id: 'name', label: 'Name', kind: 'text', value: 'alpha.wav' },
+    { id: 'kinds', label: 'Kinds', kind: 'list', value: ['lead', 'tail', 'broken'] },
+  ]);
+  assert.deepEqual(body.documents, [{ id: 'notes', label: 'Notes', text: 'Short notes.\n', truncated: false, path: 'pieces/alpha/notes.md' }]);
+  assert.ok(!JSON.stringify(body).includes(root));
 });

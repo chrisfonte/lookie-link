@@ -371,7 +371,8 @@ test('an unknown root alias is a problem; templates without sources resolve to e
 
   const empty = await resolver.resolveContext({ template: { templateId: 'plain', markers: [] }, audio: ALPHA });
   assert.deepEqual(empty, {
-    target: null, targetSha256: null, sources: [], reads: {}, targetValues: {}, image: null, projections: [], problems: [],
+    target: null, targetSha256: null, sources: [], reads: {}, targetValues: {}, image: null,
+    details: [], documents: [], projections: [], problems: [],
   });
 });
 
@@ -496,4 +497,115 @@ test('matches inside .history or .lookie-tmp directories are never targets', asy
   await copyRecord(root, 'owned/delta/record.yaml', 'mix/live/.history/record.yaml');
   const tpl = receiptsTemplate('mix/live/record.yaml', '{target.dir}/passes/owner-edits');
   assert.equal((await resolver.locateTarget(tpl, 'target', DELTA)).target.relPath, 'mix/live/record.yaml');
+});
+
+async function withDocs(root, files) {
+  const record = path.join(root, 'pieces/alpha/record.yaml');
+  const extra = Object.keys(files).map((name) => `  - id: doc-${name.replace(/\W/g, '-')}\n    path: pieces/alpha/${name}\n`).join('');
+  await fs.appendFile(record, extra);
+  for (const [name, content] of Object.entries(files)) {
+    await fs.mkdir(path.dirname(path.join(root, 'pieces/alpha', name)), { recursive: true });
+    await fs.writeFile(path.join(root, 'pieces/alpha', name), content);
+  }
+}
+
+test('details resolve each kind from the target document; absent values are null with a neutral problem', async (t) => {
+  const { dir, resolver } = await setup(t);
+  const tpl = template({
+    details: [
+      { id: 'name', label: 'Name', source: 'target', pointer: '/asset/name' },
+      { id: 'first', label: 'First event', source: 'target', pointer: '/analysis/first_event_sample', kind: 'number' },
+      { id: 'window', label: 'Window', source: 'target', pointer: '/analysis/window', kind: 'list' },
+      { id: 'kinds', label: 'Event kinds', source: 'target', pointer: '/analysis/events[*]/kind', kind: 'list' },
+      { id: 'decision', label: 'Decision', source: 'target', pointer: '/analysis/decision', kind: 'yaml' },
+      { id: 'count', label: 'Count as text', source: 'target', pointer: '/analysis/first_event_sample', kind: 'text' },
+      { id: 'missing', label: 'Missing', source: 'target', pointer: '/analysis/nothing' },
+      { id: 'badnumber', label: 'Bad number', source: 'target', pointer: '/asset/name', kind: 'number' },
+      { id: 'viaitem', label: 'Via report', source: 'hits', pointer: '/probe/rate_hz', kind: 'number' },
+    ],
+  });
+  const context = await resolver.resolveContext({ template: tpl, audio: ALPHA });
+  const byId = Object.fromEntries(context.details.map((detail) => [detail.id, detail]));
+  assert.deepEqual(context.details.map((detail) => detail.id),
+    ['name', 'first', 'window', 'kinds', 'decision', 'count', 'missing', 'badnumber', 'viaitem']);
+  assert.deepEqual(byId.name, { id: 'name', label: 'Name', kind: 'text', value: 'alpha.wav' });
+  assert.deepEqual(byId.first, { id: 'first', label: 'First event', kind: 'number', value: 177888 });
+  assert.deepEqual(byId.window.value, ['1000', '2000']);
+  assert.deepEqual(byId.kinds.value, ['lead', 'tail', 'broken']);
+  assert.equal(byId.decision.kind, 'yaml');
+  assert.equal(byId.decision.value, 'start: 4800\nend: 9600');
+  assert.equal(byId.count.value, '177888');
+  assert.equal(byId.missing.value, null);
+  assert.equal(byId.badnumber.value, null);
+  assert.equal(byId.viaitem.value, 48000);
+  const problems = context.problems.filter((problem) => problem.detailId);
+  assert.deepEqual(problems.map((problem) => problem.detailId).sort(), ['badnumber', 'missing']);
+  noAbsolutePaths(context, dir);
+});
+
+test('a detail whose source cannot be read is null and does not repeat the source problem', async (t) => {
+  const { resolver } = await setup(t);
+  const tpl = template({ details: [{ id: 'gone', label: 'Gone', source: 'cue', pointer: '/cross_start' }] });
+  tpl.sources[2] = { ...tpl.sources[2], pathFrom: { source: 'target', pointer: '/evidence[id=missing-link]/path' } };
+  const context = await resolver.resolveContext({ template: tpl, audio: ALPHA });
+  assert.deepEqual(context.details, [{ id: 'gone', label: 'Gone', kind: 'text', value: null }]);
+  assert.equal(context.problems.filter((problem) => problem.sourceId === 'cue').length, 1);
+});
+
+test('documents are read as bounded text under the root with root-relative paths', async (t) => {
+  const { dir, root, resolver } = await setup(t);
+  await withDocs(root, { 'notes.md': '# Notes\n\nA short note.\n', 'long.txt': 'x'.repeat(5000) + 'tail', 'wide.md': '\u00e9'.repeat(10) });
+  const tpl = template({
+    documents: [
+      { id: 'notes', label: 'Notes', source: 'target', pathFrom: '/evidence[id=doc-notes-md]/path' },
+      { id: 'long', label: 'Long', source: 'target', pathFrom: { source: 'target', pointer: '/evidence[id=doc-long-txt]/path' }, maxBytes: 100 },
+      { id: 'wide', label: 'Wide', source: 'target', pathFrom: '/evidence[id=doc-wide-md]/path', maxBytes: 5 },
+    ],
+  });
+  const context = await resolver.resolveContext({ template: tpl, audio: ALPHA });
+  const byId = Object.fromEntries(context.documents.map((doc) => [doc.id, doc]));
+  assert.deepEqual(byId.notes, { id: 'notes', label: 'Notes', text: '# Notes\n\nA short note.\n', truncated: false, path: 'pieces/alpha/notes.md' });
+  assert.equal(byId.long.text, 'x'.repeat(100));
+  assert.equal(byId.long.truncated, true);
+  assert.equal(byId.long.path, 'pieces/alpha/long.txt');
+  assert.equal(byId.wide.truncated, true);
+  assert.equal(byId.wide.text, '\u00e9\u00e9', 'a character cut in half is dropped');
+  assert.deepEqual(context.documents.map((doc) => doc.id), ['notes', 'long', 'wide']);
+  noAbsolutePaths(context, dir);
+});
+
+test('documents refuse absolute paths, .. segments, symlink escapes, binary and missing files as neutral problems', async (t) => {
+  const { dir, root, resolver } = await setup(t);
+  await withDocs(root, { 'bin.dat': Buffer.from([65, 0, 66]) });
+  await fs.writeFile(path.join(dir, 'outside.md'), 'secret');
+  await fs.symlink(path.join(dir, 'outside.md'), path.join(root, 'pieces/alpha/link.md'));
+  await fs.appendFile(path.join(root, 'pieces/alpha/record.yaml'), '  - id: link\n    path: pieces/alpha/link.md\n');
+  const point = (id) => ({ id, label: id, source: 'target', pathFrom: `/evidence[id=${id}]/path` });
+  const tpl = template({
+    documents: [point('absolute-link'), point('escaping-link'), point('missing-link'), point('link'), point('doc-bin-dat'),
+      { id: 'nokey', label: 'No key', source: 'target', pathFrom: '/evidence[id=nope]/path' }],
+  });
+  const context = await resolver.resolveContext({ template: tpl, audio: ALPHA });
+  assert.deepEqual(context.documents, []);
+  const byDoc = Object.fromEntries(context.problems.filter((problem) => problem.documentId).map((problem) => [problem.documentId, problem.message]));
+  assert.match(byDoc['absolute-link'], /not a relative path/);
+  assert.match(byDoc['escaping-link'], /not a relative path/);
+  assert.match(byDoc['missing-link'], /not found/);
+  assert.match(byDoc.link, /leaves the root/);
+  assert.match(byDoc['doc-bin-dat'], /not a text file/);
+  assert.match(byDoc.nokey, /no document path/);
+  noAbsolutePaths(context, dir);
+  assert.ok(!JSON.stringify(context).includes('secret'));
+});
+
+test('without a located target the details and documents are empty', async (t) => {
+  const { resolver } = await setup(t);
+  const tpl = template({
+    details: [{ id: 'name', label: 'Name', source: 'target', pointer: '/asset/name' }],
+    documents: [{ id: 'n', label: 'N', source: 'target', pathFrom: '/evidence[id=a]/path' }],
+  });
+  const context = await resolver.resolveContext({ template: tpl, audio: { ...ALPHA, sha256: 'e'.repeat(64) } });
+  assert.equal(context.target, null);
+  assert.deepEqual(context.details, []);
+  assert.deepEqual(context.documents, []);
 });
