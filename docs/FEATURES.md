@@ -72,7 +72,7 @@ Click any inline image to open it in a full-screen lightbox. Close with the X bu
 
 Markdown links to local audio files are rendered as an inline `<audio>` player so you can tap **Play** without leaving the page. The original link text is preserved underneath as a caption that points at the dedicated player page.
 
-Supported extensions: `.m4a`, `.mp3`, `.wav`, `.ogg`, `.oga`, `.opus`, `.flac`, `.aac`
+Supported extensions: `.m4a`, `.mp3`, `.wav`, `.aif`, `.aiff`, `.ogg`, `.oga`, `.opus`, `.flac`, `.aac`
 
 All three of these link forms render as a player:
 
@@ -82,13 +82,15 @@ All three of these link forms render as a player:
 [NotebookLM overview](http://<your-lookie-host>/view/my-repo/notebooks/2026-05-12-cruz-meeting.m4a)
 ```
 
-Browsing an audio file directly at `/view/<repo>/<path>.<audio-ext>` renders a dedicated player page with the same controls plus a **Download** link and file metadata (size, mtime).
+Browsing an audio file directly at `/view/<repo>/<path>.<audio-ext>` renders the waveform player page: a peaks waveform per channel, zoom, scrubbing, loop, playback speed, a **Download** link and file metadata (size, mtime). The waveform needs `ffmpeg` and `ffprobe` (see System dependencies in the README); without them the page still plays the file. Query parameters: `?template=<id>` picks the marker template, `?record=<recordId>` opens a specific saved set, `?t=<seconds>` starts the playhead there.
+
+With `markers.enabled: true` the same page is a marker editor: points and regions typed into the waveform by key, nudge or typed sample position, validated against a marker template (constraints, snapping to reference sources) and saved as immutable, superseding records keyed by the audio's SHA-256. A template may declare a projection that writes the saved values back into a YAML file through a guarded tool, with a dry-run preview first. Audio roots (`audioRoots`) are read-only directories that browse and play like repositories. See [the Audio and markers section of the capability matrix](CAPABILITIES.md#audio-and-markers) and [the API](API.md#audio-and-markers).
 
 Under the hood, audio is streamed from `/asset/<repo>/<path>.<audio-ext>` with the correct `Content-Type` and `Range` request support, so `<audio>` can seek without re-downloading.
 
 Notes:
 
-- Audio files are classified as binary, so they are **not** editable in editable mode.
+- Audio files are classified as binary, so they are **not** editable in editable mode. Marker records are separate documents; the audio file is never modified.
 - Audio links inside fenced ` ``` ` code blocks are left as code, not rewritten to a player.
 - The image lightbox does not apply to `<audio>` (it's a separate, non-binary widget).
 

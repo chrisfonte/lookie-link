@@ -50,7 +50,7 @@ function withSources() {
       write: [{ marker: 'a', pointer: '/x/y' }],
       text: [{ pointer: '/x/reason', template: 'by {actor}: {reason}' }],
       status: { pointer: '/x/status', onAccept: 'accepted' },
-      receipts: { dir: 'sessions/{session}/edits/{audio.basename}', snapshot: 'pre-{stamp}.yaml', receipt: 'edit-{stamp}.md' },
+      receipts: { dir: 'edits/{templateId}/{audio.basename}', snapshot: 'pre-{stamp}.yaml', receipt: 'edit-{stamp}.md' },
       history: { pointer: '/history', append: { reason: 'edit {date}' } },
       evidence: { pointer: '/evidence', append: { id: 'e-{n}' }, referenceIn: '/x/ids' },
     }],
@@ -333,4 +333,17 @@ test('yaml-pointers write entries: unit enum, multiple refused, pointer must sta
   const pointer = withSources();
   pointer.projections[0].write = [{ marker: 'a', pointer: 'p' }];
   assertRejected(pointer, 'write[0].pointer');
+});
+
+test('receipts paths refuse tokens outside the path-safe set', () => {
+  const doc = JSON.parse(JSON.stringify(require('../lib/markers/bundled/radio-imaging.json')));
+  doc.projections = [{ id: 'wb', kind: 'yaml-pointers', root: 'r', target: 't',
+    write: [{ marker: 'floor', pointer: '/x/floor' }],
+    receipts: { dir: 'sessions/{session}/edits/{audio.basename}', snapshot: 'pre-{stamp}.yaml', receipt: 'edit-{actor}.md' } }];
+  doc.sources = [{ id: 't', kind: 'yaml', root: 'r', locate: { glob: 'items/*/record.yaml', match: { pointer: '/id', equals: '$audio.sha256' } } }];
+  const result = validateMarkerTemplate(doc);
+  assert.equal(result.valid, false);
+  const paths = result.errors.map((e) => e.path).join(' ');
+  assert.match(paths, /receipts\.dir/);
+  assert.match(paths, /receipts\.receipt/);
 });

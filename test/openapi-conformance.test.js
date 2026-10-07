@@ -53,7 +53,7 @@ const fixtureTemplate = {
   fields: [{ id: 'reps', type: 'number', label: 'Reps', required: true, constraints: { minimum: 1, maximum: 100, integer: true, step: 1 } }],
 };
 
-async function startServer(f, formsEnabled) {
+async function startServer(f, formsEnabled, markersEnabled = false) {
   const options = {
     mappings: { docs: f.docs },
     accessConfig: {},
@@ -81,7 +81,20 @@ async function startServer(f, formsEnabled) {
       formsAuthorize: () => true,
     });
   }
+  if (markersEnabled) {
+    Object.assign(options, {
+      markersConfig: {
+        enabled: true,
+        templatesPaths: [path.join(f.root, 'marker-templates')],
+        destinations: { default: path.join(f.root, 'marker-records') },
+        roots: {},
+        peaksCachePath: path.join(f.root, 'peaks'),
+        publicOrigins: ['http://markers.example.test'],
+      },
+    });
+  }
   const app = createApp(options);
+  if (app.locals.markersReady) await app.locals.markersReady;
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   return { server, base: `http://127.0.0.1:${server.address().port}` };
@@ -117,8 +130,11 @@ const PARAM_VALUES = {
   repo: 'docs', slug: 'sunset', mode: 'dark', id: 'a', templateId: TEMPLATE_ID,
   keyId: 'fixture-key', grantId: 'fixture-grant', trashId: 'fixture-trash', submissionId: 'fixture-submission',
   name: 'ops', version: '1.26', file: 'email-table-template.html',
+  recordId: '00000000-0000-4000-8000-000000000000',
 };
-const QUERY_VALUES = { q: 'fixture', since: () => String(Date.now() - 3600000), name: 'pic' };
+const QUERY_VALUES = {
+  q: 'fixture', since: () => String(Date.now() - 3600000), name: 'pic', repo: 'docs', path: 'README.md', template: 'freeform',
+};
 
 function buildUrl(specPath, op, extraQuery) {
   let url = specPath.replace(/\{([A-Za-z]+)\}/g, (_, name) => {
@@ -218,18 +234,19 @@ function validateDocument(doc) {
   }
 }
 
-async function exercise(t, formsEnabled) {
-  const doc = buildOpenApiDocument({ formsEnabled });
+async function exercise(t, formsEnabled, markersEnabled = false) {
+  const doc = buildOpenApiDocument({ formsEnabled, markersEnabled });
   validateDocument(doc);
   const f = stageFixture();
-  const { server, base } = await startServer(f, formsEnabled);
+  const { server, base } = await startServer(f, formsEnabled, markersEnabled);
+  const extraTag = formsEnabled ? 'forms' : (markersEnabled ? 'markers' : null);
   try {
     const failures = [];
     for (const { specPath, method, op, label } of operations(doc)) {
       try { await checkOne(); } catch (error) { failures.push(`${label}: ${error.message.split('\n')[0]}`); }
       async function checkOne() {
-      const scoped = `${label}${formsEnabled ? ' [forms]' : ''}`;
-      if (!formsEnabled || (op.tags[0] === 'forms')) {
+      const scoped = `${label}${extraTag ? ` [${extraTag}]` : ''}`;
+      if (!extraTag || (op.tags[0] === extraTag)) {
         tally.operations += 1;
         tally.byTag[op.tags[0]] = (tally.byTag[op.tags[0]] || 0) + 1;
       }
@@ -301,4 +318,8 @@ test('OpenAPI document (forms off) is structurally valid and every operation con
 
 test('OpenAPI document (forms on) is structurally valid and every operation conforms', async (t) => {
   await exercise(t, true);
+});
+
+test('OpenAPI document (markers on) is structurally valid and every operation conforms', async (t) => {
+  await exercise(t, false, true);
 });

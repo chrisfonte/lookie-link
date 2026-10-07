@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — audio markers
+
+- Audio files open in a waveform player (peaks from `ffmpeg`/`ffprobe`, cached beside the audio or in a cache directory); `.aif`/`.aiff` are recognized. New always-on routes `GET /api/audio/:repo/*` and `GET /api/peaks/:repo/*`, discoverable as the `audio` capability.
+- Read-only audio roots (`audioRoots`): browse and play network audio like a repository; edits, saves and non-audio bytes are refused. `/asset` now answers `416`/`404` for bad ranges and missing files instead of `500`.
+- Opt-in marker editor (`markers.enabled`): marker templates (bundled `freeform`, `song-structure` and `radio-imaging`, plus operator-managed ones) and immutable marker records keyed by the audio's SHA-256, with revision conflicts (`409 revision_conflict`), constraint validation, reference sources, and a dry-run preview. Routes under `/api/markers/`, the `markers` capability and endpoint templates, and OpenAPI entries when enabled.
+- Optional projections write saved markers back into a YAML target through a guarded tool (target-hash checks, snapshot and receipt files); the `rivendell` projection is a preview-only stub. See the Audio and markers sections of `docs/CAPABILITIES.md` and `docs/API.md`.
+- Declared `ffmpeg` and `ffprobe` as referenced system dependencies (`fossa-deps.yml`, README).
+
 ## Unreleased — generic diagram authoring
 
 - Ops Kit 1.28 adds numbered-key diagrams (markers on the drawing, a reflowing HTML

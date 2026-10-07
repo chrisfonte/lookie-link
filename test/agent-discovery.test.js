@@ -261,6 +261,12 @@ const ROUTE_FOR_ENDPOINT = Object.freeze({
   formsTemplates: ['get', '/api/forms/templates'],
   formsSubmissions: ['get', '/api/forms/:templateId/submissions'],
   formsList: ['get', '/api/forms/:templateId/list'],
+  audioInfo: ['get', '/api/audio/:repo/*'],
+  audioPeaks: ['get', '/api/peaks/:repo/*'],
+  markerTemplates: ['get', '/api/markers/templates'],
+  markerRecords: ['get', '/api/markers/records'],
+  markerContext: ['get', '/api/markers/context'],
+  markerPreview: ['post', '/api/markers/preview'],
   edit: ['get', '/edit/*'],
   save: ['post', '/api/save/*'],
   preview: ['post', '/api/preview/*'],
@@ -301,6 +307,8 @@ const CAPABILITY_ENDPOINTS = Object.freeze({
   appearance: ['appearance', 'appearanceTheme'],
   kits: ['kits', 'kit', 'kitStylesheet', 'kitFile'],
   forms: ['forms', 'formsTemplates', 'formsSubmissions', 'formsList'],
+  audio: ['audioInfo', 'audioPeaks'],
+  markers: ['markerTemplates', 'markerRecords', 'markerContext', 'markerPreview'],
 });
 
 // App-level routes only by default (the authoritative matrix covers those).

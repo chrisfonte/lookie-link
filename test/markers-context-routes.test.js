@@ -93,7 +93,7 @@ test('returns the resolved context with root-relative paths and an asset url', a
     url: '/asset/served/pieces/alpha/measure/plot.png',
     plot: { left: 142, right: 1942, top: 64, bottom: 664 },
   });
-  assert.deepEqual(body.projections, [{ id: 'write-back', kind: 'rivendell', label: 'write-back' }]);
+  assert.deepEqual(body.projections, [{ id: 'write-back', kind: 'rivendell', label: 'write-back', acceptable: false }]);
   assert.deepEqual(body.problems, []);
   assert.deepEqual(state.calls, [['authorize', 'station', 'station/alpha.wav'], ['audio', 'station', 'station/alpha.wav']]);
   const text = JSON.stringify(body);

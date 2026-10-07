@@ -79,6 +79,8 @@ The inventory was checked against the route registrations in [`server.js`](../se
 | Transformed HTML: `/embed/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; preserves scripts while rewriting local URLs and injecting theme sync plus annotation mount/gate markup (not the network annotation client). Mounted repos only. [`server.js`](../server.js) |
 | Verbatim HTML: `/raw/:repo/*` | `GET` | Effective `view` on file | Raw-HTML flag | `.html`/`.htm` only; unsanitized same-origin content; supports published revisions. [`server.js`](../server.js) |
 | View redirect: `/view` | `GET` | Public redirect | Always | Redirects to `/`; a restricted caller is then challenged there. [`server.js`](../server.js) |
+| Audio info: `/api/audio/:repo/*` | `GET` | Effective `view` on file | Always | Audio extensions only (`415` otherwise). JSON header fields (`sampleRate`, `channels`, `frames`, `durationSeconds`, `sha256`, `blockSize`, `blocks`, `peakMode`), `viewUrl`, `assetUrl`, `peaksUrl`, `sidecar.location`; generates the peaks sidecar when missing. `503 peaks_unavailable` when `ffmpeg`/`ffprobe` cannot run; `413 audio_too_large` above `markers.maxAudioBytes`. No absolute paths in the response. [`lib/audio/routes.js`](../lib/audio/routes.js) |
+| Audio peaks: `/api/peaks/:repo/*` | `GET` | Effective `view` on file | Always | Little-endian `uint16` min/max pairs per block per channel as `application/octet-stream`; `X-Peaks-*` headers mirror the JSON header, `?header=1` returns it as JSON; weak `ETag` from the audio SHA-256 (`304` on a match). [`lib/audio/routes.js`](../lib/audio/routes.js) |
 
 Unmatched paths use the final `404` middleware and unhandled errors use the final `500` middleware at [`server.js`](../server.js). These are fallbacks, not separately registered application routes.
 
@@ -127,6 +129,12 @@ This three-column table is test-checked against `lib/agent-discovery.js` and the
 | `formsTemplates` | `/api/forms/templates` | `forms.enabled` is true |
 | `formsSubmissions` | `/api/forms/:templateId/submissions` | `forms.enabled` is true |
 | `formsList` | `/api/forms/:templateId/list` | `forms.enabled` is true |
+| `audioInfo` | `/api/audio/:repo/*path` | Audio capability is available |
+| `audioPeaks` | `/api/peaks/:repo/*path` | Audio capability is available |
+| `markerTemplates` | `/api/markers/templates` | `markers.enabled` is true |
+| `markerRecords` | `/api/markers/records` | `markers.enabled` is true |
+| `markerContext` | `/api/markers/context` | `markers.enabled` is true |
+| `markerPreview` | `/api/markers/preview` | `markers.enabled` is true |
 
 Administrative grant, API-key, and managed-repo registration routes are intentionally not emitted.
 
@@ -153,6 +161,8 @@ Both discovery responses contain these booleans. They are computed from register
 | `appearance` | The appearance list route is registered (always); its admin writes are not advertised |
 | `kits` | At least one kit is loaded and the kits list/show routes are registered |
 | `forms` | The forms router is mounted (`forms.enabled: true`); per-template authorization still applies on each forms route |
+| `audio` | Caller has visible `view` scope and the audio info and peaks routes are registered (always, whether or not markers are enabled) |
+| `markers` | The marker routers are mounted (`markers.enabled: true`), the caller has visible `view` scope and the audio routes exist; per-path `view`/`write` authorization and template-admin checks still apply on each route |
 
 ## Discovery field inventory
 
@@ -298,6 +308,26 @@ The package also ships compatibility executables `lookie-read` and `lookie-annot
 | `lib/path-utils.js` | Path containment and route builders plus display helpers |
 | `lib/publish-store.js` | Atomic immutable revisions, optimistic update guard, metadata separation, limits, historical resolution, revocation |
 | `lib/renderer.js` | Sanitized Markdown/HTML and highlighted code; directory/image/audio/video/PDF/CSV/JSON pages; portable links; anchors; editor and preview |
+
+## Audio and markers
+
+Audio roots (`audioRoots`) are read-only mappings: they browse like repositories, serve only audio bytes, and refuse edits, saves and annotation writes. The viewer page for any served audio file (`/view/<repo>/<path>`, extensions `.mp3 .wav .ogg .m4a .aac .flac .aif .aiff`) is a waveform player; with `markers.enabled: true` it is also a marker editor. The audio info and peaks routes are in the registered-routes table above and are always present. Everything under `/api/markers/` below is mounted only when `markers.enabled` is true, on routers like forms, so the route-matrix equality test does not cover them; discovery advertises the `markers` capability and the `markerTemplates`, `markerRecords`, `markerContext` and `markerPreview` endpoint templates, and `/openapi.json` includes them.
+
+| Route | Method | Effective auth | Notes |
+|---|---|---|---|
+| `/api/markers/templates` | `GET` | Non-denied caller | Bundled and stored marker templates. |
+| `/api/markers/templates/:templateId` | `GET` | Non-denied caller | One template with its revision. |
+| `/api/markers/templates` | `POST` | Template admin + browser gate | Creates a template; `201`. Template admin means an unrestricted caller, or a token with `write` and whole-fleet repo scope. |
+| `/api/markers/templates/:templateId` | `PATCH` | Template admin + browser gate | Body carries `expectedRevision` (`revision` is accepted as an alias); stale: `409 revision_conflict` with `currentRevision`. |
+| `/api/markers/templates/:templateId` | `DELETE` | Template admin + browser gate | Tombstones the template; history is kept; `expectedRevision` required. |
+| `/api/markers/context` | `GET` | Effective `view` on the audio file | Query `repo`, `path`, `template`. Resolved reference sources, target reads and the projection list (`id`, `kind`, `label`, `acceptable`); root-relative paths only. |
+| `/api/markers/records` | `GET` | Effective `view` on the audio file | Query `repo`, `path`, optional `templateId`, `all=1`. Latest record per template, keyed by the audio SHA-256. |
+| `/api/markers/records/:recordId` | `GET` | Effective `view` on the record's audio | One immutable record. |
+| `/api/markers/records/:recordId/history` | `GET` | Effective `view` on the record's audio | The supersession chain. |
+| `/api/markers/records` | `POST` | Effective `write` on the audio file + browser gate | Creates a record; `201`. Needs `templateRevision`; optional `projection { id, mode: "live", accept?, expectedTargetSha256 }` writes back through the template's projection (`targetSha256After` in the response). Errors: `409 revision_conflict` (`currentRecordId`), `409 target_conflict` (`currentTargetSha256`), `409 sidecar_conflict`, `409 feature_disabled`, `422 validation_error`, `501 not_implemented`, `503 peaks_unavailable`, `413 audio_too_large`. |
+| `/api/markers/preview` | `POST` | Effective `write` on the audio file + browser gate | Dry-run constraint check and projection; writes nothing durable. |
+
+Browser mutations carry the context cookie `lookie_markers_context`, an `X-CSRF-Token` header from the viewer page, and an `Origin` matching `markers.publicOrigins` (falling back to `forms.publicOrigins`); bearer callers skip the gate, and a bearer plus the cookie is `400 ambiguous_credentials`. Mutations never accept `?token=`. Projections write only into `markers.roots` aliases flagged `allowProjections`, through the guarded YAML tool named in `markers.yamlToolPath`; a projection into a root that is also a served repository additionally needs `write` (`view` for previews) on that whole repository unless the caller is a template admin.
 
 ## Forms routes (mounted only when `forms.enabled` is true)
 

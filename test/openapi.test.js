@@ -143,8 +143,39 @@ test('with forms enabled the spec adds exactly the forms router routes', async (
   }
 });
 
+test('with markers enabled the spec adds exactly the marker router routes', async () => {
+  const base = new Set(specRoutes(buildOpenApiDocument({ formsEnabled: false, markersEnabled: false })));
+  const doc = buildOpenApiDocument({ formsEnabled: false, markersEnabled: true });
+  const added = specRoutes(doc).filter((entry) => !base.has(entry));
+  assert.ok(added.length > 0);
+  for (const entry of added) {
+    assert.ok(entry.slice(entry.indexOf(':') + 1).startsWith('/api/markers/'), entry);
+  }
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lookie-openapi-markers-'));
+  try {
+    const app = createApp({
+      mappings: {},
+      accessConfig: {},
+      formsConfig: { enabled: false },
+      markersConfig: {
+        enabled: true,
+        templatesPaths: [path.join(root, 'templates')],
+        destinations: { default: path.join(root, 'records') },
+        roots: {},
+        peaksCachePath: path.join(root, 'peaks'),
+        publicOrigins: ['http://markers.example.test'],
+      },
+    });
+    await app.locals.markersReady;
+    const all = registeredRoutes(app, { includeRouters: true }).filter((entry) => !entry.startsWith('get:/public/'));
+    assert.deepEqual(sorted(specRoutes(doc)), sorted(all));
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test('every operation is complete and references the shared Error envelope', () => {
-  const doc = buildOpenApiDocument({ formsEnabled: true, version: '9.9.9', baseUrl: 'http://x.test' });
+  const doc = buildOpenApiDocument({ formsEnabled: true, markersEnabled: true, version: '9.9.9', baseUrl: 'http://x.test' });
   assert.match(doc.openapi, /^3\.1/);
   assert.equal(doc.info.version, '9.9.9');
   assert.deepEqual(doc.servers, [{ url: 'http://x.test' }]);
@@ -170,7 +201,7 @@ test('every operation is complete and references the shared Error envelope', () 
       if (method !== 'get') {
         // Forms mutations also admit the browser path (context cookie + CSRF +
         // Origin) as a declared second scheme; every other mutation is bearer-only.
-        const expected = /^\/(api\/)?forms/.test(specPath) ? [{ bearerAuth: [] }, { browserContext: [] }] : [{ bearerAuth: [] }];
+        const expected = /^\/(api\/)?(forms|markers)/.test(specPath) ? [{ bearerAuth: [] }, { browserContext: [] }] : [{ bearerAuth: [] }];
         assert.deepEqual(op.security, expected, `${label} mutations declare their credential paths`);
       }
       for (const match of specPath.matchAll(/\{([A-Za-z]+)\}/g)) {

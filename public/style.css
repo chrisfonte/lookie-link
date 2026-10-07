@@ -3142,6 +3142,12 @@ html[data-wallpaper="on"] .content { border-radius: 18px; }
 }
 
 /* audio markers */
+/* markers feature off: player and waveform only */
+.audio-markers-off .content.audio-markers .am-bar-markers,
+.audio-markers-off .content.audio-markers .am-lanes,
+.audio-markers-off .content.audio-markers .am-side,
+.audio-markers-off .content.audio-markers .am-save { display: none; }
+
 .layout.layout-audio {
   max-width: 1400px;
 }

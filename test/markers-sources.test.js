@@ -187,7 +187,7 @@ test('image keeps the plot box unchanged (right and bottom exclusive) and return
 test('projections list id, kind and a label (id by default)', async (t) => {
   const { resolver } = await setup(t);
   const context = await resolver.resolveContext({ template: template(), audio: ALPHA });
-  assert.deepEqual(context.projections, [{ id: 'write-back', kind: 'yaml-pointers', label: 'write-back' }]);
+  assert.deepEqual(context.projections, [{ id: 'write-back', kind: 'yaml-pointers', label: 'write-back', acceptable: false }]);
 });
 
 test('no matching target is a neutral problem and dependent sources stay quiet', async (t) => {

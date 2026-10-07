@@ -120,6 +120,19 @@ const {
   patchKitOverlay,
 } = require('./lib/kits');
 const { createFormsRouter } = require('./lib/forms/routes');
+const nodeCrypto = require('node:crypto');
+const nodeFs = require('node:fs');
+const nodeOs = require('node:os');
+const { createPeaksService } = require('./lib/audio/peaks');
+const { registerAudioRoutes } = require('./lib/audio/routes');
+const { createBrowserWriteGate } = require('./lib/browser-write-gate');
+const { MarkerTemplateStore } = require('./lib/markers/template-store');
+const { createMarkerTemplateRouter } = require('./lib/markers/routes-templates');
+const { MarkerRecordStore } = require('./lib/markers/record-store');
+const { createMarkerRecordRouter } = require('./lib/markers/routes-records');
+const { registerMarkerContextRoute } = require('./lib/markers/routes-context');
+const { createSourceResolver } = require('./lib/markers/sources');
+const { createProjectionRunner, createYamlPointersProjection, createRivendellProjection } = require('./lib/markers/projections');
 const { apiError } = require('./lib/api-error');
 
 const { version: LOOKIE_LINK_VERSION } = require('./package.json');
@@ -849,6 +862,8 @@ function getRouteAvailability(app) {
     kit: has('get', '/api/kits/:name'),
     kitStylesheet: has('get', '/kit/:name/kit.css'),
     kitFile: has('get', '/kit/:name/files/:file'),
+    audioInfo: has('get', '/api/audio/:repo/*'),
+    audioPeaks: has('get', '/api/peaks/:repo/*'),
   };
 }
 
@@ -1151,6 +1166,263 @@ function createApp(options = {}) {
       logger,
       get customThemeCss() { return customThemeCss; },
     }));
+  }
+
+  // ---- Audio info/peaks routes (always) and marker routes (markers.enabled) ----
+  const markersEnabled = Boolean(markersConfig && markersConfig.enabled === true);
+  const markerDestinations = (markersEnabled && markersConfig.destinations) || {};
+  const peaksCachePath = markersConfig.peaksCachePath
+    || path.join(nodeOs.homedir(), '.local', 'share', 'lookie-link', 'peaks');
+  const peaksService = options.peaksService || createPeaksService({
+    ffmpegPath: markersConfig.ffmpegPath || 'ffmpeg',
+    ffprobePath: markersConfig.ffprobePath || 'ffprobe',
+    blockSize: markersConfig.blockSize || 1152,
+    peakMode: 'max-abs',
+    cachePath: peaksCachePath,
+    maxAudioBytes: markersConfig.maxAudioBytes,
+    maxConcurrent: 2,
+    logger,
+  });
+  const requestAccessContext = (req) => req.accessContext || resolveAccessContext(req);
+
+  // Access context + view permission + mapping + containment + audio extension + stat.
+  const resolveAudioFile = async (req, repo, relativePath) => {
+    const context = requestAccessContext(req);
+    if (context.mode === 'denied') {
+      return { ok: false, status: context.denialStatus || 403, code: 'forbidden', message: context.denialMessage || 'Access denied.' };
+    }
+    const rootPath = mappings[repo];
+    if (!rootPath || isManagedInternalPath(repo, relativePath)) {
+      return { ok: false, status: 404, code: 'not_found', message: 'Audio file not found.' };
+    }
+    const extension = path.extname(relativePath).toLowerCase();
+    if (!AUDIO_EXTENSIONS.has(extension)) {
+      return { ok: false, status: 415, code: 'unsupported_media_type', message: 'Not an audio file.' };
+    }
+    if (!canAccessPath(context, 'view', repo, relativePath, 'file')) {
+      return getManagedRepo(repo)
+        ? { ok: false, status: 404, code: 'not_found', message: 'Audio file not found.' }
+        : { ok: false, status: 403, code: 'forbidden', message: 'Access denied.' };
+    }
+    let absPath;
+    try {
+      absPath = await safeResolve(rootPath, relativePath);
+    } catch (error) {
+      if (error && error.code === 'EACCES') return { ok: false, status: 403, code: 'forbidden', message: 'Invalid path.' };
+      throw error;
+    }
+    const stat = await statResolvedPath(absPath);
+    if (!stat || !stat.isFile()) {
+      return { ok: false, status: 404, code: 'not_found', message: 'Audio file not found.' };
+    }
+    return { ok: true, absPath, extension, mimeType: AUDIO_MIME_TYPES[extension] };
+  };
+  const peaksCandidates = (repo, relativePath, absPath) => {
+    const digest = nodeCrypto.createHash('sha256').update(`${repo}\0${relativePath}`).digest('hex');
+    const candidates = [{ dir: path.dirname(absPath), readOnly: isReadOnlyRepo(repo) }];
+    candidates.push(path.join(markerDestinations.default || peaksCachePath, 'peaks', digest));
+    return candidates;
+  };
+  registerAudioRoutes(app, {
+    resolveAudioFile,
+    peaksCandidates,
+    peaksService,
+    apiError,
+    buildViewHref: buildHref,
+    buildAssetHref,
+  });
+
+  let markerGate = null;
+  app.locals.markersReady = Promise.resolve();
+  if (markersEnabled) {
+    const markersAudit = typeof options.markersAudit === 'function'
+      ? options.markersAudit
+      : (event, req, details) => {
+        const persisted = recordApiKeyAuditEvent(event, req.accessContext, {
+          resourceKind: 'marker',
+          resourceId: (details && (details.templateId || details.recordId)) || null,
+        }, details || {});
+        if (!persisted) logger.info('Markers audit', { event, ...(details || {}) });
+      };
+    const markerTemplateStore = options.markerTemplateStore || new MarkerTemplateStore({
+      templatesPaths: markersConfig.templatesPaths,
+      logger,
+    });
+    // createApp is synchronous, so the template load starts here and its promise is
+    // exposed as app.locals.markersReady (tests and the entry point may await it).
+    // A failed load is logged; the store still serves bundled templates.
+    app.locals.markersReady = Promise.resolve(markerTemplateStore.load()).catch((error) => {
+      logger.error('Marker template load failed.', { error: error && error.message });
+    });
+    markerGate = createBrowserWriteGate({
+      publicOrigins: markersConfig.publicOrigins || (formsConfig && formsConfig.publicOrigins),
+      cookieName: 'lookie_markers_context',
+      contexts: options.markersCsrfContexts,
+      audit: markersAudit,
+      logger,
+    });
+    const authorizeAdmin = (req) => {
+      const context = requestAccessContext(req);
+      if (context.mode === 'unrestricted') return true;
+      return context.mode === 'scoped' && context.allRepos === true
+        && (context.permissions.write === true || context.permissions.edit === true);
+    };
+    const authorizeRead = (req, repo, relativePath) => canAccessPath(requestAccessContext(req), 'view', repo, relativePath, 'file');
+    const authorizeWrite = (req, repo, relativePath) => canAccessPath(requestAccessContext(req), 'write', repo, relativePath, 'file');
+    // A projection into a root that is also a served repository needs that repository's
+    // permission (whole-repo scope: the template names a root and a source, not a path
+    // known before the audio is located). Roots that are not served need template-admin.
+    const mappedRepoForRoot = (alias) => {
+      const root = markersConfig.roots && markersConfig.roots[alias];
+      const rootPath = root && (typeof root === 'string' ? root : root.path);
+      if (!rootPath) return null;
+      const resolvedRoot = path.resolve(rootPath);
+      return Object.keys(mappings).find((id) => path.resolve(mappings[id]) === resolvedRoot) || null;
+    };
+    const authorizeProjection = (req, { mode, projection }) => {
+      if (authorizeAdmin(req)) return true;
+      const repoId = projection ? mappedRepoForRoot(projection.root) : null;
+      return Boolean(repoId) && canAccessRepo(requestAccessContext(req), mode === 'live' ? 'write' : 'view', repoId);
+    };
+    const principalFor = (req) => {
+      const context = req.accessContext || {};
+      if (context.principal && typeof context.principal.id === 'string') {
+        return { id: context.principal.id, type: context.principal.kind || 'agent' };
+      }
+      if (context.subject && typeof context.subject.agentId === 'string') {
+        return { id: context.subject.agentId, type: 'agent' };
+      }
+      if (context.mode === 'unrestricted') return { id: 'operator', type: 'operator' };
+      return null;
+    };
+    const tokenSubjectFor = (req) => {
+      const context = req.accessContext || {};
+      const subject = context.subject;
+      if (typeof subject === 'string' && subject) return subject;
+      if (subject && typeof subject === 'object') {
+        const named = subject.name || subject.agentId || subject.id;
+        if (typeof named === 'string' && named) return named;
+      }
+      return typeof context.tokenName === 'string' && context.tokenName ? context.tokenName : null;
+    };
+    const recordStores = new Map();
+    const stores = {
+      forDestination(id) {
+        if (!Object.prototype.hasOwnProperty.call(markerDestinations, id)) {
+          throw new Error(`Marker destination "${id}" is not configured.`);
+        }
+        if (!recordStores.has(id)) {
+          recordStores.set(id, new MarkerRecordStore({ storageRoot: markerDestinations[id], logger }));
+        }
+        return recordStores.get(id);
+      },
+    };
+    const destinationIds = () => Object.keys(markerDestinations);
+    const resolveAudioWithPeaks = async (req, repo, relativePath) => {
+      const file = await resolveAudioFile(req, repo, relativePath);
+      if (!file.ok) return file;
+      try {
+        const peaks = await peaksService.ensurePeaks({
+          filePath: file.absPath,
+          candidates: peaksCandidates(repo, relativePath, file.absPath),
+        });
+        const { header } = peaks;
+        return {
+          ok: true,
+          sampleRate: header.sampleRate,
+          channels: header.channels,
+          frames: header.frames,
+          sha256: header.source.sha256,
+          absPath: file.absPath,
+        };
+      } catch (error) {
+        if (error && error.code === 'audio_too_large') {
+          return { ok: false, status: 413, code: 'audio_too_large', message: 'This audio file is too large to analyze.' };
+        }
+        return { ok: false, status: 503, code: 'peaks_unavailable', message: 'Audio analysis is unavailable on this instance; marker records cannot be validated.' };
+      }
+    };
+    const hashAudio = (absPath) => new Promise((resolve, reject) => {
+      const hash = nodeCrypto.createHash('sha256');
+      const stream = nodeFs.createReadStream(absPath);
+      stream.on('error', reject);
+      stream.on('data', (chunk) => hash.update(chunk));
+      stream.on('end', () => resolve(hash.digest('hex')));
+    });
+    const sourceResolver = createSourceResolver({ roots: markersConfig.roots || {} });
+    const loadRecord = async (recordId) => {
+      for (const id of destinationIds()) {
+        const record = await stores.forDestination(id).getRecord(recordId);
+        if (record) return record;
+      }
+      return null;
+    };
+    const projectionRunner = createProjectionRunner({
+      yamlPointers: createYamlPointersProjection({
+        roots: markersConfig.roots || {},
+        yamlToolPath: markersConfig.yamlToolPath || undefined,
+        validators: markersConfig.validators || {},
+        timezone: markersConfig.timezone,
+        locateTarget: sourceResolver.locateTarget,
+        loadRecord,
+        logger,
+      }),
+      rivendell: createRivendellProjection(),
+    });
+
+    app.use(createMarkerTemplateRouter({
+      store: markerTemplateStore,
+      authorizeAdmin,
+      gate: markerGate,
+      audit: markersAudit,
+      logger,
+    }));
+    app.use(createMarkerRecordRouter({
+      stores,
+      templateStore: markerTemplateStore,
+      gate: markerGate,
+      authorizeRead,
+      authorizeWrite,
+      authorizeProjection,
+      resolveAudio: resolveAudioWithPeaks,
+      hashAudio,
+      principalFor,
+      project: projectionRunner.project,
+      audit: markersAudit,
+      operatorName: markersConfig.operatorName || undefined,
+      tokenSubjectFor,
+      destinationIds,
+      logger,
+    }));
+    // The context route sits on its own router, like forms: discovery and OpenAPI
+    // describe it through the `markers` capability, not through app-level routes.
+    const markerContextRouter = express.Router();
+    registerMarkerContextRoute(markerContextRouter, {
+      resolver: sourceResolver,
+      templateStore: markerTemplateStore,
+      authorizeRead,
+      resolveAudio: async (req, repo, relativePath) => {
+        const resolved = await resolveAudioWithPeaks(req, repo, relativePath);
+        if (!resolved.ok) {
+          if (resolved.status === 404) return null;
+          const failure = new Error(resolved.message);
+          failure.status = resolved.status;
+          failure.code = resolved.code;
+          throw failure;
+        }
+        return {
+          sha256: resolved.sha256,
+          basename: path.posix.basename(relativePath),
+          sampleRate: resolved.sampleRate,
+          frames: resolved.frames,
+        };
+      },
+      assetUrlFor: (alias, relativePath) => {
+        const repoId = mappedRepoForRoot(alias);
+        return repoId ? buildAssetHref(repoId, relativePath) : null;
+      },
+    });
+    app.use(markerContextRouter);
   }
   app.use(express.json({ limit: '2mb' }));
   app.use('/public', express.static(path.join(__dirname, 'public'), {
@@ -2056,6 +2328,7 @@ function createApp(options = {}) {
     publishedRepo,
     routeAvailability: getRouteAvailability(app),
     formsEnabled: Boolean(formsConfig && formsConfig.enabled === true),
+    markersEnabled: Boolean(markersConfig && markersConfig.enabled === true),
     kitsEnabled: kitsEnabled(),
   });
 
@@ -2087,6 +2360,7 @@ function createApp(options = {}) {
     res.set('Cache-Control', 'no-cache');
     res.status(200).json(buildOpenApiDocument({
       formsEnabled: optionsForCaller.formsEnabled,
+      markersEnabled: optionsForCaller.markersEnabled,
       version: LOOKIE_LINK_VERSION,
       baseUrl: optionsForCaller.baseUrl,
     }));
@@ -2316,6 +2590,12 @@ function createApp(options = {}) {
         size: formatFileSize(stat.size),
         customThemeCss,
         queryToken: accessContext.queryToken,
+        markersEnabled,
+        csrfToken: markerGate && accessContext.mode !== 'denied' ? markerGate.issueContext(req, res) : null,
+        templateId: typeof req.query.template === 'string' ? req.query.template : null,
+        recordId: typeof req.query.record === 'string' ? req.query.record : null,
+        startSeconds: typeof req.query.t === 'string' ? req.query.t : null,
+        operatorName: markersEnabled ? (markersConfig.operatorName || null) : null,
       });
 
       res.status(200).type('html').send(html);

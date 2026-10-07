@@ -1,0 +1,13 @@
+# Referenced system dependencies: external tools Lookie-Link invokes by configured path.
+# They are not bundled or installed by npm; FOSSA records them as custom dependencies.
+custom-dependencies:
+  - name: ffmpeg
+    version: "system"
+    license: "LGPL-2.1-or-later OR GPL-2.0-or-later"
+    metadata:
+      description: "external tool invoked by configured path"
+  - name: ffprobe
+    version: "system"
+    license: "LGPL-2.1-or-later OR GPL-2.0-or-later"
+    metadata:
+      description: "external tool invoked by configured path"

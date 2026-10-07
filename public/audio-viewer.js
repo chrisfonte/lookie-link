@@ -2283,6 +2283,7 @@
 
   async function loadSetRecords(set, wantedId) {
     let latest = null;
+    if (boot.markersEnabled === false) { set.latestId = null; set.record = null; set.markers = set.markers || []; return; }
     try {
       const result = await api.records(set.templateId);
       latest = (result.records || []).find((r) => r.templateId === set.templateId) || null;
@@ -2330,6 +2331,8 @@
   }
 
   async function init() {
+    const markersOn = boot.markersEnabled !== false;
+    if (!markersOn) document.documentElement.classList.add('audio-markers-off');
     loadCalibration();
     loadOperatorName();
     app.hidden = false;
@@ -2356,10 +2359,10 @@
     state.view = { start: 0, span: Math.max(state.duration, 0.001) };
 
     const [templateList, template, context, freeform] = await Promise.all([
-      api.templates().catch(() => ({ templates: [] })),
-      api.template(boot.templateId).catch(() => null),
-      api.context(boot.templateId).catch(() => null),
-      boot.templateId === 'freeform' ? Promise.resolve(null) : api.template('freeform').catch(() => null),
+      markersOn ? api.templates().catch(() => ({ templates: [] })) : Promise.resolve({ templates: [] }),
+      markersOn ? api.template(boot.templateId).catch(() => null) : Promise.resolve(null),
+      markersOn ? api.context(boot.templateId).catch(() => null) : Promise.resolve(null),
+      (!markersOn || boot.templateId === 'freeform') ? Promise.resolve(null) : api.template('freeform').catch(() => null),
     ]);
     state.templates = templateList.templates || [];
     state.template = (template && template.template) || (boot.templateId === 'freeform' ? FREEFORM_TEMPLATE : { ...FREEFORM_TEMPLATE, templateId: boot.templateId });
