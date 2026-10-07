@@ -2089,7 +2089,7 @@
     }
   }
 
-  function previewPanel(result.projection || result) {
+  function previewPanel(result) {
     const panel = h('div', { class: 'am-preview', 'data-am': 'preview-result' }, h('h4', { text: 'Write-back preview (nothing written)' }));
     const list = h('dl', { class: 'am-kv' });
     if (Array.isArray(result.pointers)) {
