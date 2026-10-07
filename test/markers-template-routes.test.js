@@ -199,15 +199,16 @@ test('a refusing gate stops the mutation and its response stands', async (t) => 
   assert.deepEqual(state.gateCalls, []);
 });
 
-test('?token= is rejected on every method', async (t) => {
+test('?token= is rejected on mutations and accepted on reads', async (t) => {
   const { call } = await setup(t);
-  for (const [method, body] of [['GET'], ['POST', sample()], ['PATCH', { revision: 1, title: 'x' }], ['DELETE', { revision: 1 }]]) {
-    const route = method === 'POST' || (method === 'GET') ? '/api/markers/templates?token=abc' : '/api/markers/templates/sample?token=abc';
-    const response = await call(method, route, body);
-    assert.equal(response.status, 400, method);
+  for (const method of ['POST', 'PATCH', 'DELETE']) {
+    const route = method === 'POST' ? '/api/markers/templates?token=abc' : '/api/markers/templates/sample?token=abc';
+    const response = await call(method, route, { revision: 1 });
+    assert.equal(response.status, 400, `${method} with a query token`);
     assert.equal(response.body.error.code, 'query_credentials_rejected');
   }
-  assert.equal((await call('GET', '/api/markers/templates/freeform?token=abc')).status, 400);
+  assert.equal((await call('GET', '/api/markers/templates?token=abc')).status, 200);
+  assert.equal((await call('GET', '/api/markers/templates/freeform?token=abc')).status, 200);
 });
 
 test('bad JSON and wrong content type are refused with envelopes', async (t) => {

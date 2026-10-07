@@ -347,3 +347,12 @@ test('receipts paths refuse tokens outside the path-safe set', () => {
   assert.match(paths, /receipts\.dir/);
   assert.match(paths, /receipts\.receipt/);
 });
+
+test('a yaml-pointers projection without receipts is refused', () => {
+  const doc = JSON.parse(JSON.stringify(require('../lib/markers/bundled/radio-imaging.json')));
+  doc.sources = [{ id: 't', kind: 'yaml', root: 'r', locate: { glob: 'items/*/record.yaml', match: { pointer: '/id', equals: '$audio.sha256' } } }];
+  doc.projections = [{ id: 'wb', kind: 'yaml-pointers', root: 'r', target: 't', write: [{ marker: 'floor', pointer: '/x/floor' }] }];
+  const result = validateMarkerTemplate(doc);
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.some((e) => e.path.endsWith('receipts')), JSON.stringify(result.errors));
+});

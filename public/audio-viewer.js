@@ -2132,7 +2132,7 @@
     if (set === state.sets.main && (useProjection || previewOnly) && projEl) {
       body.projection = {
         id: projEl.value,
-        mode: 'live',
+        mode: previewOnly ? 'preview' : 'live',
         accept: Boolean(acceptEl && acceptEl.checked),
         expectedTargetSha256: state.expectedTargetSha256 || null,
       };
