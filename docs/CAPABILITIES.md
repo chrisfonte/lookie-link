@@ -220,6 +220,7 @@ Neither response includes credentials, token names, repository roots, store path
 | `markers.peaksCachePath` / `markers.blockSize` | Peaks cache root (default `~/.local/share/lookie-link/peaks`) and samples per peak block (positive integer, default `1152`) |
 | `markers.ffmpegPath` / `markers.ffprobePath` / `markers.yamlToolPath` | Tool binaries; defaults `ffmpeg` and `ffprobe`; `yamlToolPath` optional (absent: YAML projections refuse) |
 | `markers.maxAudioBytes` | Largest audio file the viewer will analyse; positive integer, default `2147483648` |
+| `markers.locateRefreshSeconds` / `markers.locateIndexMax` | Locator index: longest age before it is rebuilt (non-negative number of seconds, default `60`, `0` rebuilds on every lookup) and the most candidate files one `locate.glob` may reach (positive integer, default `200000`; more is a "too many candidates" problem). A glob may be a string or a list and may use `*` in any directory segment and in the file name; see [API.md](API.md#audio-and-markers) |
 | `markers.operatorName` / `markers.timezone` | Optional default save name for unrestricted browser saves (default `null`) and IANA zone for stamped dates (default: server zone) |
 | `markers.validators.<id>` | Non-empty command array of strings a template may reference by id; leading `~` elements are expanded. See [CONFIGURATION.md](CONFIGURATION.md#markers) |
 | `markers.publicOrigins[]` | Exact allowed browser write origins for markers; defaults to `forms.publicOrigins` |

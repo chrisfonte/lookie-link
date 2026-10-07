@@ -403,3 +403,14 @@ test('radio-imaging constrains only the floor, which must come before the protec
   assert.deepEqual(constrained, [['floor', { before: 'protected_end' }]]);
   assert.deepEqual(validateMarkerTemplate(radio).errors, []);
 });
+
+test('locate.glob accepts a list of one to sixteen globs', () => {
+  const doc = JSON.parse(JSON.stringify(require('../lib/markers/bundled/radio-imaging.json')));
+  const source = (glob) => ({ id: 't', kind: 'yaml', root: 'r', locate: { glob, match: { pointer: '/id', equals: '$audio.sha256' } } });
+  doc.sources = [source(['items/*/record.yaml', 'items/*/rec-*/record.yaml'])];
+  assert.equal(validateMarkerTemplate(doc).valid, true);
+  doc.sources = [source([])];
+  assert.equal(validateMarkerTemplate(doc).valid, false);
+  doc.sources = [source(['../escape.yaml'])];
+  assert.equal(validateMarkerTemplate(doc).valid, false);
+});

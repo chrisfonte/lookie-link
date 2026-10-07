@@ -159,6 +159,8 @@ markers:
   ffprobePath: ffprobe                               # default
   maxAudioBytes: 2147483648                          # default; largest audio file the viewer will analyse
   operatorName: Operator                             # default save name for unrestricted browser saves
+  locateRefreshSeconds: 60                           # locate index refresh age (0 = refresh on every lookup)
+  locateIndexMax: 200000                             # cap on files a locate index may hold
   timezone: America/Chicago                          # optional; defaults to the server zone
   yamlToolPath: ~/path/to/yaml-tool                  # optional
   validators:
@@ -173,6 +175,7 @@ markers:
 - `destinations` maps an alias to the directory where marker records are written (marker destinations; same rules as `forms.destinations`). It holds record directories only. A template can name a destination alias, never a path.
 - `roots` maps an alias (a definition id: lowercase letters, numbers and hyphens, starting with a letter) to the directories a template may project into, locate files in, or cite as evidence. An entry is a path or `{ path, allowProjections, requireValidator }`. `allowProjections` (default `false`) lets a template project into that root; a root without it is read-only for projections. `requireValidator` (default `true`) means a projection into that root must name a validator. With no `roots` block the reader returns an empty map.
 - `peaksCachePath`, `ffmpegPath` and `ffprobePath` default as shown. `blockSize` is a positive integer. `maxAudioBytes` is a positive integer; larger audio files are refused before analysis.
+- `locateRefreshSeconds` and `locateIndexMax` bound the per-root index that locates a template's target files: the index is rebuilt when a walked directory changes or after the refresh age, and refuses to grow past the cap.
 - `operatorName` is the default display name offered for unrestricted browser saves, and `timezone` is an IANA zone name used when stamping dates; both are optional (`operatorName` reads as `null`, `timezone` as unset).
 - `yamlToolPath` is optional; without it, projections that need the YAML tool refuse.
 - `validators` maps an id (same pattern as audio root ids) to a non-empty command array of strings. Elements beginning with `~` are expanded. A template can only reference a validator by id, never supply a command.

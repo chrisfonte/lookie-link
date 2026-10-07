@@ -75,6 +75,8 @@ test('getMarkersConfig defaults when the block is absent', (t) => {
   assert.deepEqual(markers.templatesPaths, []);
   assert.deepEqual(markers.roots, {});
   assert.equal(markers.maxAudioBytes, 2147483648);
+  assert.equal(markers.locateRefreshSeconds, 60);
+  assert.equal(markers.locateIndexMax, 200000);
   assert.equal(markers.operatorName, null);
   assert.equal(markers.timezone, undefined);
 });
@@ -90,6 +92,8 @@ test('getMarkersConfig reads a full block, expanding ~ and validator paths', (t)
     '  peaksCachePath: ~/peaks',
     '  blockSize: 576',
     '  maxAudioBytes: 1048576',
+    '  locateRefreshSeconds: 5.5',
+    '  locateIndexMax: 1000',
     '  operatorName: Operator One',
     '  timezone: America/Chicago',
     '  ffmpegPath: /usr/local/bin/ffmpeg',
@@ -110,6 +114,8 @@ test('getMarkersConfig reads a full block, expanding ~ and validator paths', (t)
   assert.equal(markers.peaksCachePath, path.join(home, 'peaks'));
   assert.equal(markers.blockSize, 576);
   assert.equal(markers.maxAudioBytes, 1048576);
+  assert.equal(markers.locateRefreshSeconds, 5.5);
+  assert.equal(markers.locateIndexMax, 1000);
   assert.equal(markers.operatorName, 'Operator One');
   assert.equal(markers.timezone, 'America/Chicago');
   assert.deepEqual(markers.templatesPaths, [path.join(home, 'marker-templates')]);
@@ -245,4 +251,21 @@ test('getMarkersConfig rejects bad maxAudioBytes, operatorName and timezone', (t
 
   withConfig(t, 'markers:\n  timezone: 5\n');
   assert.throws(() => getMarkersConfig(), /markers\.timezone must be a string/);
+});
+
+test('getMarkersConfig accepts a zero refresh interval and rejects bad locator limits', (t) => {
+  withConfig(t, 'markers:\n  locateRefreshSeconds: 0\n');
+  assert.equal(getMarkersConfig().locateRefreshSeconds, 0);
+
+  withConfig(t, 'markers:\n  locateRefreshSeconds: -1\n');
+  assert.throws(() => getMarkersConfig(), /markers\.locateRefreshSeconds must be a non-negative number/);
+
+  withConfig(t, 'markers:\n  locateRefreshSeconds: soon\n');
+  assert.throws(() => getMarkersConfig(), /markers\.locateRefreshSeconds must be a non-negative number/);
+
+  withConfig(t, 'markers:\n  locateIndexMax: 0\n');
+  assert.throws(() => getMarkersConfig(), /markers\.locateIndexMax must be a positive integer/);
+
+  withConfig(t, 'markers:\n  locateIndexMax: 2.5\n');
+  assert.throws(() => getMarkersConfig(), /markers\.locateIndexMax must be a positive integer/);
 });

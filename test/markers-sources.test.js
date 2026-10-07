@@ -191,7 +191,9 @@ test('projections list id, kind and a label (id by default)', async (t) => {
 });
 
 test('no matching target is a neutral problem and dependent sources stay quiet', async (t) => {
-  const { resolver } = await setup(t);
+  const { root, resolver } = await setup(t);
+  // The key is named, so this file is a candidate that cannot be parsed.
+  await fs.writeFile(path.join(root, 'pieces/gamma/record.yaml'), 'asset: {digest: [unclosed\n');
   const context = await resolver.resolveContext({ template: template(), audio: { ...ALPHA, sha256: 'c'.repeat(64) } });
   assert.equal(context.target, null);
   assert.equal(context.targetSha256, null);
@@ -241,12 +243,12 @@ test('dot directories are not searched by the wildcard', async (t) => {
   assert.equal(context.target.relPath, 'pieces/alpha/record.yaml');
 });
 
-test('a literal glob without a wildcard works; unsupported globs are problems', async (t) => {
+test('a literal glob without a wildcard works; unsupported glob syntax is a problem', async (t) => {
   const { resolver } = await setup(t);
   const literal = template();
   literal.sources[0].locate.glob = 'pieces/alpha/record.yaml';
   assert.equal((await resolver.resolveContext({ template: literal, audio: ALPHA })).target.relPath, 'pieces/alpha/record.yaml');
-  for (const glob of ['pieces/*/*/record.yaml', 'pie*/alpha/record.yaml', 'pieces/alpha/*.yaml', '**/record.yaml']) {
+  for (const glob of ['**/record.yaml', 'pieces/**/record.yaml', 'pieces/?/record.yaml', 'pieces/[ab]*/record.yaml', 'pieces/{alpha,beta}/record.yaml', []]) {
     const tpl = template();
     tpl.sources[0].locate.glob = glob;
     const context = await resolver.resolveContext({ template: tpl, audio: ALPHA });
@@ -608,4 +610,345 @@ test('without a located target the details and documents are empty', async (t) =
   assert.equal(context.target, null);
   assert.deepEqual(context.details, []);
   assert.deepEqual(context.documents, []);
+});
+
+// ---- locator grammar and scale (lane M) ----
+
+// Leading letter: an all-digit value would load as a YAML number.
+const hex = (n) => `e${n.toString(16).padStart(63, '0')}`;
+
+function locatorTemplate(glob, { pointer = '/asset/digest', equals = '$audio.sha256', kind = 'yaml' } = {}) {
+  const tpl = template();
+  tpl.sources = [{ id: 'target', kind, root: 'main', locate: { glob, match: { pointer, equals } } }];
+  return tpl;
+}
+
+async function put(root, rel, text) {
+  await fs.mkdir(path.dirname(path.join(root, rel)), { recursive: true });
+  await fs.writeFile(path.join(root, rel), text);
+}
+
+const record = (digest) => `asset:\n  digest: ${digest}\n`;
+const audioFor = (digest) => ({ ...ALPHA, sha256: digest });
+
+async function located(resolver, glob, digest, options) {
+  return resolver.locateTarget(locatorTemplate(glob, options), 'target', audioFor(digest));
+}
+
+async function bump(file, ms = 5000) {
+  const when = new Date(Date.now() + ms);
+  await fs.utimes(file, when, when);
+}
+
+test('a wildcard may sit in any directory segment and in the file name', async (t) => {
+  const { root, resolver } = await setup(t);
+  await put(root, 'lib/one/take-a/rec-1.yaml', record(hex(1)));
+  await put(root, 'lib/two/take-b/rec-2.yaml', record(hex(2)));
+  await put(root, 'lib/two/take-b/other.txt', record(hex(3)));
+  await put(root, 'liberty/three/take-c/rec-3.yaml', record(hex(4)));
+  assert.equal((await located(resolver, 'lib/*/*/rec-*.yaml', hex(2))).target.relPath, 'lib/two/take-b/rec-2.yaml');
+  assert.equal((await located(resolver, 'lib*/*/*/rec-*.yaml', hex(4))).target.relPath, 'liberty/three/take-c/rec-3.yaml');
+  assert.equal((await located(resolver, 'lib/*/take-a/*.yaml', hex(1))).target.relPath, 'lib/one/take-a/rec-1.yaml');
+  assert.equal((await located(resolver, 'lib/two/take-b/rec-*.yaml', hex(2))).target.relPath, 'lib/two/take-b/rec-2.yaml');
+  // The name pattern really filters: other.txt holds a digest but is not rec-*.yaml.
+  assert.equal((await located(resolver, 'lib/*/*/rec-*.yaml', hex(3))).target, null);
+  assert.equal((await located(resolver, 'lib/*/*/*.txt', hex(3))).target.relPath, 'lib/two/take-b/other.txt');
+});
+
+test('a wildcard needs a directory level to match directories and a file level to match files', async (t) => {
+  const { root, resolver } = await setup(t);
+  await put(root, 'flat/rec.yaml', record(hex(10)));
+  await put(root, 'flat/sub/rec.yaml', record(hex(11)));
+  // "flat/*/rec.yaml" skips the file "flat/rec.yaml"; "flat/*" never descends into "flat/sub".
+  assert.equal((await located(resolver, 'flat/*/rec.yaml', hex(10))).target, null);
+  assert.equal((await located(resolver, 'flat/*/rec.yaml', hex(11))).target.relPath, 'flat/sub/rec.yaml');
+  assert.equal((await located(resolver, 'flat/*', hex(10))).target.relPath, 'flat/rec.yaml');
+  assert.equal((await located(resolver, 'flat/*', hex(11))).target, null);
+});
+
+test('a list of globs is searched as a union, each file counted once', async (t) => {
+  const { root, resolver } = await setup(t);
+  await put(root, 'a/x/rec.yaml', record(hex(20)));
+  await put(root, 'b/y/note.yaml', record(hex(21)));
+  const globs = ['a/*/rec.yaml', 'b/*/note.yaml'];
+  assert.equal((await located(resolver, globs, hex(20))).target.relPath, 'a/x/rec.yaml');
+  assert.equal((await located(resolver, globs, hex(21))).target.relPath, 'b/y/note.yaml');
+  // Two globs reaching the same file are one candidate, not an ambiguity.
+  assert.equal((await located(resolver, ['a/*/rec.yaml', 'a/x/*.yaml', 'a/x/rec.yaml'], hex(20))).target.relPath, 'a/x/rec.yaml');
+  // The same value in two globs' files is ambiguous.
+  await put(root, 'b/y/dup.yaml', record(hex(20)));
+  await assert.rejects(located(resolver, ['a/*/rec.yaml', 'b/*/dup.yaml'], hex(20)), (error) => error.code === 'ambiguous_target');
+  assert.equal((await located(resolver, ['a/*/rec.yaml', 'b/*/note.yaml'], hex(20))).target.relPath, 'a/x/rec.yaml');
+});
+
+test('malformed glob lists are problems, never throws', async (t) => {
+  const { resolver } = await setup(t);
+  for (const glob of [[], [''], ['a/*/r.yaml', '../x/*.yaml'], [42], Array.from({ length: 17 }, (_, i) => `d${i}/*/r.yaml`)]) {
+    const result = await located(resolver, glob, hex(1));
+    assert.equal(result.target, null, JSON.stringify(glob));
+    assert.ok(result.problem, JSON.stringify(glob));
+  }
+});
+
+test('too many candidates is a problem, never a partial answer treated as exactly one', async (t) => {
+  const { root, resolver } = await setup(t, { locateIndexMax: 4 });
+  for (let i = 0; i < 6; i += 1) await put(root, `cap/p${i}/rec.yaml`, record(hex(i)));
+  // hex(0) sorts first and would have been inside any prefix of the listing.
+  for (const digest of [hex(0), hex(5)]) {
+    const result = await located(resolver, 'cap/*/rec.yaml', digest);
+    assert.equal(result.target, null);
+    assert.match(result.problem, /too many candidates/);
+  }
+  const context = await resolver.resolveContext({ template: locatorTemplate('cap/*/rec.yaml'), audio: audioFor(hex(0)) });
+  assert.equal(context.target, null);
+  assert.match(context.problems[0].message, /too many candidates/);
+});
+
+test('the cap applies per directory listing, per level and to the union of a glob list', async (t) => {
+  const { root, resolver } = await setup(t, { locateIndexMax: 4 });
+  for (let i = 0; i < 3; i += 1) {
+    await put(root, `tier/d${i}/e0/rec.yaml`, record(hex(100 + i)));
+    await put(root, `tier/d${i}/e1/rec.yaml`, record(hex(200 + i)));
+  }
+  // Three directories fit; the second level then holds six files in total.
+  assert.equal((await located(resolver, 'tier/*/e0/rec.yaml', hex(101))).target.relPath, 'tier/d1/e0/rec.yaml');
+  const wide = await located(resolver, 'tier/*/*/rec.yaml', hex(101));
+  assert.match(wide.problem, /too many candidates/);
+  // Each glob fits alone (3 files), their union (6) does not.
+  assert.equal((await located(resolver, ['tier/*/e0/rec.yaml'], hex(100))).target.relPath, 'tier/d0/e0/rec.yaml');
+  assert.match((await located(resolver, ['tier/*/e0/rec.yaml', 'tier/*/e1/rec.yaml'], hex(100))).problem, /too many candidates/);
+  // A literal glob is a single candidate whatever the cap.
+  assert.equal((await located(resolver, 'tier/d2/e1/rec.yaml', hex(202))).target.relPath, 'tier/d2/e1/rec.yaml');
+});
+
+test('dot names, .history and .lookie-tmp stay excluded under multi-wildcard globs', async (t) => {
+  const { root, resolver } = await setup(t);
+  await put(root, 'ex/one/rec.yaml', record(hex(30)));
+  await put(root, 'ex/.dot/rec.yaml', record(hex(30)));
+  await put(root, 'ex/one/.hidden.yaml', record(hex(30)));
+  await put(root, 'ex/one/.history/rec.yaml', record(hex(30)));
+  await put(root, 'ex/one/.lookie-tmp/rec.yaml', record(hex(30)));
+  assert.equal((await located(resolver, 'ex/*/*.yaml', hex(30))).target.relPath, 'ex/one/rec.yaml');
+  // Reached by a literal segment, the reserved directories are still never targets.
+  const viaLiteral = await located(resolver, ['ex/*/.history/*.yaml', 'ex/*/.lookie-tmp/*.yaml'], hex(30));
+  assert.equal(viaLiteral.target, null);
+  assert.match(viaLiteral.problem, /no target found/);
+  const both = await located(resolver, ['ex/*/*.yaml', 'ex/*/.history/*.yaml'], hex(30));
+  assert.equal(both.target.relPath, 'ex/one/rec.yaml');
+});
+
+test('receipt copies are dropped for index results too', async (t) => {
+  const { root, resolver } = await setup(t);
+  await put(root, 'rc/one/rec.yaml', record(hex(40)));
+  await put(root, 'rc/one/receipts/stamp/snapshot.yaml', record(hex(40)));
+  const tpl = locatorTemplate(['rc/*/rec.yaml', 'rc/*/receipts/*/snapshot.yaml']);
+  tpl.projections = [{ id: 'write-back', kind: 'yaml-pointers', root: 'main', target: 'target', write: [{ marker: 'first', pointer: '/x' }], receipts: { dir: '{target.dir}/receipts', snapshot: 'snapshot.yaml', receipt: 'receipt.json' } }];
+  const result = await resolver.locateTarget(tpl, 'target', audioFor(hex(40)));
+  assert.equal(result.target.relPath, 'rc/one/rec.yaml');
+});
+
+test('symlinks that leave the root are not candidates under file or directory wildcards', async (t) => {
+  const { dir, root, resolver } = await setup(t);
+  await fs.mkdir(path.join(dir, 'away'));
+  await fs.writeFile(path.join(dir, 'away/rec.yaml'), record(hex(50)));
+  await put(root, 'sl/real/rec.yaml', record(hex(51)));
+  await fs.symlink(path.join(dir, 'away/rec.yaml'), path.join(root, 'sl/real/linked.yaml'));
+  await fs.symlink(path.join(dir, 'away'), path.join(root, 'sl/dirlink'));
+  assert.equal((await located(resolver, 'sl/*/*.yaml', hex(50))).target, null);
+  assert.equal((await located(resolver, 'sl/*/rec.yaml', hex(50))).target, null);
+  assert.equal((await located(resolver, 'sl/*/rec.yaml', hex(51))).target.relPath, 'sl/real/rec.yaml');
+  // An in-root symlinked directory is followed.
+  await fs.symlink(path.join(root, 'sl/real'), path.join(root, 'sl/inside'));
+  await assert.rejects(located(resolver, 'sl/*/rec.yaml', hex(51)), (error) => error.code === 'ambiguous_target');
+});
+
+test('exactly one match is still enforced through the index', async (t) => {
+  const { root, resolver } = await setup(t);
+  await put(root, 'one/a/rec.yaml', record(hex(60)));
+  await put(root, 'one/b/rec.yaml', record(hex(60)));
+  await put(root, 'one/c/rec.yaml', record(hex(61)));
+  await assert.rejects(located(resolver, 'one/*/rec.yaml', hex(60)), (error) => error.status === 409 && error.code === 'ambiguous_target');
+  assert.equal((await located(resolver, 'one/*/rec.yaml', hex(61))).target.relPath, 'one/c/rec.yaml');
+  const none = await located(resolver, 'one/*/rec.yaml', hex(62));
+  assert.equal(none.target, null);
+  assert.match(none.problem, /^no target found$/);
+});
+
+test('the pre-filter never hides a match: quoted keys, flow style, json, case folding and sequences', async (t) => {
+  const { root, resolver } = await setup(t);
+  const upper = hex(0xabc).toUpperCase();
+  await put(root, 'pf/block/rec.yaml', 'asset:\n  digest: ' + hex(70) + '\n');
+  await put(root, 'pf/quoted/rec.yaml', 'asset:\n  "digest": "' + hex(71) + '"\n');
+  await put(root, 'pf/flow/rec.yaml', 'asset: {digest: ' + hex(72) + ', name: x}\n');
+  await put(root, 'pf/upper/rec.yaml', 'asset:\n  digest: ' + upper + '\n');
+  await put(root, 'pf/json/rec.yaml', JSON.stringify({ asset: { digest: hex(73) } }));
+  await put(root, 'pf/many/rec.yaml', 'asset:\n  digest: ' + hex(74) + '\n');
+  for (const [n, name] of [[70, 'block'], [71, 'quoted'], [72, 'flow'], [73, 'json'], [74, 'many']]) {
+    assert.equal((await located(resolver, 'pf/*/rec.yaml', hex(n))).target.relPath, `pf/${name}/rec.yaml`, name);
+  }
+  assert.equal((await located(resolver, 'pf/*/rec.yaml', hex(0xabc))).target.relPath, 'pf/upper/rec.yaml');
+  // Selector steps before the final key.
+  await put(root, 'sel/rec.yaml', 'items:\n  - id: a\n    digest: ' + hex(75) + '\n  - id: b\n    digest: ' + hex(76) + '\n');
+  assert.equal((await located(resolver, 'sel/*.yaml', hex(76), { pointer: '/items[*]/digest' })).target.relPath, 'sel/rec.yaml');
+  assert.equal((await located(resolver, 'sel/*.yaml', hex(75), { pointer: '/items[id=a]/digest' })).target.relPath, 'sel/rec.yaml');
+  assert.equal((await located(resolver, 'sel/*.yaml', hex(76), { pointer: '/items[id=a]/digest' })).target, null);
+});
+
+test('the pre-filter does not create false matches: comments, other keys, containers', async (t) => {
+  const { root, resolver } = await setup(t);
+  await put(root, 'fm/comment/rec.yaml', '# digest: ' + hex(80) + '\nasset:\n  name: x\n');
+  await put(root, 'fm/other/rec.yaml', 'asset:\n  digest: not-it\n  previous_digest_note: ' + hex(81) + '\n');
+  await put(root, 'fm/nested/rec.yaml', 'asset:\n  digest:\n    value: ' + hex(82) + '\n');
+  await put(root, 'fm/nokey/rec.yaml', 'asset:\n  name: ' + hex(83) + '\n');
+  for (const n of [80, 81, 82, 83]) {
+    assert.equal((await located(resolver, 'fm/*/rec.yaml', hex(n))).target, null, String(n));
+  }
+});
+
+test('json sources and $audio.basename matching go through the index', async (t) => {
+  const { root, resolver } = await setup(t);
+  await put(root, 'js/a/rec.json', JSON.stringify({ asset: { name: 'Take One.wav' } }));
+  await put(root, 'js/b/rec.json', JSON.stringify({ asset: { name: 'take one (2).wav' } }));
+  const options = { pointer: '/asset/name', equals: '$audio.basename', kind: 'json' };
+  const hit = await resolver.locateTarget(locatorTemplate('js/*/rec.json', options), 'target', { ...ALPHA, basename: 'Take One.wav' });
+  assert.equal(hit.target.relPath, 'js/a/rec.json');
+  // Basenames are matched exactly; only sha256 folds case.
+  const miss = await resolver.locateTarget(locatorTemplate('js/*/rec.json', options), 'target', { ...ALPHA, basename: 'take one.wav' });
+  assert.equal(miss.target, null);
+});
+
+test('a new matching file in a walked directory is seen at once, through the directory mtime', async (t) => {
+  const { root, resolver } = await setup(t);
+  await put(root, 'mt/a/rec.yaml', record(hex(90)));
+  assert.equal((await located(resolver, 'mt/*/rec.yaml', hex(90))).target.relPath, 'mt/a/rec.yaml');
+  assert.equal((await located(resolver, 'mt/*/rec.yaml', hex(91))).target, null);
+  await put(root, 'mt/b/rec.yaml', record(hex(91)));
+  await bump(path.join(root, 'mt'));
+  assert.equal((await located(resolver, 'mt/*/rec.yaml', hex(91))).target.relPath, 'mt/b/rec.yaml');
+  await put(root, 'mt/c/rec.yaml', record(hex(90)));
+  await bump(path.join(root, 'mt'), 9000);
+  await assert.rejects(located(resolver, 'mt/*/rec.yaml', hex(90)), (error) => error.code === 'ambiguous_target');
+  await fs.rm(path.join(root, 'mt/c'), { recursive: true });
+  await bump(path.join(root, 'mt'), 12000);
+  assert.equal((await located(resolver, 'mt/*/rec.yaml', hex(90))).target.relPath, 'mt/a/rec.yaml');
+});
+
+test('an in-place edit shows up after the refresh interval; a stale hit never survives its own re-read', async (t) => {
+  let clock = 1000000;
+  const { root, resolver } = await setup(t, { locateRefreshSeconds: 60, now: () => clock });
+  await put(root, 'ip/a/rec.yaml', record(hex(110)));
+  await put(root, 'ip/b/rec.yaml', record(hex(111)));
+  assert.equal((await located(resolver, 'ip/*/rec.yaml', hex(110))).target.relPath, 'ip/a/rec.yaml');
+  // Edit a in place: the directory listing does not change, so the index is stale.
+  await fs.writeFile(path.join(root, 'ip/a/rec.yaml'), record(hex(112)));
+  await bump(path.join(root, 'ip/a/rec.yaml'));
+  clock += 30000;
+  const stale = await located(resolver, 'ip/*/rec.yaml', hex(110));
+  assert.equal(stale.target, null, 'the old hit is re-read and refused');
+  assert.equal((await located(resolver, 'ip/*/rec.yaml', hex(112))).target, null, 'the new value is not indexed yet');
+  clock += 31000;
+  assert.equal((await located(resolver, 'ip/*/rec.yaml', hex(112))).target.relPath, 'ip/a/rec.yaml');
+  assert.equal((await located(resolver, 'ip/*/rec.yaml', hex(110))).target, null);
+});
+
+test('a refresh interval of zero re-checks on every lookup', async (t) => {
+  const { root, resolver } = await setup(t, { locateRefreshSeconds: 0 });
+  await put(root, 'zr/a/rec.yaml', record(hex(120)));
+  assert.equal((await located(resolver, 'zr/*/rec.yaml', hex(121))).target, null);
+  await fs.writeFile(path.join(root, 'zr/a/rec.yaml'), record(hex(121)));
+  await bump(path.join(root, 'zr/a/rec.yaml'));
+  assert.equal((await located(resolver, 'zr/*/rec.yaml', hex(121))).target.relPath, 'zr/a/rec.yaml');
+});
+
+test('a refresh reuses entries whose mtime and size are unchanged', async (t) => {
+  let clock = 5000000;
+  const { root, resolver } = await setup(t, { now: () => clock });
+  const file = path.join(root, 'ru/a/rec.yaml');
+  const pinned = new Date('2026-01-01T00:00:00Z');
+  await put(root, 'ru/a/rec.yaml', record(hex(130)));
+  await fs.utimes(file, pinned, pinned);
+  assert.equal((await located(resolver, 'ru/*/rec.yaml', hex(130))).target.relPath, 'ru/a/rec.yaml');
+  // Same size, mtime restored: the index entry is trusted until the file's stat changes.
+  await fs.writeFile(file, record(hex(131)));
+  await fs.utimes(file, pinned, pinned);
+  clock += 120000;
+  assert.equal((await located(resolver, 'ru/*/rec.yaml', hex(131))).target, null);
+  await bump(file);
+  clock += 120000;
+  assert.equal((await located(resolver, 'ru/*/rec.yaml', hex(131))).target.relPath, 'ru/a/rec.yaml');
+});
+
+test('concurrent lookups share one build and agree', async (t) => {
+  const { root, resolver } = await setup(t);
+  for (let i = 0; i < 40; i += 1) await put(root, `cc/p${i}/rec.yaml`, record(hex(300 + i)));
+  const results = await Promise.all(Array.from({ length: 12 }, (_, i) => located(resolver, 'cc/*/rec.yaml', hex(300 + i))));
+  results.forEach((result, i) => assert.equal(result.target.relPath, `cc/p${i}/rec.yaml`));
+});
+
+test('an unreadable candidate that names the key is counted; one that cannot hold the key is not', async (t) => {
+  const { root, resolver } = await setup(t);
+  await put(root, 'ur/ok/rec.yaml', record(hex(140)));
+  await put(root, 'ur/bad/rec.yaml', 'asset: {digest: [broken\n');
+  await put(root, 'ur/noise/rec.yaml', 'garbage: [broken\n');
+  const result = await located(resolver, 'ur/*/rec.yaml', hex(141));
+  assert.equal(result.problem, 'no target found (1 candidate file could not be read)');
+});
+
+test('an oversized candidate counts as unreadable and is never indexed', async (t) => {
+  const { root, resolver } = await setup(t, { maxFileBytes: 200 });
+  await put(root, 'big/ok/rec.yaml', record(hex(150)));
+  await put(root, 'big/huge/rec.yaml', record(hex(151)) + '# ' + 'x'.repeat(400) + '\n');
+  assert.equal((await located(resolver, 'big/*/rec.yaml', hex(150))).target.relPath, 'big/ok/rec.yaml');
+  assert.equal((await located(resolver, 'big/*/rec.yaml', hex(151))).problem, 'no target found (1 candidate file could not be read)');
+});
+
+test('a missing or unknown root and a missing wildcard directory are neutral problems', async (t) => {
+  const { resolver } = await setup(t);
+  assert.match((await located(resolver, 'nowhere/*/rec.yaml', hex(1))).problem, /^no target found$/);
+  const unknown = locatorTemplate('pieces/*/record.yaml');
+  unknown.sources[0].root = 'ghost';
+  assert.match((await resolver.locateTarget(unknown, 'target', ALPHA)).problem, /not configured/);
+});
+
+test('performance smoke: 20,000 synthetic records, cold build and warm lookup', async (t) => {
+  const { root, resolver } = await setup(t);
+  const count = 20000;
+  const base = path.join(root, 'bulk');
+  const names = Array.from({ length: count }, (_, i) => `p${String(i).padStart(5, '0')}`);
+  for (let i = 0; i < count; i += 500) {
+    await Promise.all(names.slice(i, i + 500).map(async (name, j) => {
+      await fs.mkdir(path.join(base, name), { recursive: true });
+      await fs.writeFile(path.join(base, name, 'imaging.yaml'), [
+        'schema: sample-record-v1',
+        'asset:',
+        `  digest: ${hex(i + j)}`,
+        '  name: ' + name + '.wav',
+        'analysis:',
+        '  first_event_sample: 1000',
+        '  events:',
+        '    - kind: lead',
+        '      begin: 1',
+        '      finish: 2',
+        'evidence:',
+        '  - id: measure-report',
+        `    path: bulk/${name}/measure/report.json`,
+        '',
+      ].join('\n'));
+    }));
+  }
+  const tpl = locatorTemplate('bulk/*/imaging.yaml');
+  const started = process.hrtime.bigint();
+  const cold = await resolver.locateTarget(tpl, 'target', audioFor(hex(12345)));
+  const coldMs = Number(process.hrtime.bigint() - started) / 1e6;
+  assert.equal(cold.target.relPath, 'bulk/p12345/imaging.yaml');
+  const warmStarted = process.hrtime.bigint();
+  const warm = await resolver.locateTarget(tpl, 'target', audioFor(hex(19999)));
+  const warmMs = Number(process.hrtime.bigint() - warmStarted) / 1e6;
+  assert.equal(warm.target.relPath, 'bulk/p19999/imaging.yaml');
+  const missStarted = process.hrtime.bigint();
+  assert.equal((await resolver.locateTarget(tpl, 'target', audioFor(hex(99999)))).target, null);
+  const missMs = Number(process.hrtime.bigint() - missStarted) / 1e6;
+  t.diagnostic(`20000 files: cold build+lookup ${coldMs.toFixed(0)} ms, warm hit ${warmMs.toFixed(0)} ms, warm miss ${missMs.toFixed(0)} ms`);
+  assert.ok(coldMs < 20000, `cold build took ${coldMs} ms`);
+  assert.ok(warmMs < 2000, `warm lookup took ${warmMs} ms`);
 });
