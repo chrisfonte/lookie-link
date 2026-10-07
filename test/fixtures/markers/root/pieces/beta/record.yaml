@@ -1,0 +1,9 @@
+schema: sample-record-v1
+asset:
+  digest: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  name: beta.wav
+analysis:
+  events: []
+evidence:
+  - id: measure-report
+    path: pieces/beta/measure/report.json

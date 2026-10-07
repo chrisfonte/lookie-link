@@ -1,0 +1,35 @@
+schema: sample-record-v1
+asset:
+  digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  name: alpha.wav
+analysis:
+  first_event_sample: 177888
+  window:
+    - 1000
+    - 2000
+  decision:
+    start: 4800
+    end: 9600
+  events:
+    - kind: lead
+      begin: 100
+      finish: 400
+    - kind: tail
+      begin: 900
+      finish: 1500
+    - kind: broken
+      begin: 50
+      finish: 20
+evidence:
+  - id: measure-report
+    path: pieces/alpha/measure/report.json
+  - id: cue-sheet
+    path: pieces/alpha/measure/cue.json
+  - id: plot-image
+    path: pieces/alpha/measure/plot.png
+  - id: absolute-link
+    path: /etc/passwd
+  - id: escaping-link
+    path: ../outside/report.json
+  - id: missing-link
+    path: pieces/alpha/measure/gone.json
