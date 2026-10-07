@@ -977,8 +977,10 @@ function createApp(options = {}) {
 
     return resolveCredentialAccess(req, accessConfig, apiKeyStore, grantStore);
   };
+  // Wiki-link resolution and search never reach into read-only audio roots.
+  const listSearchableRepos = () => repoResolver.listAll().filter((repo) => !isReadOnlyRepo(repo.id));
   const linkResolutionContext = (accessContext) => ({
-    repoMappings: mappings,
+    repoMappings: Object.fromEntries(Object.entries(mappings).filter(([id]) => !isReadOnlyRepo(id))),
     canResolveLink: (repo, relativePath, isDirectory) => canAccessPath(
       accessContext,
       'view',
@@ -1622,7 +1624,7 @@ function createApp(options = {}) {
       // empty result: a typo used to look like "nothing there" (2026-09-23).
       const requestedScopes = searchScope(req.query).flatMap((v) => String(v).split(',')).map((v) => v.trim()).filter(Boolean);
       if (requestedScopes.length) {
-        const searchable = new Set(repoResolver.listAll().filter((repo) => canView(repo.id, '', 'directory')).map((repo) => repo.id));
+        const searchable = new Set(listSearchableRepos().filter((repo) => canView(repo.id, '', 'directory')).map((repo) => repo.id));
         const unknown = requestedScopes.filter((id) => !searchable.has(id));
         if (unknown.length) {
           apiError(res, 400, null, `scope names no searchable repo: ${unknown.join(', ')}. See GET /api/repos for the repos you can search.`, unknown.map((id) => ({ path: 'scope', message: `not searchable: ${id}` })));
@@ -1632,7 +1634,7 @@ function createApp(options = {}) {
       const result = ripgrepBinary
         ? await searchWithRipgrep({
           binary: ripgrepBinary,
-          repos: repoResolver.listAll(),
+          repos: listSearchableRepos(),
           query,
           scope: searchScope(req.query),
           limit: req.query.limit,
@@ -1641,7 +1643,7 @@ function createApp(options = {}) {
         })
         : await searchManagedRepos({
           store: repoResolver.store,
-          repos: repoResolver.listAll(),
+          repos: listSearchableRepos(),
           query,
           scope: searchScope(req.query),
           limit: req.query.limit,
@@ -1673,7 +1675,7 @@ function createApp(options = {}) {
     try {
       const result = await suggestManagedRepos({
         store: repoResolver.store,
-        repos: repoResolver.listAll(),
+        repos: listSearchableRepos(),
         query,
         scope: searchScope(req.query),
         limit: req.query.limit,
@@ -3596,6 +3598,10 @@ function createApp(options = {}) {
 
     const accessContext = resolveAccessContext(req);
     const repo = req.params.repo;
+    if (isReadOnlyRepo(repo)) {
+      res.status(415).type('text/plain').send('Not served from an audio root.');
+      return;
+    }
     const relativePath = req.params[0] || '';
     let rootPath = mappings[repo];
 
@@ -3723,6 +3729,10 @@ function createApp(options = {}) {
 
     const accessContext = resolveAccessContext(req);
     const repo = req.params.repo;
+    if (isReadOnlyRepo(repo)) {
+      res.status(415).type('text/plain').send('Not served from an audio root.');
+      return;
+    }
     const relativePath = req.params[0] || '';
     let rootPath = mappings[repo];
     let resolved;

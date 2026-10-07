@@ -204,9 +204,13 @@ Neither response includes credentials, token names, repository roots, store path
 | `forms.publicOrigins[]` / `.publicOrigin` | Exact allowed browser mutation origins, including scheme and port; browser mutations fail closed when absent |
 | `audioRoots.<id>` | Read-only audio directory, `path` or `{ path, label }` (tilde-expanded). `<id>` matches `^[a-z0-9][a-z0-9._-]{0,63}$` and must not collide with a repository or managed repository (startup fails). Served as audio only; edits, saves and annotation writes are `403`. See [CONFIGURATION.md](CONFIGURATION.md#audio-roots) |
 | `markers.enabled` | Enables the audio marker viewer; default `false`. When true, `markers.templatesPath` and `markers.destinations` are required |
-| `markers.templatesPath` / `markers.destinations.<alias>` | Marker-template directory and the alias-to-storage-root map (same rules as `forms.destinations`); roots are never disclosed |
+| `markers.templatesPath` | Marker-template directory or list of directories (resolved, `~` expanded); the first is the writable store, the rest are read-only |
+| `markers.destinations.<alias>` | Alias-to-storage-root map for marker records (same rules as `forms.destinations`); record directories only, roots are never disclosed |
+| `markers.roots.<alias>` | Projection / locate / evidence roots templates may name: a path or `{ path, allowProjections, requireValidator }`; `allowProjections` default `false`, `requireValidator` default `true`; alias is a definition id |
 | `markers.peaksCachePath` / `markers.blockSize` | Peaks cache root (default `~/.local/share/lookie-link/peaks`) and samples per peak block (positive integer, default `1152`) |
 | `markers.ffmpegPath` / `markers.ffprobePath` / `markers.yamlToolPath` | Tool binaries; defaults `ffmpeg` and `ffprobe`; `yamlToolPath` optional (absent: YAML projections refuse) |
+| `markers.maxAudioBytes` | Largest audio file the viewer will analyse; positive integer, default `2147483648` |
+| `markers.operatorName` / `markers.timezone` | Optional default save name for unrestricted browser saves (default `null`) and IANA zone for stamped dates (default: server zone) |
 | `markers.validators.<id>` | Non-empty command array of strings a template may reference by id; leading `~` elements are expanded. See [CONFIGURATION.md](CONFIGURATION.md#markers) |
 | `markers.publicOrigins[]` | Exact allowed browser write origins for markers; defaults to `forms.publicOrigins` |
 | `themes.<name>.dark` / `.light` | Custom CSS-variable maps. Accepted keys: `bg`, `bg_elev`, `bg_code`, `text`, `text_soft`, `accent`, `border`, `link`, `page_bg`, `toolbar_bg`, `toolbar_btn_bg`, `toolbar_btn_hover`, `toolbar_btn_text`, `toc_active_bg`, `heading_font` |

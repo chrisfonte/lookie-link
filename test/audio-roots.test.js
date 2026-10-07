@@ -173,3 +173,45 @@ test('an audio root id that collides with a repository throws at createApp', asy
     /audioRoots id "Bad Id"/
   );
 });
+
+test('/raw and /embed refuse an .html file in an audio root with 415', async (t) => {
+  const fixture = await makeFixture();
+  t.after(() => fs.rm(fixture.root, { recursive: true, force: true }));
+  await fs.writeFile(path.join(fixture.audioDir, 'page.html'), '<h1>audio root page</h1>');
+  await fs.writeFile(path.join(fixture.repoDir, 'page.html'), '<h1>plain page</h1>');
+  const base = await withServer(t, appOptions(fixture, { rawHtmlEnabled: true }));
+
+  for (const route of ['raw', 'embed']) {
+    const refused = await fetch(`${base}/${route}/station-audio/page.html`);
+    assert.equal(refused.status, 415, route);
+    assert.match(refused.headers.get('content-type'), /text\/plain/);
+    assert.equal(await refused.text(), 'Not served from an audio root.');
+  }
+
+  const plain = await fetch(`${base}/raw/plain/page.html`);
+  assert.equal(plain.status, 200);
+  assert.match(await plain.text(), /plain page/);
+});
+
+for (const ripgrep of [false, 'auto']) {
+  test(`fleet search does not list audio root files (ripgrep: ${ripgrep})`, async (t) => {
+    const fixture = await makeFixture();
+    t.after(() => fs.rm(fixture.root, { recursive: true, force: true }));
+    await fs.writeFile(path.join(fixture.audioDir, 'notes.txt'), 'fleet-wide needle in audio\n');
+    await fs.writeFile(path.join(fixture.repoDir, 'README.md'), '# Plain\nfleet-wide needle in plain\n');
+    const base = await withServer(t, appOptions(fixture, { searchConfig: { ripgrep } }));
+
+    const search = await (await fetch(`${base}/api/search?q=${encodeURIComponent('fleet-wide needle')}`)).json();
+    assert.equal(search.ok, true);
+    const hits = search.results.map((entry) => entry.repo);
+    assert.ok(hits.includes('plain'));
+    assert.ok(!hits.includes('station-audio'), 'audio root files are not search results');
+    assert.ok(!JSON.stringify(search).includes('station-audio'));
+
+    const scoped = await fetch(`${base}/api/search?q=needle&scope=station-audio`);
+    assert.equal(scoped.status, 400);
+
+    const suggest = await (await fetch(`${base}/api/search/suggest?q=notes`)).json();
+    assert.ok(!JSON.stringify(suggest).includes('station-audio'));
+  });
+}

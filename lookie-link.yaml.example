@@ -130,13 +130,23 @@ repositories:
 # Optional audio marker viewer. Enabling needs templatesPath and destinations.
 # markers:
 #   enabled: true
-#   templatesPath: ~/.local/share/lookie-link/marker-templates
-#   destinations:
+#   templatesPath:                                     # string or list; first entry is writable
+#     - ~/.local/share/lookie-link/marker-templates
+#     - /path/to/client-repo/marker-templates          # read-only
+#   destinations:                                      # marker record directories only
 #     default: ~/.local/share/lookie-link/marker-records
+#   roots:                                             # projection / locate / evidence roots
+#     records-repo:
+#       path: /path/to/client-repo
+#       allowProjections: true                         # default false
+#       requireValidator: true                         # default true
 #   peaksCachePath: ~/.local/share/lookie-link/peaks   # default
 #   blockSize: 1152                                    # samples per peak block
 #   ffmpegPath: ffmpeg
 #   ffprobePath: ffprobe
+#   maxAudioBytes: 2147483648                          # default
+#   operatorName: Operator                             # default save name for browser saves
+#   timezone: America/Chicago                          # optional; default server zone
 #   yamlToolPath: ~/path/to/yaml-tool                  # needed for yaml-pointers projections
 #   validators:                                        # templates reference these by id
 #     record-check: ["python3", "~/path/validate-record.py", "{candidate}"]

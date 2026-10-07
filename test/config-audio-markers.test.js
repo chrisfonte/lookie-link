@@ -71,6 +71,12 @@ test('getMarkersConfig defaults when the block is absent', (t) => {
   assert.deepEqual(markers.validators, {});
   assert.equal(markers.destinations, undefined);
   assert.equal(markers.publicOrigins, undefined);
+  assert.equal(markers.templatesPath, undefined);
+  assert.deepEqual(markers.templatesPaths, []);
+  assert.deepEqual(markers.roots, {});
+  assert.equal(markers.maxAudioBytes, 2147483648);
+  assert.equal(markers.operatorName, null);
+  assert.equal(markers.timezone, undefined);
 });
 
 test('getMarkersConfig reads a full block, expanding ~ and validator paths', (t) => {
@@ -83,6 +89,9 @@ test('getMarkersConfig reads a full block, expanding ~ and validator paths', (t)
     '    imaging: /path/to/client-repo',
     '  peaksCachePath: ~/peaks',
     '  blockSize: 576',
+    '  maxAudioBytes: 1048576',
+    '  operatorName: Operator One',
+    '  timezone: America/Chicago',
     '  ffmpegPath: /usr/local/bin/ffmpeg',
     '  yamlToolPath: ~/bin/yaml-tool',
     '  validators:',
@@ -100,6 +109,10 @@ test('getMarkersConfig reads a full block, expanding ~ and validator paths', (t)
   });
   assert.equal(markers.peaksCachePath, path.join(home, 'peaks'));
   assert.equal(markers.blockSize, 576);
+  assert.equal(markers.maxAudioBytes, 1048576);
+  assert.equal(markers.operatorName, 'Operator One');
+  assert.equal(markers.timezone, 'America/Chicago');
+  assert.deepEqual(markers.templatesPaths, [path.join(home, 'marker-templates')]);
   assert.equal(markers.ffmpegPath, '/usr/local/bin/ffmpeg');
   assert.equal(markers.yamlToolPath, path.join(home, 'bin/yaml-tool'));
   assert.deepEqual(markers.validators, {
@@ -148,4 +161,88 @@ test('getMarkersConfig rejects malformed destinations, validators, and blockSize
 
   withConfig(t, 'markers:\n  blockSize: 0\n');
   assert.throws(() => getMarkersConfig(), /markers\.blockSize must be a positive integer/);
+});
+
+test('getMarkersConfig accepts a list of templatesPath entries', (t) => {
+  withConfig(t, [
+    'markers:',
+    '  enabled: true',
+    '  templatesPath:',
+    '    - ~/marker-templates',
+    '    - /path/to/client-repo/marker-templates',
+    '  destinations:',
+    '    default: /path/to/records',
+    '',
+  ].join('\n'));
+  const markers = getMarkersConfig();
+  assert.deepEqual(markers.templatesPaths, [
+    path.join(os.homedir(), 'marker-templates'),
+    '/path/to/client-repo/marker-templates',
+  ]);
+  assert.equal(markers.templatesPath, markers.templatesPaths[0]);
+});
+
+test('getMarkersConfig rejects malformed templatesPath and an empty list when enabled', (t) => {
+  withConfig(t, 'markers:\n  templatesPath: [7]\n');
+  assert.throws(() => getMarkersConfig(), /markers\.templatesPath must be a path or a list of paths/);
+
+  withConfig(t, 'markers:\n  templatesPath: {a: b}\n');
+  assert.throws(() => getMarkersConfig(), /markers\.templatesPath must be a path or a list of paths/);
+
+  withConfig(t, 'markers:\n  enabled: true\n  templatesPath: []\n  destinations:\n    default: /path/to/records\n');
+  assert.throws(() => getMarkersConfig(), /markers\.templatesPath is required/);
+});
+
+test('getMarkersConfig reads roots as strings or objects with defaults', (t) => {
+  withConfig(t, [
+    'markers:',
+    '  roots:',
+    '    evidence: ~/evidence',
+    '    records-repo:',
+    '      path: /path/to/client-repo',
+    '      allowProjections: true',
+    '    loose-repo:',
+    '      path: /path/to/other-repo',
+    '      requireValidator: false',
+    '',
+  ].join('\n'));
+  assert.deepEqual(getMarkersConfig().roots, {
+    evidence: { path: path.join(os.homedir(), 'evidence'), allowProjections: false, requireValidator: true },
+    'records-repo': { path: '/path/to/client-repo', allowProjections: true, requireValidator: true },
+    'loose-repo': { path: '/path/to/other-repo', allowProjections: false, requireValidator: false },
+  });
+});
+
+test('getMarkersConfig rejects malformed roots', (t) => {
+  withConfig(t, 'markers:\n  roots: [a]\n');
+  assert.throws(() => getMarkersConfig(), /markers\.roots must be a map/);
+
+  withConfig(t, 'markers:\n  roots:\n    Bad_Alias: /path/to/repo\n');
+  assert.throws(() => getMarkersConfig(), /markers\.roots alias "Bad_Alias"/);
+
+  withConfig(t, 'markers:\n  roots:\n    ok: 5\n');
+  assert.throws(() => getMarkersConfig(), /markers\.roots "ok" must be a path/);
+
+  withConfig(t, 'markers:\n  roots:\n    ok:\n      allowProjections: true\n');
+  assert.throws(() => getMarkersConfig(), /markers\.roots "ok" must be a path/);
+
+  withConfig(t, 'markers:\n  roots:\n    ok:\n      path: /path/to/repo\n      allowProjections: "yes"\n');
+  assert.throws(() => getMarkersConfig(), /allowProjections must be true or false/);
+
+  withConfig(t, 'markers:\n  roots:\n    ok:\n      path: /path/to/repo\n      requireValidator: 1\n');
+  assert.throws(() => getMarkersConfig(), /requireValidator must be true or false/);
+});
+
+test('getMarkersConfig rejects bad maxAudioBytes, operatorName and timezone', (t) => {
+  withConfig(t, 'markers:\n  maxAudioBytes: 0\n');
+  assert.throws(() => getMarkersConfig(), /markers\.maxAudioBytes must be a positive integer/);
+
+  withConfig(t, 'markers:\n  maxAudioBytes: 1.5\n');
+  assert.throws(() => getMarkersConfig(), /markers\.maxAudioBytes must be a positive integer/);
+
+  withConfig(t, 'markers:\n  operatorName: [x]\n');
+  assert.throws(() => getMarkersConfig(), /markers\.operatorName must be a string/);
+
+  withConfig(t, 'markers:\n  timezone: 5\n');
+  assert.throws(() => getMarkersConfig(), /markers\.timezone must be a string/);
 });
