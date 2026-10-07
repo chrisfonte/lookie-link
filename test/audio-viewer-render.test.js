@@ -108,3 +108,24 @@ test('the viewer client script parses as a standalone script', () => {
   const source = nodeFs.readFileSync(nodePath.join(__dirname, '..', 'public', 'audio-viewer.js'), 'utf8');
   assert.doesNotThrow(() => new vm.Script(source, { filename: 'audio-viewer.js' }));
 });
+
+test('the toolbar carries the tap-on-release checkbox, off by default and unchecked in the markup', () => {
+  const html = renderAudioPage(OPTIONS);
+  const control = /<input type="checkbox"[^>]*data-am="tap-release"[^>]*>/.exec(html);
+  assert.ok(control, 'tap-release checkbox present');
+  assert.ok(!/\bchecked\b/.test(control[0]), 'not checked in the server markup');
+  assert.match(html, /Tap on release/);
+  assert.match(html, /data-am="add-point"/);
+  assert.match(html, /data-am="add-region"/);
+});
+
+test('the client builds the reason hint and the play-from-here action with textContent paths', () => {
+  const nodeFs = require('node:fs');
+  const nodePath = require('node:path');
+  const source = nodeFs.readFileSync(nodePath.join(__dirname, '..', 'public', 'audio-viewer.js'), 'utf8');
+  assert.match(source, /data-am': 'reason-hint'/);
+  assert.match(source, /Type a reason to enable Save\./);
+  assert.match(source, /data-am': 'play-from'/);
+  assert.match(source, /lookie\.audio\.tapOnRelease/);
+  assert.ok(!/\.innerHTML\s*=/.test(source), 'no innerHTML assignment');
+});

@@ -3778,6 +3778,16 @@ html[data-wallpaper="on"] .content { border-radius: 18px; }
   width: 4.5rem;
 }
 
+.audio-markers .am-check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.audio-markers .am-reason-hint {
+  align-self: center;
+}
+
 .audio-markers .am-actions-notes {
   align-items: center;
   margin-top: 0.4rem;

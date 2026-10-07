@@ -418,6 +418,173 @@ async function tapArithmetic(browser, env, viewport, label) {
   await context.close();
 }
 
+const nearly = (a, b, tolerance = 0.001) => Math.abs(a - b) <= tolerance;
+
+async function selectSeeks(browser, env, viewport, label) {
+  const {context, page} = await openViewer(browser, env.origin, viewport, '?template=freeform');
+  // A point at exactly 1.000 s, made from the paused playhead.
+  await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 1; });
+  await page.locator('[data-am="add-point"]').click();
+  const point = (await markersOf(page)).find((m) => m.origin === 'new' && m.kind === 'point');
+  assert.equal(point.sample, SAMPLE_RATE, `${label}: paused Add point lands on the playhead exactly`);
+  await page.keyboard.press('Escape'); // clear the selection that placing a marker made
+  await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 4; });
+  const flag = page.locator(`[data-marker-id="${point.id}"] .am-flag`);
+
+  // Selecting seeks and leaves the player paused.
+  await flag.click();
+  let seen = await page.evaluate(() => ({t: window.__audioMarkers.audio.currentTime, paused: window.__audioMarkers.audio.paused}));
+  assert.ok(nearly(seen.t, point.sample / SAMPLE_RATE), `${label}: select seeks to the point (${seen.t})`);
+  assert.equal(seen.paused, true, `${label}: selecting does not start playback`);
+
+  // Enter starts playback from the marker.
+  await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 4; });
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => !window.__audioMarkers.audio.paused, null, {timeout: 10000});
+  seen = await page.evaluate(() => window.__audioMarkers.audio.currentTime);
+  assert.ok(seen >= point.sample / SAMPLE_RATE - 0.001 && seen < 3, `${label}: Enter plays from the marker (${seen})`);
+
+  // Selecting while playing seeks and keeps playing.
+  await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 4; });
+  await flag.click();
+  seen = await page.evaluate(() => ({t: window.__audioMarkers.audio.currentTime, paused: window.__audioMarkers.audio.paused}));
+  assert.ok(seen.t < 3 && seen.paused === false, `${label}: selecting while playing seeks and keeps playing (${seen.t})`);
+
+  // Enter while playing restarts from the marker.
+  await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 4; });
+  await page.keyboard.press('Enter');
+  seen = await page.evaluate(() => ({t: window.__audioMarkers.audio.currentTime, paused: window.__audioMarkers.audio.paused}));
+  assert.ok(seen.t < 3 && seen.paused === false, `${label}: Enter restarts from the marker (${seen.t})`);
+  await page.locator('[data-am="play"]').click();
+  assert.equal(await page.evaluate(() => window.__audioMarkers.audio.paused), true);
+
+  // The inspector button does the same.
+  await openInspector(page);
+  await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 4; });
+  await page.locator('[data-am="play-from"]').click();
+  await page.waitForFunction(() => !window.__audioMarkers.audio.paused, null, {timeout: 10000});
+  seen = await page.evaluate(() => window.__audioMarkers.audio.currentTime);
+  assert.ok(seen >= point.sample / SAMPLE_RATE - 0.001 && seen < 3, `${label}: Play from here (${seen})`);
+  await page.locator('[data-am="play"]').click();
+
+  // A drag seeks once on selection, never on movement.
+  await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 5; });
+  const box = await flag.boundingBox();
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 5; }); // the seek on selection has happened
+  await page.mouse.move(x + 30, y, {steps: 6});
+  await page.mouse.move(x + 60, y, {steps: 6});
+  await page.mouse.up();
+  seen = await page.evaluate(() => window.__audioMarkers.audio.currentTime);
+  assert.ok(nearly(seen, 5), `${label}: dragging does not seek on every move (${seen})`);
+  assert.ok((await markersOf(page)).find((m) => m.id === point.id).sample > point.sample, 'the drag still moved the point');
+
+  // A region selects to its start.
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 2; });
+  await page.locator('[data-am="add-region"]').click();
+  const region = (await markersOf(page)).find((m) => m.kind === 'region' && m.origin === 'new');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 5; });
+  await page.locator(`[data-marker-id="${region.id}"] .am-body`).click();
+  seen = await page.evaluate(() => window.__audioMarkers.audio.currentTime);
+  assert.ok(nearly(seen, region.startSample / SAMPLE_RATE), `${label}: selecting a region seeks to its start (${seen})`);
+  await context.close();
+}
+
+async function tapEdgeModes(browser, env, viewport, label) {
+  const {context, page} = await openViewer(browser, env.origin, viewport, '?template=freeform');
+  const newMarkers = async () => (await markersOf(page)).filter((m) => m.origin === 'new');
+  const toggle = page.locator('[data-am="tap-release"]');
+  assert.equal(await toggle.isChecked(), false, `${label}: tap on release defaults off`);
+  assert.equal((await page.evaluate(() => window.__audioMarkers.getClock())).tapEdge, 'press');
+  // keydown and keyup see different times
+  await page.evaluate(() => window.__audioMarkers.setClock({
+    now: (event) => (event && event.type === 'keyup' ? (event.key === ']' ? 3 : event.key === '[' ? 1 : 2.5) : 0.5),
+    outputLatency: 0, baseLatency: 0, calibrationMs: 0,
+  }));
+
+  // off: the press is the tap
+  await page.keyboard.press('m');
+  assert.deepEqual((await newMarkers()).map((m) => m.sample), [24000], `${label}: press mode uses the keydown time`);
+
+  // on: the release is the tap, auto-repeat is ignored
+  await toggle.check();
+  assert.equal((await page.evaluate(() => window.__audioMarkers.getClock())).tapEdge, 'release');
+  assert.equal(await page.evaluate(() => window.localStorage.getItem('lookie.audio.tapOnRelease')), '1');
+  await page.keyboard.down('m');
+  assert.equal((await newMarkers()).length, 1, `${label}: nothing registers on press in release mode`);
+  await page.keyboard.down('m'); // auto-repeat
+  await page.keyboard.down('m');
+  assert.equal((await newMarkers()).length, 1, 'repeats do not register');
+  await page.keyboard.up('m');
+  assert.deepEqual((await newMarkers()).map((m) => m.sample).sort((a, b) => a - b), [24000, 120000], `${label}: release mode uses the keyup time, once`);
+
+  // regions: each press and release is its own tap
+  await page.keyboard.down('[');
+  await page.keyboard.up('[');
+  await page.keyboard.down(']');
+  await page.keyboard.up(']');
+  const region = (await newMarkers()).find((m) => m.kind === 'region');
+  assert.ok(region, `${label}: release-mode region closed`);
+  assert.deepEqual([region.startSample, region.endSample], [48000, 144000], 'region edges use the keyup times');
+
+  // the choice persists across a reload
+  await page.reload();
+  await page.waitForFunction(() => window.__audioMarkers.ready);
+  assert.equal(await toggle.isChecked(), true, `${label}: the choice persists`);
+  assert.equal((await page.evaluate(() => window.__audioMarkers.getClock())).tapEdge, 'release');
+  await toggle.uncheck();
+  assert.equal((await page.evaluate(() => window.__audioMarkers.getClock())).tapEdge, 'press');
+  await context.close();
+}
+
+async function addButtonsUseHeardTime(browser, env, viewport, label) {
+  const {context, page} = await openViewer(browser, env.origin, viewport, '?template=freeform');
+  await page.locator('[data-am="play"]').click();
+  await page.waitForFunction(() => window.__audioMarkers.audio.currentTime > 0.3, null, {timeout: 10000});
+  // heard = 2.5 - 0.1 = 2.4 s = 115200 samples, from the click event, not from currentTime
+  await page.evaluate(() => window.__audioMarkers.setClock({
+    now: (event) => (event && event.type === 'click' ? 2.5 : 0), outputLatency: 0.1, baseLatency: 0, calibrationMs: 0,
+  }));
+  await page.locator('[data-am="add-point"]').click();
+  let added = (await markersOf(page)).filter((m) => m.origin === 'new');
+  assert.deepEqual(added.map((m) => m.sample), [115200], `${label}: Add point uses the heard time`);
+  assert.match(await page.locator('[data-am="latency"]').innerText(), /output 100\.0 ms/);
+  await page.locator('[data-am="add-region"]').click();
+  added = (await markersOf(page)).filter((m) => m.origin === 'new' && m.kind === 'region');
+  assert.deepEqual(added.map((m) => [m.startSample, m.endSample]), [[115200, 115200 + SAMPLE_RATE]], `${label}: Add region starts at the heard time`);
+
+  // paused: the playhead exactly
+  await page.evaluate(() => window.__audioMarkers.setClock(null));
+  await page.locator('[data-am="play"]').click();
+  await page.evaluate(() => { window.__audioMarkers.audio.currentTime = 1.5; });
+  await page.locator('[data-am="add-point"]').click();
+  assert.ok((await markersOf(page)).some((m) => m.origin === 'new' && m.kind === 'point' && m.sample === 72000), `${label}: paused Add point is the playhead`);
+  await context.close();
+}
+
+async function reasonHint(browser, env, viewport, label) {
+  const {context, page} = await openViewer(browser, env.origin, viewport, '?template=song-structure');
+  const hint = page.locator('[data-am="reason-hint"]');
+  assert.equal(await hint.isVisible(), true, `${label}: hint shows while the reason is empty`);
+  assert.equal((await hint.textContent()).trim(), 'Type a reason to enable Save.');
+  assert.equal(await page.locator('[data-am="save"]').isDisabled(), true);
+  await page.locator('[data-am-field="reason"]').fill('Because');
+  assert.equal(await hint.isVisible(), false, `${label}: hint goes away once a reason is typed`);
+  assert.equal(await hint.textContent(), '');
+  await page.locator('[data-am-field="reason"]').fill('');
+  assert.equal(await hint.isVisible(), true, `${label}: hint returns when the reason is cleared`);
+  await context.close();
+
+  const free = await openViewer(browser, env.origin, viewport, '?template=freeform');
+  assert.equal(await free.page.locator('[data-am="reason-hint"]').isVisible(), false, `${label}: no hint for the freeform template`);
+  await free.context.close();
+}
+
 // ---------------------------------------------------------------- run
 
 if (!haveFfmpeg()) {
@@ -450,7 +617,11 @@ try {
     await staleSecondTab(browser, env, viewport, label);
     await tapRealTone(browser, env, viewport, label);
     await tapArithmetic(browser, env, viewport, label);
-    console.log(`Audio markers ${label}: no-template point/region/label/save/reload, song-structure, projection write-back, stale tab 409, tap sync real tone and arithmetic PASS`);
+    await selectSeeks(browser, env, viewport, label);
+    await tapEdgeModes(browser, env, viewport, label);
+    await addButtonsUseHeardTime(browser, env, viewport, label);
+    await reasonHint(browser, env, viewport, label);
+    console.log(`Audio markers ${label}: no-template point/region/label/save/reload, song-structure, projection write-back, stale tab 409, tap sync real tone and arithmetic, select-seeks, tap edge, Add buttons heard time, reason hint PASS`);
   }
 } catch (error) {
   failed = true;
