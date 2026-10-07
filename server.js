@@ -1353,7 +1353,7 @@ function createApp(options = {}) {
       stream.on('data', (chunk) => hash.update(chunk));
       stream.on('end', () => resolve(hash.digest('hex')));
     });
-    const sourceResolver = createSourceResolver({ roots: markersConfig.roots || {} });
+    const sourceResolver = createSourceResolver({ roots: markersConfig.roots || {}, locateRefreshSeconds: markersConfig.locateRefreshSeconds, locateIndexMax: markersConfig.locateIndexMax });
     const loadRecord = async (recordId) => {
       for (const id of destinationIds()) {
         const record = await stores.forDestination(id).getRecord(recordId);

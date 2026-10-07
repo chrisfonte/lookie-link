@@ -220,6 +220,7 @@ Neither response includes credentials, token names, repository roots, store path
 | `markers.peaksCachePath` / `markers.blockSize` | Peaks cache root (default `~/.local/share/lookie-link/peaks`) and samples per peak block (positive integer, default `1152`) |
 | `markers.ffmpegPath` / `markers.ffprobePath` / `markers.yamlToolPath` | Tool binaries; defaults `ffmpeg` and `ffprobe`; `yamlToolPath` optional (absent: YAML projections refuse) |
 | `markers.maxAudioBytes` | Largest audio file the viewer will analyse; positive integer, default `2147483648` |
+| `markers.locateRefreshSeconds` / `markers.locateIndexMax` | Locator index: longest age before it is rebuilt (non-negative number of seconds, default `60`, `0` rebuilds on every lookup) and the most candidate files one `locate.glob` may reach (positive integer, default `200000`; more is a "too many candidates" problem). A glob may be a string or a list and may use `*` in any directory segment and in the file name; see [API.md](API.md#audio-and-markers) |
 | `markers.operatorName` / `markers.timezone` | Optional default save name for unrestricted browser saves (default `null`) and IANA zone for stamped dates (default: server zone) |
 | `markers.validators.<id>` | Non-empty command array of strings a template may reference by id; leading `~` elements are expanded. See [CONFIGURATION.md](CONFIGURATION.md#markers) |
 | `markers.publicOrigins[]` | Exact allowed browser write origins for markers; defaults to `forms.publicOrigins` |
@@ -315,12 +316,12 @@ Audio roots (`audioRoots`) are read-only mappings: they browse like repositories
 
 | Route | Method | Effective auth | Notes |
 |---|---|---|---|
-| `/api/markers/templates` | `GET` | Non-denied caller | Bundled and stored marker templates. |
+| `/api/markers/templates` | `GET` | Non-denied caller | Bundled and stored marker templates, plus `skipped[]` (`file`, `source`, `reason`) for template files that were present but not used; callers who are not template admins see no `sources`, `projections`, `image`, `details` or `documents` on a template. |
 | `/api/markers/templates/:templateId` | `GET` | Non-denied caller | One template with its revision. |
 | `/api/markers/templates` | `POST` | Template admin + browser gate | Creates a template; `201`. Template admin means an unrestricted caller, or a token with `write` and whole-fleet repo scope. |
 | `/api/markers/templates/:templateId` | `PATCH` | Template admin + browser gate | Body carries `expectedRevision` (`revision` is accepted as an alias); stale: `409 revision_conflict` with `currentRevision`. |
 | `/api/markers/templates/:templateId` | `DELETE` | Template admin + browser gate | Tombstones the template; history is kept; `expectedRevision` required. |
-| `/api/markers/context` | `GET` | Effective `view` on the audio file | Query `repo`, `path`, `template`. Resolved reference sources, target reads and the projection list (`id`, `kind`, `label`, `acceptable`); root-relative paths only. |
+| `/api/markers/context` | `GET` | Effective `view` on the audio file | Query `repo`, `path`, `template`. Resolved reference sources, target reads, `details[]` (`id`, `label`, `kind`, `value`), `documents[]` (`id`, `label`, `text`, `truncated`, `path`) and the projection list (`id`, `kind`, `label`, `acceptable`); root-relative paths only. |
 | `/api/markers/records` | `GET` | Effective `view` on the audio file | Query `repo`, `path`, optional `templateId`, `all=1`. Latest record per template, keyed by the audio SHA-256. |
 | `/api/markers/records/:recordId` | `GET` | Effective `view` on the record's audio | One immutable record. |
 | `/api/markers/records/:recordId/history` | `GET` | Effective `view` on the record's audio | The supersession chain. |
