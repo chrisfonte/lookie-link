@@ -100,3 +100,9 @@ test('aif and aiff are served by the audio viewer', () => {
   const html = renderAudioPage({ ...OPTIONS, relativePath: 'take.aiff', audioHref: '/asset/station-audio/take.aiff', mimeType: 'audio/aiff' });
   assert.match(html, /type="audio\/aiff"/);
 });
+
+test('the viewer client script parses as a standalone script', () => {
+  const vm = require('node:vm');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'audio-viewer.js'), 'utf8');
+  assert.doesNotThrow(() => new vm.Script(source, { filename: 'audio-viewer.js' }));
+});
