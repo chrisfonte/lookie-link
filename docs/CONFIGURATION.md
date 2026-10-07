@@ -123,6 +123,42 @@ Query semantics are the same on both backends: every whitespace-separated term m
 
 With a ripgrep binary available, `/api/search` searches every served repository in one process and is complete (the response says `backend: "ripgrep"`). Without one, the built-in walk is used: complete when scoped to one repo, fair-share sampled across a fleet (`backend: "walk"`, `truncated` says when a slice ran out). `maxEntries` applies to the walk only. The binary must be on the SERVICE's PATH (a shell alias or function does not count) or named explicitly.
 
+## Audio roots
+
+```yaml
+audioRoots:
+  station-audio:
+    path: /path/to/share
+    label: Station audio
+  field-recordings: ~/recordings     # shorthand: id -> path
+```
+
+An audio root is a read-only directory mapped like a repository: it appears in the Files picker, `/api/repos`, `/view`, `/asset`, the tree and changes APIs and search. Each id must match `^[a-z0-9][a-z0-9._-]{0,63}$`, and must not collide with a `repositories` key or a managed repository (the server refuses to start). `path` may start with `~`; `label` defaults to the id. Malformed entries fail startup with a message naming the id.
+
+Audio roots are served as audio only: `/asset` answers `415` for any file whose extension is not an audio type, and `/view` of such a file shows a "shown but not served" page (name, size, modified) rather than rendering it. `/api/repos/:repo/files/*` refuses non-text files (`415`). Editing, saving and annotation writes answer `403`, and the edit and annotation controls are hidden. `/api/repos` entries for audio roots carry `kind: "audio"`, `readOnly: true` and `label`; plain repositories are unchanged. Root paths are never disclosed to clients.
+
+## Markers
+
+```yaml
+markers:
+  enabled: true
+  templatesPath: ~/.local/share/lookie-link/marker-templates
+  destinations:
+    default: ~/.local/share/lookie-link/marker-records
+    imaging: /path/to/client-repo
+  peaksCachePath: ~/.local/share/lookie-link/peaks   # default
+  blockSize: 1152                                    # default; samples per peak block
+  ffmpegPath: ffmpeg                                 # default
+  ffprobePath: ffprobe                               # default
+  yamlToolPath: ~/path/to/yaml-tool                  # optional
+  validators:
+    record-check: ["python3", "~/path/validate-record.py", "{candidate}"]
+  publicOrigins:
+    - http://lookie-host.local:3000
+```
+
+`enabled` is a boolean (default `false`). When `true`, `templatesPath` (directory of marker templates) and at least one entry in `destinations` (alias to storage root, same rules as `forms.destinations`) are required; otherwise startup fails. `peaksCachePath`, `ffmpegPath` and `ffprobePath` default as shown. `blockSize` is a positive integer. `yamlToolPath` is optional; without it, projections that need the YAML tool refuse. `validators` maps an id (same pattern as audio root ids) to a non-empty command array of strings; elements beginning with `~` are expanded, and a template can only reference a validator by id, never supply a command. `publicOrigins` are the exact browser-write origins and default to `forms.publicOrigins` when absent. Paths are deployment configuration: templates cannot declare them, and none is disclosed to clients.
+
 ## Custom themes
 
 > **Live-reloadable values (contributors).** Theme CSS, wallpapers, appearance and kits change at runtime without a restart. Any code that renders chrome must read them per request (the server hands out live getters); never copy one into a local at construction. `test/live-theme-every-page.test.js` sets theme CSS after startup and requires every HTML page family to carry it: add new page families to its `PAGES` list. (2026-09-25: the Trackers router copied it once and shipped every Trackers page without custom-theme tokens.)

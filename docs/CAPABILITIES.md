@@ -202,6 +202,13 @@ Neither response includes credentials, token names, repository roots, store path
 | `forms.submissionsPath` | Legacy single submission root; when `destinations` is absent it becomes the `default` destination |
 | `forms.timezone` | IANA timezone used when a browser cannot report its UTC offset |
 | `forms.publicOrigins[]` / `.publicOrigin` | Exact allowed browser mutation origins, including scheme and port; browser mutations fail closed when absent |
+| `audioRoots.<id>` | Read-only audio directory, `path` or `{ path, label }` (tilde-expanded). `<id>` matches `^[a-z0-9][a-z0-9._-]{0,63}$` and must not collide with a repository or managed repository (startup fails). Served as audio only; edits, saves and annotation writes are `403`. See [CONFIGURATION.md](CONFIGURATION.md#audio-roots) |
+| `markers.enabled` | Enables the audio marker viewer; default `false`. When true, `markers.templatesPath` and `markers.destinations` are required |
+| `markers.templatesPath` / `markers.destinations.<alias>` | Marker-template directory and the alias-to-storage-root map (same rules as `forms.destinations`); roots are never disclosed |
+| `markers.peaksCachePath` / `markers.blockSize` | Peaks cache root (default `~/.local/share/lookie-link/peaks`) and samples per peak block (positive integer, default `1152`) |
+| `markers.ffmpegPath` / `markers.ffprobePath` / `markers.yamlToolPath` | Tool binaries; defaults `ffmpeg` and `ffprobe`; `yamlToolPath` optional (absent: YAML projections refuse) |
+| `markers.validators.<id>` | Non-empty command array of strings a template may reference by id; leading `~` elements are expanded. See [CONFIGURATION.md](CONFIGURATION.md#markers) |
+| `markers.publicOrigins[]` | Exact allowed browser write origins for markers; defaults to `forms.publicOrigins` |
 | `themes.<name>.dark` / `.light` | Custom CSS-variable maps. Accepted keys: `bg`, `bg_elev`, `bg_code`, `text`, `text_soft`, `accent`, `border`, `link`, `page_bg`, `toolbar_bg`, `toolbar_btn_bg`, `toolbar_btn_hover`, `toolbar_btn_text`, `toc_active_bg`, `heading_font` |
 | `themes.<name>.aliases[]` | Additional names that render the same theme; never listed separately in the picker. See [CONFIGURATION.md](CONFIGURATION.md#aliases) |
 | `search.ripgrep` / `search.maxResults` | Search backend: `auto` (default) uses a ripgrep binary on the service PATH, `false` forces the walk, a path names the binary; result cap 1–100. See [CONFIGURATION.md](CONFIGURATION.md#search) |

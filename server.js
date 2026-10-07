@@ -17,6 +17,8 @@ const {
   getPublishConfig,
   getFormsConfig,
   getKitsConfig,
+  getAudioRootsConfig,
+  getMarkersConfig,
   loadCustomThemes, getSearchConfig, getBaseConfig, getAppearanceOverlayPath, mergeAppearance, THEME_CSS_PROPERTIES, loadWallpaperCatalog, getWallpaperDefaults, reloadConfig, getConfigPath,
   generateCustomThemeCss,
   BUILT_IN_THEMES,
@@ -52,6 +54,7 @@ const {
   buildPreviewHref,
   buildRawHref,
   buildEmbedHref,
+  escapeHtml,
   formatFileSize,
   formatMTime,
   compareEntries,
@@ -71,7 +74,8 @@ const {
   renderAnnotationMarkdown,
   setThemeList,
   getThemeList,
-  setNavLinks, detectRenderMode } = require('./lib/renderer');
+  setNavLinks, detectRenderMode,
+  baseHtml, toolbarHtml, themeScript } = require('./lib/renderer');
 const {
   readAnnotationDocument,
   filterAnnotationsByState,
@@ -138,6 +142,8 @@ const AUDIO_MIME_TYPES = {
   '.opus': 'audio/ogg',
   '.flac': 'audio/flac',
   '.aac': 'audio/aac',
+  '.aif': 'audio/aiff',
+  '.aiff': 'audio/aiff',
 };
 
 const VIDEO_MIME_TYPES = {
@@ -221,6 +227,8 @@ const ASSET_MIME_TYPES = {
 };
 const IMAGE_EXTENSIONS = new Set(Object.keys(IMAGE_MIME_TYPES));
 const AUDIO_EXTENSIONS = new Set(Object.keys(AUDIO_MIME_TYPES));
+const TEXT_EXTENSIONS = new Set(Object.keys(TEXT_MIME_TYPES));
+const AUDIO_ROOT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const VIDEO_EXTENSIONS = new Set(Object.keys(VIDEO_MIME_TYPES));
 const PDF_EXTENSIONS = new Set(Object.keys(PDF_MIME_TYPES));
 const EDITABLE_EXTENSIONS = new Set([
@@ -844,6 +852,30 @@ function getRouteAvailability(app) {
   };
 }
 
+// Audio roots list every file but serve only audio. A non-audio file there gets
+// this page (name, size, modified) instead of the document renderer.
+function renderShownNotServedPage({ repo, relativePath, parentHref, mtime, size, customThemeCss }) {
+  const name = path.posix.basename(relativePath);
+  const extension = path.extname(name).toLowerCase();
+  const body = `${toolbarHtml('')}
+  <main class="layout">
+    <header class="topbar">
+      <nav class="breadcrumbs"><a href="${escapeHtml(parentHref)}">${escapeHtml(repo)}</a><span class="sep">/</span><h1 class="crumb-title">${escapeHtml(name)}</h1></nav>
+    </header>
+    <article class="content shown-not-served">
+      <p>This file is shown but not served from an audio root.</p>
+      <dl>
+        <dt>Name</dt><dd>${escapeHtml(name)}</dd>
+        <dt>Size</dt><dd>${escapeHtml(size)}</dd>
+        <dt>Modified</dt><dd>${escapeHtml(mtime)}</dd>
+        <dt>Type</dt><dd>${escapeHtml(extension || 'unknown')}</dd>
+      </dl>
+    </article>
+  </main>
+  ${themeScript()}`;
+  return baseHtml({ title: `${repo}/${relativePath}`, body, customThemeCss });
+}
+
 function createApp(options = {}) {
   const app = express();
   const logger = options.logger || console;
@@ -861,6 +893,8 @@ function createApp(options = {}) {
   const rawPublishConfig = options.publishConfig === undefined ? getPublishConfig() : options.publishConfig;
   const formsConfig = options.formsConfig === undefined ? getFormsConfig() : options.formsConfig;
   const kitsConfig = options.kitsConfig === undefined ? getKitsConfig() : options.kitsConfig;
+  const audioRoots = options.audioRoots === undefined ? getAudioRootsConfig() : (options.audioRoots || {});
+  const markersConfig = options.markersConfig === undefined ? getMarkersConfig() : (options.markersConfig || { enabled: false });
   const refreshKits = () => loadKits({
     folders: kitsConfig.folders || [],
     managedFolder: kitsConfig.managedFolder === undefined ? null : kitsConfig.managedFolder,
@@ -886,6 +920,34 @@ function createApp(options = {}) {
   const managedRepoStore = options.managedRepoStore === undefined
     ? ManagedRepoStore.fromConfig(rawManagedReposConfig)
     : options.managedRepoStore;
+  // Audio roots are read-only mappings: browsable like repositories, never
+  // editable, and only audio bytes are served from them.
+  const readOnlyRepos = new Set();
+  const audioRootLabels = {};
+  for (const [audioId, root] of Object.entries(audioRoots)) {
+    if (!AUDIO_ROOT_ID_PATTERN.test(audioId)) {
+      throw new Error(`audioRoots id "${audioId}" must use only lowercase letters, numbers, dots, underscores, and hyphens.`);
+    }
+    if (!root || typeof root.path !== 'string' || !root.path) {
+      throw new Error(`audioRoots "${audioId}" must have a path.`);
+    }
+    if (Object.prototype.hasOwnProperty.call(mappings, audioId)) {
+      throw new Error(`audioRoots id "${audioId}" conflicts with a configured repository mapping.`);
+    }
+    if (managedRepoStore && managedRepoStore.isEnabled()
+      && managedRepoStore.listRepos().repos.some((repo) => repo.id === audioId)) {
+      throw new Error(`audioRoots id "${audioId}" conflicts with a managed repository.`);
+    }
+    mappings[audioId] = root.path;
+    readOnlyRepos.add(audioId);
+    audioRootLabels[audioId] = typeof root.label === 'string' && root.label ? root.label : audioId;
+  }
+  const isReadOnlyRepo = (repoId) => readOnlyRepos.has(repoId);
+  const READ_ONLY_MESSAGE = 'This repository is read-only.';
+  const isReadOnlyPath = (viewPath) => {
+    const requested = splitViewPath(viewPath || '');
+    return Boolean(requested && isReadOnlyRepo(requested.repo));
+  };
   // Every served repo (managed or plainly mapped) behind one read-only door
   // (API roadmap R2): tree / changes / file read / search work for all of them.
   const repoResolver = createRepoResolver({ mappings, managedRepoStore });
@@ -1208,6 +1270,10 @@ function createApp(options = {}) {
     const found = resolveReadableRepo(req, res, relativePath, 'file');
     if (!found) return;
     const { repo, reader } = found;
+    if (isReadOnlyRepo(repo.id) && !TEXT_EXTENSIONS.has(path.extname(relativePath).toLowerCase())) {
+      apiError(res, 415, 'unsupported_media_type', 'Only text files can be read from a read-only audio root.');
+      return;
+    }
     try {
       const result = await reader.readFile(repo, relativePath);
       res.status(200).json({ ok: true, repo: repo.id, managed: repo.managed, ...result, viewUrl: buildHref(repo.id, result.path) });
@@ -2045,6 +2111,7 @@ function createApp(options = {}) {
         repo,
         viewUrl: `/view/${encodeURIComponent(repo)}/`,
         assetUrl: `/asset/${encodeURIComponent(repo)}/`,
+        ...(isReadOnlyRepo(repo) ? { kind: 'audio', readOnly: true, label: audioRootLabels[repo] } : {}),
       }));
     res.status(200).json({ ok: true, repos, count: repos.length });
   });
@@ -2170,6 +2237,19 @@ function createApp(options = {}) {
     }
 
     const extension = effectiveViewExtension(relativePath);
+    if (isReadOnlyRepo(repo) && !AUDIO_EXTENSIONS.has(extension)) {
+      const shownParent = parentPath(relativePath);
+      res.status(200).type('html').send(renderShownNotServedPage({
+        repo,
+        relativePath,
+        parentHref: appendAccessToken(shownParent === null ? '/view' : buildHref(repo, shownParent), accessContext),
+        mtime: formatMTime(stat.mtime),
+        size: formatFileSize(stat.size),
+        customThemeCss,
+        queryToken: accessContext.queryToken,
+      }));
+      return;
+    }
     if (parseBooleanQuery(req.query && req.query.validate) && HTML_EXTENSIONS.has(extension)) {
       let sourceBuffer;
       try {
@@ -2294,7 +2374,7 @@ function createApp(options = {}) {
         rawHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
         mtime: formatMTime(stat.mtime),
         size: formatFileSize(stat.size),
-        editHref: editingEnabled && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
+        editHref: editingEnabled && !isReadOnlyRepo(repo) && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
           ? appendAccessToken(buildEditHref(repo, relativePath), accessContext)
           : null,
         customThemeCss,
@@ -2324,7 +2404,7 @@ function createApp(options = {}) {
         rawHref: appendAccessToken(buildAssetHref(repo, relativePath), accessContext),
         mtime: formatMTime(stat.mtime),
         size: formatFileSize(stat.size),
-        editHref: editingEnabled && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
+        editHref: editingEnabled && !isReadOnlyRepo(repo) && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
           ? appendAccessToken(buildEditHref(repo, relativePath), accessContext)
           : null,
         customThemeCss,
@@ -2371,7 +2451,7 @@ function createApp(options = {}) {
       parentHref: appendAccessToken(parentRel === null ? '/view' : buildHref(repo, parentRel), accessContext),
       mtime: formatMTime(stat.mtime),
       size: formatFileSize(stat.size),
-      editHref: editingEnabled && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
+      editHref: editingEnabled && !isReadOnlyRepo(repo) && canAccessPath(accessContext, 'edit', repo, relativePath, 'file')
         ? appendAccessToken(buildEditHref(repo, relativePath), accessContext)
         : null,
       rawHtmlHref: rawHtmlEnabled && isHtmlFile
@@ -2382,7 +2462,7 @@ function createApp(options = {}) {
         : null,
       customThemeCss,
       queryToken: accessContext.queryToken,
-      annotationsEnabled: annotationsEnabled && canAccessPath(accessContext, 'view', repo, relativePath, 'file'),
+      annotationsEnabled: annotationsEnabled && !isReadOnlyRepo(repo) && canAccessPath(accessContext, 'view', repo, relativePath, 'file'),
     });
 
     res.status(200).type('html').send(html);
@@ -2392,6 +2472,10 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
     if (!editingEnabled) {
       res.status(404).type('text/plain').send('Editing mode is disabled.');
+      return;
+    }
+    if (isReadOnlyPath(req.params[0])) {
+      res.status(403).type('text/plain').send(READ_ONLY_MESSAGE);
       return;
     }
 
@@ -2492,6 +2576,10 @@ function createApp(options = {}) {
     const accessContext = resolveAccessContext(req);
     if (!editingEnabled) {
       apiError(res, 404, 'feature_disabled', 'Editing mode is disabled.');
+      return;
+    }
+    if (isReadOnlyPath(req.params[0])) {
+      apiError(res, 403, 'read_only_repo', READ_ONLY_MESSAGE);
       return;
     }
 
@@ -2836,6 +2924,10 @@ function createApp(options = {}) {
       apiError(res, 404, 'feature_disabled', 'Annotations are disabled.');
       return;
     }
+    if (isReadOnlyRepo(req.params.repo)) {
+      apiError(res, 403, 'read_only_repo', READ_ONLY_MESSAGE);
+      return;
+    }
 
     const repo = req.params.repo;
     const relativePath = req.params[0] || '';
@@ -2923,6 +3015,10 @@ function createApp(options = {}) {
   app.patch('/api/annotations/:repo/*', async (req, res) => {
     if (!annotationsEnabled) {
       apiError(res, 404, 'feature_disabled', 'Annotations are disabled.');
+      return;
+    }
+    if (isReadOnlyRepo(req.params.repo)) {
+      apiError(res, 403, 'read_only_repo', READ_ONLY_MESSAGE);
       return;
     }
 
@@ -3406,7 +3502,7 @@ function createApp(options = {}) {
 
     const extension = path.extname(relativePath).toLowerCase();
     const mimeType = ASSET_MIME_TYPES[extension];
-    if (!mimeType) {
+    if (!mimeType || (isReadOnlyRepo(repo) && !AUDIO_EXTENSIONS.has(extension))) {
       res.status(415).type('text/plain').send('Unsupported asset type.');
       return;
     }
@@ -3472,10 +3568,23 @@ function createApp(options = {}) {
         return;
       }
 
-      console.error('Failed to serve asset', { resolved, error });
-      if (!res.headersSent) {
-        res.status(500).type('text/plain').send('Failed to read asset.');
+      if (res.headersSent) {
+        console.error('Failed to serve asset', { resolved, error });
+        return;
       }
+      // `send` reports an unsatisfiable Range as status 416 and a vanished file
+      // as ENOENT; answer those as such instead of a generic 500.
+      if (error.status === 416) {
+        if (error.headers && error.headers['Content-Range']) res.set('Content-Range', error.headers['Content-Range']);
+        res.status(416).type('text/plain').send('Requested range not satisfiable.');
+        return;
+      }
+      if (error.code === 'ENOENT' || error.status === 404) {
+        res.status(404).type('text/plain').send('Asset not found.');
+        return;
+      }
+      console.error('Failed to serve asset', { resolved, error });
+      res.status(500).type('text/plain').send('Failed to read asset.');
     });
   });
 
@@ -3581,7 +3690,7 @@ function createApp(options = {}) {
         mappings,
         queryToken: accessContext.queryToken,
         sensitiveValues: accessContext.source === 'header' ? [extractPresentedToken(req)] : [],
-        annotationsEnabled: annotationsEnabled && canAccessPath(accessContext, 'view', repo, relativePath, 'file'),
+        annotationsEnabled: annotationsEnabled && !isReadOnlyRepo(repo) && canAccessPath(accessContext, 'view', repo, relativePath, 'file'),
         themeMode: typeof req.query['lookie-theme'] === 'string' ? req.query['lookie-theme'] : 'dark',
         themeScheme: typeof req.query['lookie-scheme'] === 'string' ? req.query['lookie-scheme'] : 'slate',
         customThemeCss,
