@@ -29,7 +29,9 @@ test('kit.css ships the catalog card parts with their working properties', () =>
 });
 
 test('catalog rules are opt-in: every v1.29 gallery selector is scoped to .gallery.catalog', () => {
-  const block = css.slice(css.indexOf('/* v1.29 catalog cards'), css.indexOf('.gallery.catalog figure:target') + 40)
+  const end = css.indexOf('/* end v1.29 catalog cards */');
+  assert.ok(end > 0, 'end-of-block marker missing');
+  const block = css.slice(css.indexOf('/* v1.29 catalog cards'), end)
     .replace(/\/\*[\s\S]*?\*\//g, '');
   const selectors = [...block.matchAll(/(^|\n)([^/\n{][^{]*)\{/g)].flatMap((m) => m[2].split(','));
   assert.ok(selectors.length >= 10);
@@ -51,7 +53,9 @@ test('showcase catalog demo: every zoom link has a lightbox target, every image 
     assert.ok(box && box[0].includes('class="photo-lightbox"'), `no lightbox for #${id}`);
     assert.ok(box[0].includes('aria-hidden="true"'), `lightbox #${id} image is not aria-hidden`);
   }
-  for (const img of section.matchAll(/<a class="photo-zoom"[^>]*><img src="[^"]*"[^>]*>/g)) {
+  for (const a of zooms) {
+    const img = section.slice(section.indexOf(a) + a.length).match(/^\s*<img src="[^"]*"[^>]*>/);
+    assert.ok(img, `zoom link without an image: ${a}`);
     assert.match(img[0], / alt="[^"]+"/, 'thumbnail without alt text');
   }
   assert.ok(section.includes('class="photo-strip"') && section.includes('pill muted') && section.includes('class="pending"'));

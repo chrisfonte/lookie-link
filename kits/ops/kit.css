@@ -233,6 +233,7 @@ html.lookie-embedded .photo-lightbox:target::after{right:12px;top:12px}
 /* Deep links: page.html#card-id lands below a sticky topnav and marks the opened card. */
 .gallery.catalog figure[id]{scroll-margin-top:64px}
 .gallery.catalog figure:target{outline:3px solid var(--accent);outline-offset:2px}
+/* end v1.29 catalog cards */
 /* Defensive display contract for surfaces that inject these controls. Current raw-HTML
    iframes may inject none; CSS cannot create annotation targets. */
 .lookie-annotate-btn{display:none}
