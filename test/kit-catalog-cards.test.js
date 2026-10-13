@@ -22,7 +22,10 @@ test('kit.css ships the catalog card parts with their working properties', () =>
   assert.match(rule('.gallery.catalog .photo-strip'), /display:grid;grid-template-columns:repeat\(auto-fill,minmax\(56px,1fr\)\)/);
   assert.match(rule('.gallery.catalog figure'), /position:relative/);
   assert.match(rule('.gallery.catalog'), /grid-template-columns:repeat\(auto-fill,/);
-  assert.match(rule('.gallery.catalog figure>.pill'), /position:absolute;top:8px;left:8px/);
+  assert.match(rule('.gallery.catalog figure>.pill:first-child'), /position:absolute;top:8px;left:8px;z-index:1;pointer-events:none;color:var\(--ink\)/);
+  assert.ok(!css.includes('.gallery.catalog figure>.pill{'), 'corner pill must be limited to :first-child');
+  assert.match(rule('.gallery.catalog figure>.pill.good:first-child::before'), /background:var\(--good\)/);
+  assert.ok(css.includes('.gallery{display:grid;grid-template-columns:repeat(auto-fit,'), 'plain .gallery keeps auto-fit');
   assert.match(rule('.gallery.catalog .photo-strip img'), /height:64px/);
   assert.match(rule('.gallery.catalog figcaption .meta'), /font-size:12px/);
   assert.match(rule('.gallery.catalog figcaption blockquote'), /border-left:3px solid var\(--accent\)/);
@@ -64,7 +67,7 @@ test('showcase catalog demo: every zoom link has a lightbox target, every image 
   assert.ok(section.includes('class="photo-strip"') && section.includes('pill muted') && section.includes('class="pending"'));
   const figs = [...section.matchAll(/<figure id="[^"]+">\s*(<[^>]+>)/g)].map((m) => m[1]);
   assert.ok(figs.length >= 3 && figs.every((t) => t.startsWith('<span class="pill ')), 'showcase status pills must be the first child of each card');
-  assert.ok(!/<p class="meta">[^<]*·/.test(section), 'showcase meta should not be a middle-dot string');
+  for (const m of section.matchAll(/<p class="meta">([\s\S]*?)<\/p>/g)) assert.ok(!m[1].includes('·'), 'showcase meta should not be a middle-dot string');
   for (const box of section.matchAll(/<a\b[^>]*class="photo-lightbox"[^>]*>/g)) {
     const close = (box[0].match(/href="#([^"]+)"/) || [])[1];
     assert.ok(close && section.includes(`<figure id="${close}">`), `lightbox closes to missing card #${close}`);

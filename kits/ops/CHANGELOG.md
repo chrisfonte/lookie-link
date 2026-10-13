@@ -12,7 +12,9 @@ All notable changes to the Ops HTML Kit.
 
 - Catalog cards: a status `.pill` placed as the figure's first child sits on the lead
   photo's corner, so it is scanned with the photo and no longer wraps alone under a long
-  title. A pill inside the `h3` still works.
+  title. A pill inside the `h3` still works. The corner pill uses `--ink` text with a
+  status-coloured dot (the tinted pill text was below AA contrast) and lets clicks through to the
+  photo's zoom link.
 - The photo strip is a uniform auto-fill grid; wrapped rows no longer stretch the last
   thumbnails.
 - Catalog grids use auto-fill columns, so a group with one or two cards keeps the column

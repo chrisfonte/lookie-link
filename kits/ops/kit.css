@@ -223,7 +223,13 @@ html.lookie-embedded .photo-lightbox:target::after{right:12px;top:12px}
 .gallery.catalog figure{position:relative;display:flex;flex-direction:column}
 /* v1.30: a status pill placed as the figure's FIRST child sits on the lead photo's corner, where
    it is scanned with the photo and cannot wrap onto its own line under a long title. */
-.gallery.catalog figure>.pill{position:absolute;top:8px;left:8px;z-index:1}
+.gallery.catalog figure>.pill:first-child{position:absolute;top:8px;left:8px;z-index:1;pointer-events:none;color:var(--ink)}
+/* On a photo the pill is the card's loudest label, so its text uses --ink (AA on every tint) and the
+   status colour moves to a dot; clicks pass through to the photo's zoom link. */
+.gallery.catalog figure>.pill:first-child::before{content:"";display:inline-block;width:7px;height:7px;margin:0 5px 1px 0;border-radius:50%;vertical-align:middle;background:var(--muted)}
+.gallery.catalog figure>.pill.good:first-child::before{background:var(--good)}
+.gallery.catalog figure>.pill.warn:first-child::before{background:var(--warn)}
+.gallery.catalog figure>.pill.info:first-child::before{background:var(--info)}
 /* v1.30: uniform thumbnails on every row (a wrapped flex row stretched the last ones). */
 .gallery.catalog .photo-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:4px;padding:4px;background:var(--surface-2)}
 .gallery.catalog .photo-strip>a,.gallery.catalog .photo-strip>img{min-width:0;border-radius:6px}
