@@ -223,10 +223,11 @@ html.lookie-embedded .photo-lightbox:target::after{right:12px;top:12px}
 .gallery.catalog figure{position:relative;display:flex;flex-direction:column}
 /* v1.30: a status pill placed as the figure's FIRST child sits on the lead photo's corner, where
    it is scanned with the photo and cannot wrap onto its own line under a long title. */
-.gallery.catalog figure>.pill:first-child{position:absolute;top:8px;left:8px;z-index:1;pointer-events:none;color:var(--ink)}
-/* On a photo the pill is the card's loudest label, so its text uses --ink (AA on every tint) and the
-   status colour moves to a dot; clicks pass through to the photo's zoom link. */
-.gallery.catalog figure>.pill:first-child::before{content:"";display:inline-block;width:7px;height:7px;margin:0 5px 1px 0;border-radius:50%;vertical-align:middle;background:var(--muted)}
+.gallery.catalog figure>.pill:first-child{position:absolute;top:8px;left:8px;z-index:1;pointer-events:none;color:var(--ink);background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+/* On a photo the pill is the card's loudest label: --ink on the card's own --surface (the page's main
+   text pair, AA in every theme incl. data-theme=auto dark, whose status tints stay light), with the
+   status colour on a ringed dot; clicks pass through to the photo's zoom link. */
+.gallery.catalog figure>.pill:first-child::before{content:"";display:inline-block;width:7px;height:7px;margin:0 5px 1px 0;border-radius:50%;vertical-align:middle;background:var(--muted);box-shadow:0 0 0 1px var(--ink)}
 .gallery.catalog figure>.pill.good:first-child::before{background:var(--good)}
 .gallery.catalog figure>.pill.warn:first-child::before{background:var(--warn)}
 .gallery.catalog figure>.pill.info:first-child::before{background:var(--info)}

@@ -22,9 +22,12 @@ test('kit.css ships the catalog card parts with their working properties', () =>
   assert.match(rule('.gallery.catalog .photo-strip'), /display:grid;grid-template-columns:repeat\(auto-fill,minmax\(56px,1fr\)\)/);
   assert.match(rule('.gallery.catalog figure'), /position:relative/);
   assert.match(rule('.gallery.catalog'), /grid-template-columns:repeat\(auto-fill,/);
-  assert.match(rule('.gallery.catalog figure>.pill:first-child'), /position:absolute;top:8px;left:8px;z-index:1;pointer-events:none;color:var\(--ink\)/);
+  assert.match(rule('.gallery.catalog figure>.pill:first-child'), /position:absolute;top:8px;left:8px;z-index:1;pointer-events:none;color:var\(--ink\);background:var\(--surface\)/);
   assert.ok(!css.includes('.gallery.catalog figure>.pill{'), 'corner pill must be limited to :first-child');
   assert.match(rule('.gallery.catalog figure>.pill.good:first-child::before'), /background:var\(--good\)/);
+  assert.match(rule('.gallery.catalog figure>.pill.warn:first-child::before'), /background:var\(--warn\)/);
+  assert.match(rule('.gallery.catalog figure>.pill.info:first-child::before'), /background:var\(--info\)/);
+  assert.match(rule('.gallery.catalog figure>.pill:first-child::before'), /box-shadow:0 0 0 1px var\(--ink\)/);
   assert.ok(css.includes('.gallery{display:grid;grid-template-columns:repeat(auto-fit,'), 'plain .gallery keeps auto-fit');
   assert.match(rule('.gallery.catalog .photo-strip img'), /height:64px/);
   assert.match(rule('.gallery.catalog figcaption .meta'), /font-size:12px/);

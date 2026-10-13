@@ -108,7 +108,7 @@ optional `.photo-strip` of more photos of the same subject, and a structured cap
 
 | Part | Markup | Notes |
 |---|---|---|
-| Status | `<span class="pill good">bought</span>` as the figure's first child | Sits on the lead photo's corner (v1.30): only a pill that is the figure's first child, with ink text and a status-coloured dot so it reads on any photo and theme; clicks pass through to the photo. Use `.pill.good`, `.pill.warn`, `.pill.info` or the neutral `.pill.muted`; never invent badge classes. A pill inside the `h3` still works but wraps under long titles |
+| Status | `<span class="pill good">bought</span>` as the figure's first child | Sits on the lead photo's corner (v1.30): only a pill that is the figure's first child, with ink text on the card surface and a ringed status-coloured dot, so it reads on any photo and theme; clicks pass through to the photo. Use `.pill.good`, `.pill.warn`, `.pill.info` or the neutral `.pill.muted`; never invent badge classes. A pill inside the `h3` still works but wraps under long titles |
 | Title | `<h3>No. 4 hand plane</h3>` | The subject's name, nothing else |
 | Meta line | `<p class="meta">Hand tools, tagged <strong>$45</strong></p>` | One or two facts the source records, written as a phrase rather than a `·`-joined string; a missing value uses `.pending`, never a guess. Facts shared by a whole group (a date, a place) belong in the group heading, not on every card |
 | Verbatim reaction | `<blockquote>…</blockquote>` | Someone's own words, quoted exactly |
