@@ -10,15 +10,30 @@ const KIT = path.join(__dirname, '..', 'kits', 'ops');
 const css = fs.readFileSync(path.join(KIT, 'kit.css'), 'utf8');
 const examples = fs.readFileSync(path.join(KIT, 'EXAMPLES.html'), 'utf8');
 
-test('kit.css ships the catalog card parts and the neutral pill', () => {
-  for (const selector of ['.gallery.catalog figure', '.gallery .photo-strip', '.gallery .photo-strip img',
-    '.gallery.catalog figcaption', '.gallery figcaption .meta', '.gallery figcaption blockquote', '.pill.muted',
-    '.gallery.catalog figure[id]', '.gallery.catalog figure:target']) {
-    assert.ok(css.includes(selector + '{'), `missing rule ${selector}`);
-  }
+// rule body for a selector, e.g. rule('.pill.muted') -> 'background:...;color:...'
+function rule(selector) {
+  const at = css.indexOf(selector + '{');
+  assert.ok(at >= 0, `missing rule ${selector}`);
+  return css.slice(at + selector.length + 1, css.indexOf('}', at));
+}
+
+test('kit.css ships the catalog card parts with their working properties', () => {
+  assert.match(rule('.gallery.catalog figure'), /display:flex/);
+  assert.match(rule('.gallery.catalog .photo-strip'), /display:flex/);
+  assert.match(rule('.gallery.catalog .photo-strip img'), /height:64px/);
+  assert.match(rule('.gallery.catalog figcaption .meta'), /font-size:12px/);
+  assert.match(rule('.gallery.catalog figcaption blockquote'), /border-left:3px solid var\(--accent\)/);
+  assert.match(rule('.gallery.catalog figure[id]'), /scroll-margin-top:64px/);
+  assert.match(rule('.gallery.catalog figure:target'), /outline:3px solid var\(--accent\)/);
+  assert.match(rule('.pill.muted'), /background:var\(--surface-2\);color:var\(--muted\)/);
 });
 
-test('catalog rules are opt-in: plain gallery rules are unchanged', () => {
+test('catalog rules are opt-in: every v1.29 gallery selector is scoped to .gallery.catalog', () => {
+  const block = css.slice(css.indexOf('/* v1.29 catalog cards'), css.indexOf('.gallery.catalog figure:target') + 40)
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  const selectors = [...block.matchAll(/(^|\n)([^/\n{][^{]*)\{/g)].flatMap((m) => m[2].split(','));
+  assert.ok(selectors.length >= 10);
+  for (const sel of selectors) assert.ok(sel.trim().startsWith('.gallery.catalog'), `unscoped selector: ${sel}`);
   assert.ok(css.includes('.gallery img{width:100%;height:170px;object-fit:cover;display:block;background:var(--surface-2)}'));
   assert.ok(css.includes('.gallery figcaption{padding:8px 10px;font-size:12px;color:var(--muted)}'));
 });
@@ -27,9 +42,15 @@ test('showcase catalog demo: every zoom link has a lightbox target, every image 
   const start = examples.indexOf('id="catalog-demo"');
   assert.ok(start > 0, 'catalog demo section missing');
   const section = examples.slice(start, examples.indexOf('<h2', start + 1));
-  const hrefs = [...section.matchAll(/class="photo-zoom" href="#([^"]+)"/g)].map((m) => m[1]);
+  const zooms = [...section.matchAll(/<a\b[^>]*class="photo-zoom"[^>]*>/g)].map((m) => m[0]);
+  const hrefs = zooms.map((a) => (a.match(/href="#([^"]+)"/) || [])[1]);
+  assert.ok(hrefs.every(Boolean), 'zoom link without a fragment href');
   assert.ok(hrefs.length >= 5, 'expected lead photos and strip photos');
-  for (const id of hrefs) assert.ok(section.includes(`id="${id}" class="photo-lightbox"`), `no lightbox for #${id}`);
+  for (const id of hrefs) {
+    const box = section.match(new RegExp(`<a\\b[^>]*id="${id}"[^>]*>\\s*<img src="[^"]*"[^>]*>`));
+    assert.ok(box && box[0].includes('class="photo-lightbox"'), `no lightbox for #${id}`);
+    assert.ok(box[0].includes('aria-hidden="true"'), `lightbox #${id} image is not aria-hidden`);
+  }
   for (const img of section.matchAll(/<a class="photo-zoom"[^>]*><img src="[^"]*"[^>]*>/g)) {
     assert.match(img[0], / alt="[^"]+"/, 'thumbnail without alt text');
   }

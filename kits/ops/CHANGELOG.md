@@ -13,10 +13,13 @@ All notable changes to the Ops HTML Kit.
 - Add catalog cards: opt-in `.catalog` on a `.gallery` for cards that each describe one
   subject. Adds `.photo-strip` (secondary photos of the same subject, each zoomable),
   and caption parts: `h3`/`h4` title with a status pill, `.meta`, `blockquote` for a
-  verbatim reaction and `details` for long text. Plain `.gallery` markup is unchanged.
+  verbatim reaction and `details` for long text. Every new rule is scoped to
+  `.gallery.catalog`, so plain `.gallery` markup is unchanged. The strip wraps when a card
+  has many photos.
 - Catalog cards with an `id` are deep-link targets: they clear a sticky topnav
   (`scroll-margin-top`) and are outlined while targeted.
-- Add `.pill.muted`, a neutral status alongside `good`, `warn` and `info`.
+- Add `.pill.muted`, a neutral status alongside `good`, `warn` and `info`, with a hairline
+  so it stays visible on a white card.
 - Document the parts, a full markup example and the thumbnail-plus-full-resolution
   lightbox pattern; add a three-card showcase (with strip, without strip, pending price).
 - Motivated by a generated photo catalog that hand-rolled the same card, strip and quote

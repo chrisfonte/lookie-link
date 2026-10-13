@@ -130,8 +130,8 @@ optional `.photo-strip` of more photos of the same subject, and a structured cap
     </figcaption>
   </figure>
 </div>
-<a id="item-1" class="photo-lightbox" href="#items" aria-label="Close enlarged photo"><img src="plane.jpg" aria-hidden="true" loading="lazy"></a>
-<a id="item-1b" class="photo-lightbox" href="#items" aria-label="Close enlarged photo"><img src="plane-tag.jpg" aria-hidden="true" loading="lazy"></a>
+<a id="item-1" class="photo-lightbox" href="#no-4-hand-plane" aria-label="Close enlarged photo"><img src="plane.jpg" aria-hidden="true" loading="lazy"></a>
+<a id="item-1b" class="photo-lightbox" href="#no-4-hand-plane" aria-label="Close enlarged photo"><img src="plane-tag.jpg" aria-hidden="true" loading="lazy"></a>
 ```
 
 **Deep links.** Give a card an `id` and link to it from anywhere (`items.html#no-4-hand-plane`): the
@@ -139,8 +139,13 @@ card lands below a sticky `topnav` and is outlined in the accent colour while it
 stable id from the source record, unique on the page, so links survive a rebuild.
 
 Point a lightbox at the full-resolution file and the grid at a small thumbnail: `loading="lazy"`
-keeps hidden lightbox images from downloading until opened. Generated catalogs should check that
-every `src` resolves before shipping; `?validate=1` reports missing local assets.
+keeps hidden lightbox images from downloading until opened. Point each lightbox's close link at its
+card's `id` (`href="#no-4-hand-plane"`) so closing the zoom returns to, and re-marks, the card.
+Generated catalogs should check that every `src` resolves before shipping; `?validate=1` counts
+unresolved local files in `summary.missingLocalAssetCount` (a count, not a warning).
+
+The strip wraps onto a second row when a card has many photos; keep it to a handful and put the rest
+in the lightbox set.
 
 The Kit defensively hides `.lookie-annotate-btn` controls by default and reveals them only when a host both injects those controls and sets `html.lookie-annotations-active`. Current Lookie raw-HTML iframes may inject no section targets at all; this CSS does not create annotation capability.
 
