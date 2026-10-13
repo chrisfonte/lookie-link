@@ -15,6 +15,8 @@ All notable changes to the Ops HTML Kit.
   title. A pill inside the `h3` still works.
 - The photo strip is a uniform auto-fill grid; wrapped rows no longer stretch the last
   thumbnails.
+- Catalog grids use auto-fill columns, so a group with one or two cards keeps the column
+  width instead of stretching a lone card across the row.
 - README and showcase: status on the photo, meta written as a short phrase instead of a
   `·`-joined string, and group-level facts (dates, places) kept in the group heading.
 - From a design review of the first catalog built on 1.29.

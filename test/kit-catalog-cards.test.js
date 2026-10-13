@@ -21,6 +21,7 @@ test('kit.css ships the catalog card parts with their working properties', () =>
   assert.match(rule('.gallery.catalog figure'), /display:flex/);
   assert.match(rule('.gallery.catalog .photo-strip'), /display:grid;grid-template-columns:repeat\(auto-fill,minmax\(56px,1fr\)\)/);
   assert.match(rule('.gallery.catalog figure'), /position:relative/);
+  assert.match(rule('.gallery.catalog'), /grid-template-columns:repeat\(auto-fill,/);
   assert.match(rule('.gallery.catalog figure>.pill'), /position:absolute;top:8px;left:8px/);
   assert.match(rule('.gallery.catalog .photo-strip img'), /height:64px/);
   assert.match(rule('.gallery.catalog figcaption .meta'), /font-size:12px/);

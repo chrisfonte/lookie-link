@@ -217,6 +217,9 @@ html.lookie-embedded .photo-lightbox:target::after{right:12px;top:12px}
    (an item, a place, a product). Adds a strip of secondary photos and a structured caption:
    h3 title (+ .pill status), .meta line, blockquote for a verbatim reaction, details for long
    text. Additive: plain .gallery/.gallery-dense markup renders exactly as before. */
+/* v1.30: catalog groups vary in size, so columns keep their width (auto-fill) instead of a lone
+   card stretching across the row (auto-fit, right for plain contact sheets). */
+.gallery.catalog{grid-template-columns:repeat(auto-fill,minmax(min(230px,100%),1fr))}
 .gallery.catalog figure{position:relative;display:flex;flex-direction:column}
 /* v1.30: a status pill placed as the figure's FIRST child sits on the lead photo's corner, where
    it is scanned with the photo and cannot wrap onto its own line under a long title. */
