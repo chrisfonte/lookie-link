@@ -59,5 +59,9 @@ test('showcase catalog demo: every zoom link has a lightbox target, every image 
     assert.match(img[0], / alt="[^"]+"/, 'thumbnail without alt text');
   }
   assert.ok(section.includes('class="photo-strip"') && section.includes('pill muted') && section.includes('class="pending"'));
+  for (const box of section.matchAll(/<a\b[^>]*class="photo-lightbox"[^>]*>/g)) {
+    const close = (box[0].match(/href="#([^"]+)"/) || [])[1];
+    assert.ok(close && section.includes(`<figure id="${close}">`), `lightbox closes to missing card #${close}`);
+  }
   for (const m of section.matchAll(/<a href="#([^"]+)">/g)) assert.ok(section.includes(`<figure id="${m[1]}">`), `deep link #${m[1]} has no card`);
 });
