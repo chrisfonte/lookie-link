@@ -1,6 +1,6 @@
 /* File: kits/ops/kit.css
    Ops HTML Kit — reusable design tokens + components for agent-built HTML deliverables.
-   Lookie-safe. v1.29 (2026-10-13).
+   Lookie-safe. v1.30 (2026-10-13).
 
    USAGE
    - Inline this file into a <style> block in each page (most reliable everywhere), OR
@@ -217,9 +217,23 @@ html.lookie-embedded .photo-lightbox:target::after{right:12px;top:12px}
    (an item, a place, a product). Adds a strip of secondary photos and a structured caption:
    h3 title (+ .pill status), .meta line, blockquote for a verbatim reaction, details for long
    text. Additive: plain .gallery/.gallery-dense markup renders exactly as before. */
-.gallery.catalog figure{display:flex;flex-direction:column}
-.gallery.catalog .photo-strip{display:flex;flex-wrap:wrap;gap:4px;padding:4px;background:var(--surface-2)}
-.gallery.catalog .photo-strip>a,.gallery.catalog .photo-strip>img{flex:1 1 56px;min-width:0;border-radius:6px}
+/* v1.30: catalog groups vary in size, so columns keep their width (auto-fill) instead of a lone
+   card stretching across the row (auto-fit, right for plain contact sheets). */
+.gallery.catalog{grid-template-columns:repeat(auto-fill,minmax(min(230px,100%),1fr))}
+.gallery.catalog figure{position:relative;display:flex;flex-direction:column}
+/* v1.30: a status pill placed as the figure's FIRST child sits on the lead photo's corner, where
+   it is scanned with the photo and cannot wrap onto its own line under a long title. */
+.gallery.catalog figure>.pill:first-child{position:absolute;top:8px;left:8px;z-index:1;pointer-events:none;color:var(--ink);background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+/* On a photo the pill is the card's loudest label: --ink on the card's own --surface (the page's main
+   text pair, AA in every theme incl. data-theme=auto dark, whose status tints stay light), with the
+   status colour on a ringed dot; clicks pass through to the photo's zoom link. */
+.gallery.catalog figure>.pill:first-child::before{content:"";display:inline-block;width:7px;height:7px;margin:0 5px 1px 0;border-radius:50%;vertical-align:middle;background:var(--muted);box-shadow:0 0 0 1px var(--ink)}
+.gallery.catalog figure>.pill.good:first-child::before{background:var(--good)}
+.gallery.catalog figure>.pill.warn:first-child::before{background:var(--warn)}
+.gallery.catalog figure>.pill.info:first-child::before{background:var(--info)}
+/* v1.30: uniform thumbnails on every row (a wrapped flex row stretched the last ones). */
+.gallery.catalog .photo-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:4px;padding:4px;background:var(--surface-2)}
+.gallery.catalog .photo-strip>a,.gallery.catalog .photo-strip>img{min-width:0;border-radius:6px}
 .gallery.catalog .photo-strip img{width:100%;height:64px;aspect-ratio:auto;border-radius:6px;object-fit:cover}
 .gallery.catalog figcaption{display:flex;flex-direction:column;gap:6px;padding:10px 12px 12px;font-size:13px;color:var(--ink)}
 .gallery.catalog figcaption h3,.gallery.catalog figcaption h4,.gallery.catalog figcaption p{margin:0}

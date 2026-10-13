@@ -14,7 +14,7 @@
   <div class="wrap">
     <p class="eyebrow">Component showcase</p>
     <h1>Ops HTML Kit</h1>
-    <p class="sub">Tokens + components for rich, Lookie-safe HTML deliverables · v1.29</p>
+    <p class="sub">Tokens + components for rich, Lookie-safe HTML deliverables · v1.30</p>
     <div class="badges"><span class="badge">🎨 Themeable</span><span class="badge">📦 Reusable</span><span class="badge">🛟 Lookie-safe</span></div>
   </div>
 </header>
@@ -196,34 +196,37 @@
   <a id="gallery-photo-b" class="photo-lightbox" href="#gallery-demo" aria-label="Close enlarged photo"><img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22><rect width=%22800%22 height=%22600%22 fill=%22%23f5eadc%22/><path d=%22M0 420 L180 230 L330 390 L520 170 L800 430 V600 H0Z%22 fill=%22%23e06b4f%22/><path d=%22M0 490 Q210 410 410 500 T800 470 V600 H0Z%22 fill=%22%230a6c8f%22/></svg>" aria-hidden="true"></a>
 
   <h2 id="catalog-demo">Catalog cards</h2>
-  <p class="lead">Add <code>.catalog</code> when each card is one subject: lead photo, a <code>.photo-strip</code> of more photos, then title + status pill, meta line, verbatim quote and expandable details. A card with an <code>id</code> is a deep-link target: <a href="#catalog-item-lantern">jump to the lantern</a>.</p>
+  <p class="lead">Add <code>.catalog</code> when each card is one subject: lead photo, a <code>.photo-strip</code> of more photos, a status pill on the photo's corner, then title, meta line, verbatim quote and expandable details. A card with an <code>id</code> is a deep-link target: <a href="#catalog-item-lantern">jump to the lantern</a>.</p>
   <div class="gallery gallery-dense catalog" aria-label="Catalog card demonstration">
     <figure id="catalog-item-plane">
+      <span class="pill good">want</span>
       <a class="photo-zoom" href="#catalog-photo-a" aria-label="Enlarge hand plane demonstration photo"><img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22><rect width=%22800%22 height=%22600%22 fill=%22%23e9e1d3%22/><rect x=%22170%22 y=%22250%22 width=%22460%22 height=%22120%22 rx=%2218%22 fill=%22%238a5a2b%22/><rect x=%22430%22 y=%22200%22 width=%2290%22 height=%2260%22 rx=%2210%22 fill=%22%23444%22/></svg>" alt="Graphic hand plane on a pale bench" loading="lazy"></a>
       <div class="photo-strip">
         <a class="photo-zoom" href="#catalog-photo-a2" aria-label="Enlarge plane side view"><img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22><rect width=%22800%22 height=%22600%22 fill=%22%23d8d2c4%22/><rect x=%22220%22 y=%22180%22 width=%22360%22 height=%22240%22 rx=%2212%22 fill=%22%23444444%22/><rect x=%22260%22 y=%22220%22 width=%22280%22 height=%2240%22 fill=%22%23eee%22/></svg>" alt="Graphic side view of the plane body" loading="lazy"></a>
         <a class="photo-zoom" href="#catalog-photo-a3" aria-label="Enlarge price tag"><img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22><rect width=%22800%22 height=%22600%22 fill=%22%23f1ebe0%22/><circle cx=%22400%22 cy=%22300%22 r=%22150%22 fill=%22%23c8821a%22/><text x=%22400%22 y=%22325%22 font-size=%2290%22 text-anchor=%22middle%22 fill=%22%23fff%22>$45</text></svg>" alt="Graphic round price tag reading 45 dollars" loading="lazy"></a>
       </div>
       <figcaption>
-        <h3>No. 4 hand plane <span class="pill good">want</span></h3>
-        <p class="meta">2026-10-13 · tools · <strong>$45</strong></p>
+        <h3>No. 4 hand plane</h3>
+        <p class="meta">Hand tools, tagged <strong>$45</strong></p>
         <blockquote>Exactly the size I keep reaching for.</blockquote>
         <details><summary>description</summary>Cast body, wooden tote, iron freshly sharpened. Three photos of one subject share one card.</details>
       </figcaption>
     </figure>
     <figure id="catalog-item-lantern">
+      <span class="pill warn">maybe</span>
       <a class="photo-zoom" href="#catalog-photo-b" aria-label="Enlarge lantern demonstration photo"><img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22><rect width=%22800%22 height=%22600%22 fill=%22%231f3442%22/><rect x=%22300%22 y=%22120%22 width=%22200%22 height=%22380%22 rx=%2230%22 fill=%22%237fb3d5%22/><circle cx=%22400%22 cy=%22230%22 r=%2260%22 fill=%22%23fff%22/></svg>" alt="Graphic blue lantern with a white lens" loading="lazy"></a>
       <figcaption>
-        <h3>Signal lantern <span class="pill warn">maybe</span></h3>
-        <p class="meta">2026-10-13 · lighting · <span class="pending">price not recorded</span></p>
+        <h3>Signal lantern</h3>
+        <p class="meta">Lighting, <span class="pending">price not recorded</span></p>
         <details><summary>description</summary>A single-photo card: no strip, and the missing price is shown as pending rather than guessed.</details>
       </figcaption>
     </figure>
     <figure id="catalog-item-tent">
+      <span class="pill muted">pass</span>
       <a class="photo-zoom" href="#catalog-photo-c" aria-label="Enlarge tent demonstration photo"><img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22><rect width=%22800%22 height=%22600%22 fill=%22%232e8b57%22/><path d=%22M400 110 L600 480 H200Z%22 fill=%22%23f5eadc%22/></svg>" alt="Graphic cream tent on green" loading="lazy"></a>
       <figcaption>
-        <h3>Canvas tent <span class="pill muted">pass</span></h3>
-        <p class="meta">2026-10-13 · outdoor · <strong>$120</strong></p>
+        <h3>Canvas tent</h3>
+        <p class="meta">Outdoor gear, tagged <strong>$120</strong></p>
         <blockquote>Too big for the car.</blockquote>
       </figcaption>
     </figure>

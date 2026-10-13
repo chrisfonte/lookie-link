@@ -8,6 +8,21 @@ Status: Active
 
 All notable changes to the Ops HTML Kit.
 
+## v1.30 (2026-10-13)
+
+- Catalog cards: a status `.pill` placed as the figure's first child sits on the lead
+  photo's corner, so it is scanned with the photo and no longer wraps alone under a long
+  title. A pill inside the `h3` still works. The corner pill uses `--ink` text on the card
+  surface with a ringed status-coloured dot (tinted pill text was below AA, and auto-dark keeps light tints) and lets clicks through to the
+  photo's zoom link.
+- The photo strip is a uniform auto-fill grid; wrapped rows no longer stretch the last
+  thumbnails.
+- Catalog grids use auto-fill columns, so a group with one or two cards keeps the column
+  width instead of stretching a lone card across the row.
+- README and showcase: status on the photo, meta written as a short phrase instead of a
+  `·`-joined string, and group-level facts (dates, places) kept in the group heading.
+- From a design review of the first catalog built on 1.29.
+
 ## v1.29 (2026-10-13)
 
 - Add catalog cards: opt-in `.catalog` on a `.gallery` for cards that each describe one
