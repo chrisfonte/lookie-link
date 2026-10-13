@@ -1,6 +1,6 @@
 /* File: kits/ops/kit.css
    Ops HTML Kit — reusable design tokens + components for agent-built HTML deliverables.
-   Lookie-safe. v1.28 (2026-10-06).
+   Lookie-safe. v1.29 (2026-10-13).
 
    USAGE
    - Inline this file into a <style> block in each page (most reliable everywhere), OR
@@ -174,6 +174,7 @@ pre{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;p
 .pill.good{background:var(--good-bg);color:var(--good)}
 .pill.warn{background:var(--warn-bg);color:var(--warn)}
 .pill.info{background:var(--info-bg);color:var(--info)}
+.pill.muted{background:var(--surface-2);color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)} /* v1.29 neutral status: pass, archived, n/a */
 .callout{border-left:4px solid var(--pop);background:var(--callout-bg);background:color-mix(in srgb,var(--pop) 8%,var(--surface));padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
 .callout.info{border-color:var(--accent);background:var(--surface-2)}
 .callout.good{border-color:var(--good);background:var(--success-bg)}
@@ -212,6 +213,27 @@ html.lookie-embedded .photo-lightbox:target{position:relative;inset:auto;z-index
   margin:14px 0;padding:16px;max-height:660px;border-radius:12px}
 html.lookie-embedded .photo-lightbox:target img{max-height:600px}
 html.lookie-embedded .photo-lightbox:target::after{right:12px;top:12px}
+/* v1.29 catalog cards: opt-in .catalog on a .gallery whose figures each describe ONE subject
+   (an item, a place, a product). Adds a strip of secondary photos and a structured caption:
+   h3 title (+ .pill status), .meta line, blockquote for a verbatim reaction, details for long
+   text. Additive: plain .gallery/.gallery-dense markup renders exactly as before. */
+.gallery.catalog figure{display:flex;flex-direction:column}
+.gallery.catalog .photo-strip{display:flex;flex-wrap:wrap;gap:4px;padding:4px;background:var(--surface-2)}
+.gallery.catalog .photo-strip>a,.gallery.catalog .photo-strip>img{flex:1 1 56px;min-width:0;border-radius:6px}
+.gallery.catalog .photo-strip img{width:100%;height:64px;aspect-ratio:auto;border-radius:6px;object-fit:cover}
+.gallery.catalog figcaption{display:flex;flex-direction:column;gap:6px;padding:10px 12px 12px;font-size:13px;color:var(--ink)}
+.gallery.catalog figcaption h3,.gallery.catalog figcaption h4,.gallery.catalog figcaption p{margin:0}
+.gallery.catalog figcaption h3,.gallery.catalog figcaption h4{font-size:15px;line-height:1.3;color:var(--ink)}
+.gallery.catalog figcaption h3 .pill,.gallery.catalog figcaption h4 .pill{margin-left:4px}
+.gallery.catalog figcaption .meta{font-size:12px;color:var(--muted)}
+.gallery.catalog figcaption .meta strong{color:var(--ink)}
+.gallery.catalog figcaption blockquote{margin:0;padding:0 0 0 8px;border-left:3px solid var(--accent);font-style:italic}
+.gallery.catalog figcaption details{font-size:12px;color:var(--muted)}
+.gallery.catalog figcaption summary{cursor:pointer}
+/* Deep links: page.html#card-id lands below a sticky topnav and marks the opened card. */
+.gallery.catalog figure[id]{scroll-margin-top:64px}
+.gallery.catalog figure:target{outline:3px solid var(--accent);outline-offset:2px}
+/* end v1.29 catalog cards */
 /* Defensive display contract for surfaces that inject these controls. Current raw-HTML
    iframes may inject none; CSS cannot create annotation targets. */
 .lookie-annotate-btn{display:none}

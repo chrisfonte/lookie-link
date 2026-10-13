@@ -4,8 +4,8 @@
 Title: Ops HTML Kit
 Owner: Operations Team
 Created: 2026-06-28
-Last Updated: 2026-10-06
-Version: 1.28
+Last Updated: 2026-10-13
+Version: 1.29
 Status: Active
 Tags: #html #css #design-system #templates #lookie-link
 Document URL: kits/ops/README.md
@@ -45,7 +45,7 @@ serve source files, not the viewer shell.
    - To opt into the active Lookie-Link viewer theme, add `data-lookie-follow-theme` to `<html>`, `<body>`, or a wrapper. Use this for reports, dashboards, status pages, and review packets that should blend with the viewer. Omit it for branded/identity pages that should keep their own look.
    - **Theme-follow and a fixed theme belong on the same element or are mutually exclusive.** Do not put `data-lookie-follow-theme` on `<html>` and `data-theme="neutral"` (or another fixed theme) on `<body>`: the descendant's fixed tokens override the inherited viewer tokens, so Lookie can stamp dark mode while the artifact stays light. For a theme-following page, omit the descendant `data-theme`; the root token block supplies the plain-browser fallback.
    - Every research HTML primary also adds `data-lookie-render="viewport"` to the root `<html>`. This is mandatory, has no research-package opt-out, and gives the page a real internal scroll container in Lookie so the authored sticky `topnav` remains pinned. The research rule is owned by Research Documentation Standards Rule 19; non-research flowing pages may retain Lookie's default content-height mode.
-3. **Compose components** (see `EXAMPLES.html`): `hero` / `topnav` / `card` / `callout` (+ `.info` `.good` `.warn`) / `pill` / `table.budget` / `table-wrap` (horizontal-scroll container for wide reference tables — REQUIRED around any table that can outgrow a phone column) / `pre` code blocks (styled surface, self-scrolling) / `gallery` + `gallery-dense` + `photo-lightbox` / `choose` (nav cards) / `tile` (stat) / **data diagrams** (`dg` card + `dg-ladder` `dg-flow` `dg-branch` `dg-week` `dg-gauge` `dg-compare` `dg-meters` `dg-bridge` `dg-timeline` — see "Data diagrams" below) / `herostats` (findings-before-scroll stat band under the hero) / `confidence` (inline qualification) / `evidence-figure` (source image + caption) / `signal-grid` + `signal` / `scorebar` / `evidence-list` + `evidence` / `risk-matrix` + `risk` / `grid-2` `grid-3` / `timeline` / `links`+`chip` / `ul.tick` `ul.todo` / `note-intro` / `backlink` (hub/corpus return link — this, not a topnav entry, is how a page points back to its parent README) / `details.place` (tap-to-expand accordion) / **slides** (`body.deck` + `slide` layouts + `slide-canvas` — see the Presentation row in the scenario map). For multi-section artifacts, include a sticky `topnav` linking to the major sections in document order; this is the default for research packets and review packets. **topnav v2 rules (2026-07-31):** place it BELOW the hero (the title leads); one non-wrapping row that scrolls with a self-cancelling trailing fade — never let it wrap into a slab; no brand link (it duplicates the H1 — every link names a real section); labels muted, accent on hover. And decorative rules (hero underlines etc.) must derive from `--accent`, never `--pop`, which can vanish against same-hued gradients. For values a source YAML does not yet record, use the `.pending` chip ("awaiting receipt") — never invent data.
+3. **Compose components** (see `EXAMPLES.html`): `hero` / `topnav` / `card` / `callout` (+ `.info` `.good` `.warn`) / `pill` / `table.budget` / `table-wrap` (horizontal-scroll container for wide reference tables — REQUIRED around any table that can outgrow a phone column) / `pre` code blocks (styled surface, self-scrolling) / `gallery` + `gallery-dense` + `photo-lightbox` + `catalog` cards with `photo-strip` / `choose` (nav cards) / `tile` (stat) / **data diagrams** (`dg` card + `dg-ladder` `dg-flow` `dg-branch` `dg-week` `dg-gauge` `dg-compare` `dg-meters` `dg-bridge` `dg-timeline` — see "Data diagrams" below) / `herostats` (findings-before-scroll stat band under the hero) / `confidence` (inline qualification) / `evidence-figure` (source image + caption) / `signal-grid` + `signal` / `scorebar` / `evidence-list` + `evidence` / `risk-matrix` + `risk` / `grid-2` `grid-3` / `timeline` / `links`+`chip` / `ul.tick` `ul.todo` / `note-intro` / `backlink` (hub/corpus return link — this, not a topnav entry, is how a page points back to its parent README) / `details.place` (tap-to-expand accordion) / **slides** (`body.deck` + `slide` layouts + `slide-canvas` — see the Presentation row in the scenario map). For multi-section artifacts, include a sticky `topnav` linking to the major sections in document order; this is the default for research packets and review packets. **topnav v2 rules (2026-07-31):** place it BELOW the hero (the title leads); one non-wrapping row that scrolls with a self-cancelling trailing fade — never let it wrap into a slab; no brand link (it duplicates the H1 — every link names a real section); labels muted, accent on hover. And decorative rules (hero underlines etc.) must derive from `--accent`, never `--pop`, which can vanish against same-hued gradients. For values a source YAML does not yet record, use the `.pending` chip ("awaiting receipt") — never invent data.
    **This list is names only — the markup is in `EXAMPLES.html` (and `research-packet-template.html` for the research components). Open it before composing.** Most components need specific child elements and classes; a plausible guess renders without error and looks wrong. The two whose failure is invisible in code and obvious on screen:
 
    ```html
@@ -99,6 +99,53 @@ Two rendering contexts (v1.18): in a plain browser the lightbox is the CSS `:tar
   <img src="harbor.jpg" aria-hidden="true">
 </a>
 ```
+
+### Catalog cards (v1.29)
+
+When each gallery card describes one subject (an inventory item, a menu dish, a product, a place)
+rather than one photo, add `.catalog` to the gallery. The figure becomes a card: the lead photo, an
+optional `.photo-strip` of more photos of the same subject, and a structured caption.
+
+| Part | Markup | Notes |
+|---|---|---|
+| Title and status | `<h3>Title <span class="pill good">bought</span></h3>` | Status uses `.pill.good`, `.pill.warn`, `.pill.info` or the neutral `.pill.muted`; never invent badge classes |
+| Meta line | `<p class="meta">date · category · <strong>$45</strong></p>` | Facts the source records; a missing value uses `.pending`, never a guess |
+| Verbatim reaction | `<blockquote>…</blockquote>` | Someone's own words, quoted exactly |
+| Long text | `<details><summary>description</summary>…</details>` | Keeps cards short in a dense grid |
+| More photos | `<div class="photo-strip">` of `.photo-zoom` links | Each opens its own `.photo-lightbox`; give every image its own alt text |
+
+```html
+<h2 id="items">Items</h2>
+<div class="gallery gallery-dense catalog">
+  <figure id="no-4-hand-plane">
+    <a class="photo-zoom" href="#item-1" aria-label="Enlarge hand plane"><img src="plane.jpg" alt="Hand plane on a bench" loading="lazy"></a>
+    <div class="photo-strip">
+      <a class="photo-zoom" href="#item-1b" aria-label="Enlarge price tag"><img src="plane-tag.jpg" alt="Price tag reading $45" loading="lazy"></a>
+    </div>
+    <figcaption>
+      <h3>No. 4 hand plane <span class="pill good">want</span></h3>
+      <p class="meta">2026-10-13 · tools · <strong>$45</strong></p>
+      <blockquote>Exactly the size I keep reaching for.</blockquote>
+      <details><summary>description</summary>Cast body, rosewood tote, sharp iron.</details>
+    </figcaption>
+  </figure>
+</div>
+<a id="item-1" class="photo-lightbox" href="#no-4-hand-plane" aria-label="Close enlarged photo"><img src="plane.jpg" aria-hidden="true" loading="lazy"></a>
+<a id="item-1b" class="photo-lightbox" href="#no-4-hand-plane" aria-label="Close enlarged photo"><img src="plane-tag.jpg" aria-hidden="true" loading="lazy"></a>
+```
+
+**Deep links.** Give a card an `id` and link to it from anywhere (`items.html#no-4-hand-plane`): the
+card lands below a sticky `topnav` and is outlined in the accent colour while it is the target. Use a
+stable id from the source record, unique on the page, so links survive a rebuild.
+
+Point a lightbox at the full-resolution file and the grid at a small thumbnail: `loading="lazy"`
+keeps hidden lightbox images from downloading until opened. Point each lightbox's close link at its
+card's `id` (`href="#no-4-hand-plane"`) so closing the zoom returns to, and re-marks, the card.
+Generated catalogs should check that every `src` resolves before shipping; `?validate=1` counts
+unresolved local files in `summary.missingLocalAssetCount` (a count, not a warning).
+
+The strip wraps onto a second row when a card has many photos; keep it to a handful and put the rest
+in the lightbox set.
 
 The Kit defensively hides `.lookie-annotate-btn` controls by default and reveals them only when a host both injects those controls and sets `html.lookie-annotations-active`. Current Lookie raw-HTML iframes may inject no section targets at all; this CSS does not create annotation capability.
 
