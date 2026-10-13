@@ -110,7 +110,7 @@ test('lookie kits / kit show / kit file round-trip the hosted kit API', async (t
   assert.equal(listed.code, 0, listed.stderr);
   const list = JSON.parse(listed.stdout);
   assert.equal(list.ok, true);
-  assert.ok(list.kits.some((kit) => kit.name === 'ops' && kit.version === '1.28'));
+  assert.ok(list.kits.some((kit) => kit.name === 'ops' && kit.version === '1.29'));
 
   const shown = await s.cli(['kit', 'show', 'ops']);
   assert.equal(shown.code, 0, shown.stderr);

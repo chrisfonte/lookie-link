@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — catalog cards
+
+- Ops Kit 1.29 adds catalog cards: `.catalog` on a `.gallery` turns each figure into a
+  card for one subject, with a `.photo-strip` of further zoomable photos and a caption of
+  title plus status pill, `.meta`, verbatim `blockquote` and `details`. Adds the neutral
+  `.pill.muted`. Cards with an `id` are deep-link targets. Opt-in and additive. See [catalog cards](kits/ops/README.md#catalog-cards-v129).
+
 ## Unreleased — audio markers
 
 - Audio files open in a waveform player (peaks from `ffmpeg`/`ffprobe`, cached beside the audio or in a cache directory); `.aif`/`.aiff` are recognized. New always-on routes `GET /api/audio/:repo/*` and `GET /api/peaks/:repo/*`, discoverable as the `audio` capability.
