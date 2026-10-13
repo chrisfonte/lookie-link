@@ -1,5 +1,5 @@
 'use strict';
-// Ops kit catalog cards (v1.29): the component ships, stays opt-in, and the showcase example
+// Ops kit catalog cards (v1.29, refined 1.30): the component ships, stays opt-in, and the showcase example
 // wires every thumbnail to a lightbox target that exists.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -19,7 +19,9 @@ function rule(selector) {
 
 test('kit.css ships the catalog card parts with their working properties', () => {
   assert.match(rule('.gallery.catalog figure'), /display:flex/);
-  assert.match(rule('.gallery.catalog .photo-strip'), /display:flex/);
+  assert.match(rule('.gallery.catalog .photo-strip'), /display:grid;grid-template-columns:repeat\(auto-fill,minmax\(56px,1fr\)\)/);
+  assert.match(rule('.gallery.catalog figure'), /position:relative/);
+  assert.match(rule('.gallery.catalog figure>.pill'), /position:absolute;top:8px;left:8px/);
   assert.match(rule('.gallery.catalog .photo-strip img'), /height:64px/);
   assert.match(rule('.gallery.catalog figcaption .meta'), /font-size:12px/);
   assert.match(rule('.gallery.catalog figcaption blockquote'), /border-left:3px solid var\(--accent\)/);
@@ -28,7 +30,7 @@ test('kit.css ships the catalog card parts with their working properties', () =>
   assert.match(rule('.pill.muted'), /background:var\(--surface-2\);color:var\(--muted\)/);
 });
 
-test('catalog rules are opt-in: every v1.29 gallery selector is scoped to .gallery.catalog', () => {
+test('catalog rules are opt-in: every catalog-card selector is scoped to .gallery.catalog', () => {
   const end = css.indexOf('/* end v1.29 catalog cards */');
   assert.ok(end > 0, 'end-of-block marker missing');
   const block = css.slice(css.indexOf('/* v1.29 catalog cards'), end)
@@ -59,6 +61,9 @@ test('showcase catalog demo: every zoom link has a lightbox target, every image 
     assert.match(img[0], / alt="[^"]+"/, 'thumbnail without alt text');
   }
   assert.ok(section.includes('class="photo-strip"') && section.includes('pill muted') && section.includes('class="pending"'));
+  const figs = [...section.matchAll(/<figure id="[^"]+">\s*(<[^>]+>)/g)].map((m) => m[1]);
+  assert.ok(figs.length >= 3 && figs.every((t) => t.startsWith('<span class="pill ')), 'showcase status pills must be the first child of each card');
+  assert.ok(!/<p class="meta">[^<]*·/.test(section), 'showcase meta should not be a middle-dot string');
   for (const box of section.matchAll(/<a\b[^>]*class="photo-lightbox"[^>]*>/g)) {
     const close = (box[0].match(/href="#([^"]+)"/) || [])[1];
     assert.ok(close && section.includes(`<figure id="${close}">`), `lightbox closes to missing card #${close}`);

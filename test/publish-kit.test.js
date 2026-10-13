@@ -91,7 +91,7 @@ const PREINLINED_HTML = [
   '<!doctype html>',
   '<html><head>',
   '<meta charset="utf-8">',
-  '<style data-kit="ops" data-kit-version="1.29">',
+  '<style data-kit="ops" data-kit-version="1.30">',
   '/* already inlined */',
   '</style>',
   '<title>Pre</title>',
@@ -115,7 +115,7 @@ test('publish with kit:ops inlines stylesheet, replaces placeholder link, and pr
     assert.equal(createdResponse.status, 201);
     const created = await createdResponse.json();
     assert.equal(created.publication.kit.name, 'ops');
-    assert.equal(created.publication.kit.version, '1.29');
+    assert.equal(created.publication.kit.version, '1.30');
     assert.equal(typeof created.publication.kit.revision, 'string');
     assert.ok(created.publication.kit.revision.length > 0);
     assert.equal(created.publication.revisions[0].kit.name, 'ops');
@@ -125,7 +125,7 @@ test('publish with kit:ops inlines stylesheet, replaces placeholder link, and pr
     });
     assert.equal(raw.status, 200);
     const html = await raw.text();
-    assert.match(html, /<style data-kit="ops" data-kit-version="1\.29">/);
+    assert.match(html, /<style data-kit="ops" data-kit-version="1\.30">/);
     assert.ok(html.includes(OPS_CSS));
     // kit.css comments mention <link rel="stylesheet">; assert only on markup
     // outside <style>…</style> blocks.
@@ -145,7 +145,7 @@ test('publish with kit:ops inlines stylesheet, replaces placeholder link, and pr
     const listBody = await listed.json();
     const summary = listBody.publications.find((entry) => entry.slug === 'with-kit');
     assert.equal(summary.kit.name, 'ops');
-    assert.equal(summary.kit.version, '1.29');
+    assert.equal(summary.kit.version, '1.30');
   } finally {
     await server.close();
     await fs.rm(fixture.root, { recursive: true, force: true });
@@ -169,7 +169,7 @@ test('publish replaces a pre-inlined marked style block with the current kit and
     });
     const preText = await preRaw.text();
     assert.notEqual(preText, PREINLINED_HTML, 'the marked block is replaced, not left alone');
-    assert.ok(preText.includes('data-kit="ops" data-kit-version="1.29"'), 'replaced with the current kit');
+    assert.ok(preText.includes('data-kit="ops" data-kit-version="1.30"'), 'replaced with the current kit');
     assert.equal((preText.match(/<style\b[^>]*data-kit/g) || []).length, 1, 'exactly one marked block');
     assert.ok(!preText.includes('old-kit-marker'), 'stale bytes gone');
 
@@ -265,7 +265,7 @@ test('revise with kit inlines revision 2 only; revision 1 bytes and projection s
     });
     assert.equal(v2.status, 200);
     const v2Html = await v2.text();
-    assert.match(v2Html, /<style data-kit="ops" data-kit-version="1\.29">/);
+    assert.match(v2Html, /<style data-kit="ops" data-kit-version="1\.30">/);
     assert.ok(v2Html.includes(OPS_CSS));
 
     const getV1 = await server.request('/api/publish/revise-kit?version=1', {
@@ -318,7 +318,7 @@ test('a revision published under an admin token overlay bakes the overlay in; ea
     const patchText = await patch.text();
     assert.equal(patch.status, 200, patchText);
     const effective = JSON.parse(patchText).kit.effectiveVersion;
-    assert.match(effective, /^1\.29\+[0-9a-f]{8}$/);
+    assert.match(effective, /^1\.30\+[0-9a-f]{8}$/);
     const rev1After = await (await server.request('/raw/published/overlay-kit/index.html?version=1', { headers: { Authorization: `Bearer ${token}` } })).text();
     assert.equal(rev1After, rev1Before, 'revision 1 bytes are frozen');
     const second = await server.request('/api/publish/overlay-kit', publishRequest(token, { expectedRevision: 1, kit: 'ops', entryPath: 'index.html', files: [{ path: 'index.html', content: PLACEHOLDER_HTML }] }));
@@ -326,7 +326,7 @@ test('a revision published under an admin token overlay bakes the overlay in; ea
     assert.equal(second.status, 200, secondText);
     const body = JSON.parse(secondText);
     assert.equal(body.publication.kit.version, effective, 'revision 2 records the effective version');
-    assert.equal(body.publication.revisions[0].kit.version, '1.29', 'revision 1 keeps its version');
+    assert.equal(body.publication.revisions[0].kit.version, '1.30', 'revision 1 keeps its version');
     const rev2 = await (await server.request('/raw/published/overlay-kit/index.html', { headers: { Authorization: `Bearer ${token}` } })).text();
     assert.ok(rev2.includes('lookie-link kit overlay') && rev2.includes('--radius:3px'), 'overlay baked into revision 2');
     assert.ok(rev2.includes(`data-kit-version="${effective}"`), 'style block carries the effective version');

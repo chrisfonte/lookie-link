@@ -2,6 +2,9 @@
 
 ## Unreleased — catalog cards
 
+- Ops Kit 1.30: catalog status pills sit on the photo corner when placed first in the
+  figure; the photo strip is a uniform grid; examples drop `·`-joined meta strings.
+
 - Ops Kit 1.29 adds catalog cards: `.catalog` on a `.gallery` turns each figure into a
   card for one subject, with a `.photo-strip` of further zoomable photos and a caption of
   title plus status pill, `.meta`, verbatim `blockquote` and `details`. Adds the neutral

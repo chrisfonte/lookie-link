@@ -5,7 +5,7 @@ Title: Ops HTML Kit
 Owner: Operations Team
 Created: 2026-06-28
 Last Updated: 2026-10-13
-Version: 1.29
+Version: 1.30
 Status: Active
 Tags: #html #css #design-system #templates #lookie-link
 Document URL: kits/ops/README.md
@@ -108,8 +108,9 @@ optional `.photo-strip` of more photos of the same subject, and a structured cap
 
 | Part | Markup | Notes |
 |---|---|---|
-| Title and status | `<h3>Title <span class="pill good">bought</span></h3>` | Status uses `.pill.good`, `.pill.warn`, `.pill.info` or the neutral `.pill.muted`; never invent badge classes |
-| Meta line | `<p class="meta">date · category · <strong>$45</strong></p>` | Facts the source records; a missing value uses `.pending`, never a guess |
+| Status | `<span class="pill good">bought</span>` as the figure's first child | Sits on the lead photo's corner (v1.30). Use `.pill.good`, `.pill.warn`, `.pill.info` or the neutral `.pill.muted`; never invent badge classes. A pill inside the `h3` still works but wraps under long titles |
+| Title | `<h3>No. 4 hand plane</h3>` | The subject's name, nothing else |
+| Meta line | `<p class="meta">Hand tools, tagged <strong>$45</strong></p>` | One or two facts the source records, written as a phrase rather than a `·`-joined string; a missing value uses `.pending`, never a guess. Facts shared by a whole group (a date, a place) belong in the group heading, not on every card |
 | Verbatim reaction | `<blockquote>…</blockquote>` | Someone's own words, quoted exactly |
 | Long text | `<details><summary>description</summary>…</details>` | Keeps cards short in a dense grid |
 | More photos | `<div class="photo-strip">` of `.photo-zoom` links | Each opens its own `.photo-lightbox`; give every image its own alt text |
@@ -118,13 +119,14 @@ optional `.photo-strip` of more photos of the same subject, and a structured cap
 <h2 id="items">Items</h2>
 <div class="gallery gallery-dense catalog">
   <figure id="no-4-hand-plane">
+    <span class="pill good">want</span>
     <a class="photo-zoom" href="#item-1" aria-label="Enlarge hand plane"><img src="plane.jpg" alt="Hand plane on a bench" loading="lazy"></a>
     <div class="photo-strip">
       <a class="photo-zoom" href="#item-1b" aria-label="Enlarge price tag"><img src="plane-tag.jpg" alt="Price tag reading $45" loading="lazy"></a>
     </div>
     <figcaption>
-      <h3>No. 4 hand plane <span class="pill good">want</span></h3>
-      <p class="meta">2026-10-13 · tools · <strong>$45</strong></p>
+      <h3>No. 4 hand plane</h3>
+      <p class="meta">Hand tools, tagged <strong>$45</strong></p>
       <blockquote>Exactly the size I keep reaching for.</blockquote>
       <details><summary>description</summary>Cast body, rosewood tote, sharp iron.</details>
     </figcaption>

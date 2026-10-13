@@ -1,6 +1,6 @@
 /* File: kits/ops/kit.css
    Ops HTML Kit — reusable design tokens + components for agent-built HTML deliverables.
-   Lookie-safe. v1.29 (2026-10-13).
+   Lookie-safe. v1.30 (2026-10-13).
 
    USAGE
    - Inline this file into a <style> block in each page (most reliable everywhere), OR
@@ -217,9 +217,13 @@ html.lookie-embedded .photo-lightbox:target::after{right:12px;top:12px}
    (an item, a place, a product). Adds a strip of secondary photos and a structured caption:
    h3 title (+ .pill status), .meta line, blockquote for a verbatim reaction, details for long
    text. Additive: plain .gallery/.gallery-dense markup renders exactly as before. */
-.gallery.catalog figure{display:flex;flex-direction:column}
-.gallery.catalog .photo-strip{display:flex;flex-wrap:wrap;gap:4px;padding:4px;background:var(--surface-2)}
-.gallery.catalog .photo-strip>a,.gallery.catalog .photo-strip>img{flex:1 1 56px;min-width:0;border-radius:6px}
+.gallery.catalog figure{position:relative;display:flex;flex-direction:column}
+/* v1.30: a status pill placed as the figure's FIRST child sits on the lead photo's corner, where
+   it is scanned with the photo and cannot wrap onto its own line under a long title. */
+.gallery.catalog figure>.pill{position:absolute;top:8px;left:8px;z-index:1}
+/* v1.30: uniform thumbnails on every row (a wrapped flex row stretched the last ones). */
+.gallery.catalog .photo-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:4px;padding:4px;background:var(--surface-2)}
+.gallery.catalog .photo-strip>a,.gallery.catalog .photo-strip>img{min-width:0;border-radius:6px}
 .gallery.catalog .photo-strip img{width:100%;height:64px;aspect-ratio:auto;border-radius:6px;object-fit:cover}
 .gallery.catalog figcaption{display:flex;flex-direction:column;gap:6px;padding:10px 12px 12px;font-size:13px;color:var(--ink)}
 .gallery.catalog figcaption h3,.gallery.catalog figcaption h4,.gallery.catalog figcaption p{margin:0}
