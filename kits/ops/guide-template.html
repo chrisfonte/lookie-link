@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<!--
+  How-to guide template (Ops HTML Kit). STANDALONE BY CONSTRUCTION.
+
+  Use for a how-to written for one real reader, sent as an attachment (HTML plus a PDF
+  rendered from the same file). The page carries everything it needs: one inline style
+  block with literal values, a fixed light theme, no stylesheet link, no web font, no
+  script, no viewer attribute. Images start as embedded placeholders so this file renders offline as-is. Replace
+  each placeholder with a screenshot encoded as a data URI before delivery.
+
+  Fill the header record below. It stays in the file but never renders, so the visible
+  page carries no internal links or names.
+
+  Capture date and time:      [pending] (date, time, time zone)
+  Alterations to screenshots: [pending] (outlines, blurs, menus shown open in place)
+  Source files behind timing: [pending] (the unit, timer or script files each time came from)
+  Standards used:             [pending] (guide standard and template version)
+  Reader time zone:           [pending] (zone used in the timeline heading)
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[pending] Guide title</title>
+<style>
+/* Fixed light theme: the kit's neutral palette as literal values.
+   accent #2f5d8a, accent-deep #1f3f5e, surface-2 #eef3f8, line #dde3ea,
+   ink #1c2530, muted #5a6675, warn #b9821a, warn-bg #fbefdf, page #eef1f4 */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;color-scheme:light}
+body{margin:0;background:#eef1f4;color:#1c2530;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.page{max-width:860px;margin:0 auto;padding:24px 18px 40px}
+h1{font-size:26px;line-height:1.25;margin:0 0 4px;color:#1f3f5e}
+h2{font-size:19px;line-height:1.3;margin:28px 0 8px;color:#1f3f5e}
+h3{font-size:16px;line-height:1.35;margin:0 0 4px;color:#1c2530}
+p{margin:0 0 10px}
+ul,ol{margin:6px 0 10px;padding-left:22px}
+li{margin:3px 0}
+.lede{color:#5a6675;margin:0 0 14px}
+a{color:#2f5d8a}
+.pending{display:inline-block;font-size:12px;font-weight:600;color:#5a6675;border:1px dashed #b8c2cf;border-radius:999px;padding:1px 9px;font-style:italic}
+
+/* Callouts */
+.callout{border-left:4px solid #c4603f;background:#fbf0ec;padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+.callout.info{border-left-color:#2f5d8a;background:#eef3f8}
+.callout.warn{border-left-color:#b9821a;background:#fbefdf}
+.callout h2,.callout h3{margin:0 0 6px;font-size:16px}
+.callout ul,.callout ol{margin:4px 0 0}
+.callout :last-child{margin-bottom:0}
+
+/* Tables scroll inside their own wrapper; the page never scrolls sideways */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:10px 0;background:#fff;border:1px solid #dde3ea;border-radius:8px}
+.table-wrap>table{margin:0;min-width:480px}
+table{width:100%;border-collapse:collapse;font-size:14.5px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid #dde3ea;vertical-align:top}
+tr:last-child td{border-bottom:0}
+th{background:#eef3f8;color:#1f3f5e;font-size:12.5px;text-transform:uppercase;letter-spacing:.4px}
+code,.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:13px;background:#eef3f8;border:1px solid #dde3ea;border-radius:4px;padding:1px 5px;overflow-wrap:anywhere}
+
+/* Numbered steps: a circle, a heading, one captioned figure each */
+.steps{margin:8px 0}
+.step{display:flex;gap:12px;align-items:flex-start;margin:18px 0}
+.step-body{flex:1 1 auto;min-width:0}
+.step-num{flex:0 0 auto;width:30px;height:30px;border-radius:50%;background:#2f5d8a;color:#fff;font-weight:700;font-size:15px;line-height:30px;text-align:center;margin-top:1px}
+
+/* Evidence figures (screenshots) */
+figure.evidence-figure{background:#fff;border:1px solid #dde3ea;border-radius:10px;padding:12px;margin:10px 0 0}
+.evidence-figure img{display:block;width:100%;max-width:100%;height:auto;border:1px solid #dde3ea;border-radius:8px;background:#eef3f8}
+.evidence-figure figcaption{margin:8px 0 0;font-size:12.5px;color:#5a6675;font-style:italic;line-height:1.55}
+
+.footer{margin-top:28px;padding-top:12px;border-top:1px solid #dde3ea;font-size:12.5px;color:#5a6675;line-height:1.55}
+
+@media (max-width:560px){
+  .page{padding:16px 12px 32px}
+  h1{font-size:22px}
+  .step{gap:9px}
+}
+
+/* Print: Letter, half-inch margins, content flows. No forced page breaks.
+   Only figures refuse to split; whole step blocks may break across pages. */
+@page{size:Letter;margin:0.5in}
+@media print{
+  html,body{background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{overflow:visible;font-size:14px;line-height:1.45}
+  h2{margin-top:22px}
+  .step{margin:14px 0}
+  .footer{margin-top:18px}
+  .page{max-width:none;padding:0}
+  .table-wrap{overflow:visible}
+  .table-wrap>table{min-width:0}
+  figure{break-inside:avoid}
+  /* Keep headings with what follows, and a step's sentence with its figure (hints, not page breaks). */
+  h2,.step-body h3,.step-body p{break-after:avoid}
+  a{color:#2f5d8a}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>[pending] What the reader asked, as a title</h1>
+<p class="lede">[pending] One line: who this is for, and what it covers.</p>
+
+<!-- Short version: what to do (often nothing), the one surprise, how to look -->
+<div class="callout info">
+  <h2>Short version</h2>
+  <ul>
+    <li>[pending] What you have to do (often nothing).</li>
+    <li>[pending] The one thing that will surprise you.</li>
+    <li>[pending] How to look, if you want to.</li>
+  </ul>
+</div>
+
+<h2>When it happens ([pending] reader's time zone, for example "Eastern Time")</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>When</th><th>What happens</th><th>What it means for you</th></tr></thead>
+  <tbody>
+    <tr><td>[pending] time</td><td>[pending]</td><td>[pending]</td></tr>
+    <tr><td>[pending] cut-off time</td><td>[pending]</td><td>[pending] Changes made after this are not picked up until the next run.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Names and codes you will see</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Code</th><th>What you call it</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>[pending]</code></td><td>[pending]</td><td>[pending]</td></tr>
+    <tr><td><code>[pending]</code></td><td>[pending]</td><td>[pending]</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>What the system holds for you right now</h2>
+<p>[pending] The reader's own data, from a read-only check, and the date and time it was read.</p>
+
+<h2>How to look</h2>
+<div class="steps">
+
+  <div class="step">
+    <span class="step-num" aria-hidden="true">1</span>
+    <div class="step-body">
+      <h3>[pending] First step, as an action</h3>
+      <p>[pending] One or two sentences.</p>
+      <figure class="evidence-figure">
+        <!-- Replace the embedded placeholder with a screenshot data URI; keep all image bytes in this file. -->
+        <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iMTQwIiB2aWV3Qm94PSIwIDAgNjQwIDE0MCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSIxNDAiIGZpbGw9IiNlZWYzZjgiLz48cmVjdCB4PSIxNiIgeT0iMTYiIHdpZHRoPSI2MDgiIGhlaWdodD0iMTA4IiByeD0iOCIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjYjhjMmNmIiBzdHJva2UtZGFzaGFycmF5PSI2IDQiLz48dGV4dCB4PSIzMjAiIHk9IjY1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzVhNjY3NSI+W3BlbmRpbmddIFNjcmVlbnNob3QgMTwvdGV4dD48dGV4dCB4PSIzMjAiIHk9IjkzIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzVhNjY3NSI+UmVwbGFjZSB3aXRoIGFuIGVtYmVkZGVkIHNjcmVlbnNob3Q8L3RleHQ+PC9zdmc+" alt="[pending] What the screenshot shows">
+        <figcaption>[pending] Say what the outline marks.</figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="step-num" aria-hidden="true">2</span>
+    <div class="step-body">
+      <h3>[pending] Second step, as an action</h3>
+      <p>[pending] One or two sentences.</p>
+      <figure class="evidence-figure">
+        <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iMTQwIiB2aWV3Qm94PSIwIDAgNjQwIDE0MCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSIxNDAiIGZpbGw9IiNlZWYzZjgiLz48cmVjdCB4PSIxNiIgeT0iMTYiIHdpZHRoPSI2MDgiIGhlaWdodD0iMTA4IiByeD0iOCIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjYjhjMmNmIiBzdHJva2UtZGFzaGFycmF5PSI2IDQiLz48dGV4dCB4PSIzMjAiIHk9IjY1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzVhNjY3NSI+W3BlbmRpbmddIFNjcmVlbnNob3QgMjwvdGV4dD48dGV4dCB4PSIzMjAiIHk9IjkzIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzVhNjY3NSI+UmVwbGFjZSB3aXRoIGFuIGVtYmVkZGVkIHNjcmVlbnNob3Q8L3RleHQ+PC9zdmc+" alt="[pending] What the screenshot shows">
+        <figcaption>[pending] Say what the outline marks.</figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <!-- Repeat the .step block as needed: one screenshot per step. -->
+
+</div>
+
+<div class="callout warn">
+  <h2>Leave these alone</h2>
+  <p>[pending] Every control on these pages changes the live system. Look, do not press:</p>
+  <ul>
+    <li>[pending] Control name: what it does.</li>
+    <li>[pending] Control name: what it does.</li>
+  </ul>
+</div>
+
+<h2>If something looks off</h2>
+<ul>
+  <li>[pending] A symptom the reader might see, and what it usually means.</li>
+  <li>[pending] A second symptom, and what to check first.</li>
+  <li>If it is still not right, tell [pending] owner name.</li>
+</ul>
+
+<div class="footer">
+  <p>[pending] About the screenshots: they were captured from the live pages on [pending] date. Outlines mark the control each step uses. [pending] Blurs hide internal addresses and names. [pending] Menus are shown opened in place, because the real pop-up list cannot be captured; they are not saved or changed.</p>
+</div>
+
+</div>
+</body>
+</html>
