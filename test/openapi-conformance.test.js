@@ -129,7 +129,7 @@ function pathValue(specPath) {
 const PARAM_VALUES = {
   repo: 'docs', slug: 'sunset', mode: 'dark', id: 'a', templateId: TEMPLATE_ID,
   keyId: 'fixture-key', grantId: 'fixture-grant', trashId: 'fixture-trash', submissionId: 'fixture-submission',
-  name: 'ops', version: '1.26', file: 'email-table-template.html',
+  name: 'ops', version: '1.31', file: 'email-table-template.html',
   recordId: '00000000-0000-4000-8000-000000000000',
 };
 const QUERY_VALUES = {
