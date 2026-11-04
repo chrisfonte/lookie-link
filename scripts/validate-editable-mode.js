@@ -288,6 +288,7 @@ async function run() {
     await annotationsGet({ params: { repo: 'docs', 0: 'doc.md' }, query: {} }, res);
     assert.equal(res.statusCode, 200, 'annotation GET failed without sidecar');
     assert.deepEqual(res.body, {
+      ok: true,
       schema: 1,
       file: 'docs/doc.md',
       annotations: [],

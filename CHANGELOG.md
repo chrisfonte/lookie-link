@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — optional configuration
+
+- Fix recursive appearance-overlay lookup when no configuration file exists, so
+  startup uses the documented defaults. Reloading after config removal also clears
+  the old config path and its sibling overlay; an explicit overlay path still works.
+- Add clean-process regression coverage and correct the editable validator's empty
+  annotation-response expectation to include the existing `ok: true` field.
+
 ## Unreleased — catalog cards
 
 - Ops Kit 1.30: catalog status pills sit on the photo corner when placed first in the

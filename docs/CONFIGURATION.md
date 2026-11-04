@@ -12,6 +12,8 @@ The server reads the first available file in this order:
 
 For supported settings, direct environment overrides take precedence over the selected YAML file. Copy `lookie-link.yaml.example` to the user config directory as a starting point.
 
+A configuration file is optional. When none exists, the server uses its documented defaults and an empty repository map. There is no sibling appearance overlay without a selected config file; `LOOKIE_LINK_APPEARANCE_OVERLAY` can still select an overlay explicitly. Removing the selected config and reloading returns to defaults rather than retaining that file's sibling overlay.
+
 ## Core server and repositories
 
 ```yaml
