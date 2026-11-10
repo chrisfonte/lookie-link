@@ -14,6 +14,12 @@ For supported settings, direct environment overrides take precedence over the se
 
 A configuration file is optional. When none exists, the server uses its documented defaults and an empty repository map. There is no sibling appearance overlay without a selected config file; `LOOKIE_LINK_APPEARANCE_OVERLAY` can still select an overlay explicitly. Removing the selected config and reloading returns to defaults rather than retaining that file's sibling overlay.
 
+This covers startup and loader behavior. Known limitation: `GET /api/appearance`
+returns `500 internal_error` when both the selected config path and explicit
+overlay path are absent. Use configured mode for the appearance API until that
+separate null-overlay handling issue is fixed. CI exercises no-config loading
+without adding a configuration fixture; see [contributor validation](CONTRIBUTING.md#validation).
+
 ## Core server and repositories
 
 ```yaml
