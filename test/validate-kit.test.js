@@ -119,7 +119,7 @@ async function requestValidation(app, requestPath, query = {}) {
   return response;
 }
 
-test('published kit:ops page detects ops 1.30, not stale, no kit warnings', async () => {
+test('published kit:ops page detects ops 1.31, not stale, no kit warnings', async () => {
   const fixture = await makePublishFixture();
   const server = await startPublishServer(fixture);
   try {
@@ -147,10 +147,10 @@ test('published kit:ops page detects ops 1.30, not stale, no kit warnings', asyn
     assert.equal(validate.status, 200);
     const report = await validate.json();
     assert.equal(report.kit.detected.name, 'ops');
-    assert.equal(report.kit.detected.version, '1.30');
+    assert.equal(report.kit.detected.version, '1.31');
     assert.equal(report.kit.source, 'inline-style');
     assert.equal(report.kit.current.name, 'ops');
-    assert.equal(report.kit.current.version, '1.30');
+    assert.equal(report.kit.current.version, '1.31');
     assert.equal(report.kit.stale, false);
     assert.deepEqual(report.kit.warnings, []);
     assert.equal(report.summary.kitWarningCount, 0);
@@ -207,7 +207,7 @@ test('older data-kit-version warns kit-stale', async (t) => {
   assert.equal(response.body.kit.detected.version, '1.0');
   assert.equal(response.body.kit.stale, true);
   assert.ok(response.body.kit.warnings.includes('kit-stale'));
-  assert.equal(response.body.kit.current.version, '1.30');
+  assert.equal(response.body.kit.current.version, '1.31');
 });
 
 test('theme-follow declared without tokens warns theme-follow-inert', async (t) => {

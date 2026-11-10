@@ -4,8 +4,8 @@
 Title: Ops HTML Kit
 Owner: Operations Team
 Created: 2026-06-28
-Last Updated: 2026-10-13
-Version: 1.30
+Last Updated: 2026-11-04
+Version: 1.31
 Status: Active
 Tags: #html #css #design-system #templates #lookie-link
 Document URL: kits/ops/README.md
@@ -26,6 +26,7 @@ A small, reusable CSS kit so agent-built HTML deliverables share one consistent,
 | `EXAMPLES.html` | Rendered showcase of every component, in both themes |
 | `research-packet-template.html` | Findings-first, source-adjacent scaffold for durable research HTML |
 | `email-table-template.html` | Plain email-safe HTML pattern for actual email bodies with structured tables |
+| `guide-template.html` | How-to guide (standalone HTML + PDF): fixed light theme, literal CSS values, embedded image placeholders |
 | `theme-follow-demo.html` | Focused Lookie-Link demo: fixed coastal/neutral panels beside a `data-lookie-follow-theme` panel |
 | `diagram-examples.html` | Annotated connections, room layout, and responsive ordered flow |
 | `CHANGELOG.md` | Version history and notable changes |
@@ -183,6 +184,7 @@ First artifact built this way: the Columbia SC yoga guide (operations-research/l
 | Company/job research packet | neutral | `signal-grid`, `scorebar`, `risk-matrix`, `evidence-list`, tables, `callout.info` — see [document structure research](https://github.com/chrisfonte/operations-research/blob/main/business/career-research-methodology/company-and-position-research-document-structure.yaml) for ideal section ordering |
 | Dashboard / status | neutral | `tile` stats, `pill` badges, `grid-3` |
 | Presentation / slide deck | either | `body.deck` + `slide slide--{cover,divider,statement,end}` + `slide-canvas` — one file renders as document (Lookie/phones), scroll-snap deck (full-screen browser, Space advances, no JS), and 1280×720 PDF. **The page must add its own print block** (`@media print{ @page{size:1280px 720px;margin:0} }` — `@page` can't be scoped in shared CSS). Export PDFs with headless Chromium `--print-to-pdf`, never the print dialog. Never use uncapped `100svh` in document tier (auto-sized iframes explode it — the kit caps at `min(100svh,640px)`). Speaker notes: `<aside class="notes">` (hidden on screen and in PDF) |
+| How-to guide (standalone HTML + PDF) | fixed light (neutral values) | Start from `guide-template.html`: inline literal CSS, embedded data-URI image placeholders, and no external stylesheets, fonts, scripts or viewer hooks. Fill the header record and content placeholders; replace each image with a screenshot data URI so the file stays self-contained. Includes a short version, timeline, codes table, numbered steps with captioned figures, warning callout and troubleshooting. Print to Letter with 0.5in margins and backgrounds enabled; only figures avoid splitting, with no forced page breaks. Inspect every PDF page and open the HTML offline before delivery. |
 | Multi-page bundle (hub + pages) | any | `topnav`, `choose` on the hub — **see inter-page links below** |
 
 ## Findings-first research packet assembly (v1.24)
@@ -464,7 +466,7 @@ The `data-lookie-follow-theme` attribute is **inert by itself** — it only does
 
 ## Versioning
 
-Bump `Version` here and add a dated note when tokens/components change. Record full version history in `CHANGELOG.md`. Already-produced deliverables that **inlined** the CSS are frozen at their version (a kit update doesn't retroactively restyle them); linked pages pick up changes automatically.
+Bump `Version` here and add a dated note when tokens/components or bundled templates change. Record full version history in `CHANGELOG.md`. Already-produced deliverables that **inlined** the CSS are frozen at their version (a kit update doesn't retroactively restyle them); linked pages pick up changes automatically.
 
 - **v1.21 (2026-07-31):** Light theme-follow badge visibility. v1.20 made light-mode theme-follow heroes surface-backed but left `--badge-bg`/`--badge-line` as white-alpha, so hero badges rendered as invisible chips on the light hero surface (confirmed by computed-style probe against the kit surface in the github light scheme: `rgba(255,255,255,.16)` chip on a `#f6f8fa→#fff` hero). The light `[data-lookie-follow-theme]` block now sets `--badge-bg:color-mix(in srgb,var(--accent) 8%,var(--surface))` (white-alpha kept as the pre-`color-mix` fallback) and `--badge-line:var(--line)`. Dark follow mode and the fixed coastal/neutral themes keep white-alpha badges — their heroes remain dark/accent surfaces. Found retrofitting the herdr and android-agentic-control research pages to the v1.20 hero contract.
 

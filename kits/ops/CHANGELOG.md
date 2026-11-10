@@ -8,6 +8,17 @@ Status: Active
 
 All notable changes to the Ops HTML Kit.
 
+## v1.31 (2026-11-04)
+
+- Add `guide-template.html`, a how-to guide (standalone HTML + PDF) with a fixed
+  light palette, inline literal CSS and embedded data-URI image placeholders.
+  It renders offline without a host: no external stylesheet, import, web font,
+  script or viewer hook. Replace the content and screenshot placeholders before delivery.
+- Print on Letter with 0.5in margins. Content flows without forced page breaks;
+  only figures avoid splitting, and headings stay with the following content.
+- Register the guide in kit discovery and the README scenario map. Shared stylesheet
+  bytes are unchanged.
+
 ## v1.30 (2026-10-13)
 
 - Catalog cards: a status `.pill` placed as the figure's first child sits on the lead

@@ -203,7 +203,7 @@ test('org kit create/PUT versions, show, pin history, tombstone, overlay path, m
     assert.equal(patched.status, 200, patched.text);
     const overlayFile = overlayPathFor(s.managedFolder, 'ops', DEFAULT_ORG);
     assert.ok(fs.existsSync(overlayFile), overlayFile);
-    assert.match(patched.json.kit.effectiveVersion, /^1\.30\+[0-9a-f]{8}$/);
+    assert.match(patched.json.kit.effectiveVersion, /^1\.31\+[0-9a-f]{8}$/);
     const css = await request(s.base, '/kit/ops/kit.css');
     assert.match(css.text, /--radius:8px/);
 
