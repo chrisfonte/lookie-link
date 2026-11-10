@@ -8,6 +8,16 @@ Status: Active
 
 All notable changes to the Ops HTML Kit.
 
+## Documentation — 2026-11-10
+
+- Record integration of the recovered kit history and 1.31 guide into `main` via
+  [#394](https://github.com/chrisfonte/lookie-link/pull/394), following the guide
+  [#392](https://github.com/chrisfonte/lookie-link/pull/392) and optional-config
+  [#393](https://github.com/chrisfonte/lookie-link/pull/393).
+- Clarify offline delivery, comment disclosure, and the existing current-version
+  policy for bundled stylesheet URLs. Kit version and stylesheet bytes are unchanged
+  by this documentation update.
+
 ## v1.31 (2026-11-04)
 
 - Add `guide-template.html`, a how-to guide (standalone HTML + PDF) with a fixed
