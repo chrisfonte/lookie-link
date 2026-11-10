@@ -16,7 +16,7 @@ Lookie-Link is a lightweight private-network viewer for local directories. Map a
 - Immutable published revisions with optimistic updates, historical readback, and revocation
 - Opt-in verbatim and transformed HTML execution for trusted content
 - Eleven built-in dark/light themes, including a Codex app-shell palette, plus custom YAML themes
-- Hosted HTML kits (bundled Ops kit plus config-folder kits) with list/show, stylesheet, and template file APIs
+- Hosted HTML kits (bundled Ops kit plus config-folder kits), including the Ops 1.31 [standalone how-to guide](kits/ops/guide-template.html)
 - A unified `lookie` CLI for authentication, discovery, managed content, trash recovery, search, annotations, appearance, kits, and publishing
 
 The complete source-checked surface is the [capability and route matrix](docs/CAPABILITIES.md). It is the single authoritative list of routes, auth gates, configuration switches, discovery fields, CLI commands, and stores.
@@ -25,11 +25,14 @@ The complete source-checked surface is the [capability and route matrix](docs/CA
 
 ```bash
 npm install
+mkdir -p ~/.config/lookie-link
 cp lookie-link.yaml.example ~/.config/lookie-link/lookie-link.yaml
 npm start
 ```
 
 Then open `http://localhost:9876`. The default port is `9876`; configured repository keys become `/view/<repo>/...` URL prefixes.
+
+A config file is optional: startup without one uses defaults and an empty repository map. Create the file above to serve your directories; see [configuration lookup and limitations](docs/CONFIGURATION.md#file-lookup-and-precedence).
 
 Minimal configuration:
 
@@ -78,6 +81,8 @@ Read requests may use a bearer header or query token so browser links can remain
 
 ## Documentation
 
+- [Release source and history](docs/RELEASE.md) — `main` is the release line; recovered kit history and Ops 1.31
+- [Deployment](docs/DEPLOYMENT.md) — deploy a pinned `main` revision, verify, then publish the deployment commit
 - [Capability and route matrix](docs/CAPABILITIES.md) — authoritative implemented surface
 - [Configuration](docs/CONFIGURATION.md) — setup and security guidance
 - [API](docs/API.md) — payload and workflow details

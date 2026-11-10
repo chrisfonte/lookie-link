@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-11-10 — Main convergence and Ops Kit 1.31
+
+- Integrate the recovered viewer, API, publication, kit, tracker, diagram and audio
+  history into `main` through [#394](https://github.com/chrisfonte/lookie-link/pull/394).
+  The full head of #391 is contained by ancestry; the merge has no conflict resolutions.
+- Add the Ops 1.31 standalone guide template through [#392](https://github.com/chrisfonte/lookie-link/pull/392).
+  Its inline CSS and embedded screenshots support offline HTML and Letter PDF delivery.
+- Fix optional-config loader recursion and stale sibling-overlay selection through
+  [#393](https://github.com/chrisfonte/lookie-link/pull/393), with clean-process regressions
+  and the existing editable-response envelope expectation corrected.
+- Document `main` as the release source and the unchanged operator runner's
+  verify/apply/restart sequence, followed by verification and plain push.
+
+Kit versions are independent of the Node package version. Historical entries
+marked "Unreleased" below describe package-release bookkeeping; the current
+source and Ops kit history are covered by [RELEASE.md](docs/RELEASE.md).
+
 ## Unreleased — optional configuration
 
 - Fix recursive appearance-overlay lookup when no configuration file exists, so

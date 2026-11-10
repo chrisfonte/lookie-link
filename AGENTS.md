@@ -35,7 +35,13 @@ This repository is public. Treat every tracked file as publishable.
 
 House standards bind this project but live outside it, in the maintainer's operations workspace; the Boundary above keeps their paths out of this repository. Cite them rather than re-deriving rules — the Rules Card in the Tier-0 router resolves each keyword below.
 
+Inherits the house project standards list "For a New Product", list version 1.0.0.
+
 - **Ending a review / is ACCEPT final / another round? / findings vs blockers** → the Rules Card entry of that name, resolving to the Adversarial Review Protocol §46.7. An ACCEPT with zero open findings from one independent non-author reviewer is terminal; only blocking findings withhold release; two-round cap.
+
+## Release source
+
+Start new branches from `main` and target pull requests to `main`. It is the release source, including the recovered kit history and Ops 1.31. A serving checkout may retain a runtime deployment branch whose commit records the source SHA. Follow [deployment](docs/DEPLOYMENT.md) and [release history](docs/RELEASE.md); use the installed operator runner unchanged, verify its result, then plain-push its deploy commit. Record deployment-specific facts outside this public repository.
 
 ## Commands
 

@@ -4,7 +4,7 @@
 Title: Ops HTML Kit
 Owner: Operations Team
 Created: 2026-06-28
-Last Updated: 2026-11-04
+Last Updated: 2026-11-10
 Version: 1.31
 Status: Active
 Tags: #html #css #design-system #templates #lookie-link
@@ -465,6 +465,20 @@ The `data-lookie-follow-theme` attribute is **inert by itself** — it only does
 4. Verify on the live `/view/…` URL in **both** viewer themes — and on a Syncthing peer, **confirm the served copy actually contains your edit first** (fetch the raw endpoint and grep for a marker string): the serving machine lags the local edit by a sync cycle, and a too-fast screenshot verifies the *previous* version while looking perfectly normal (observed 2026-07-19).
 
 ## Versioning
+
+Ops 1.31 includes [guide-template.html](guide-template.html), which carries its CSS
+and image placeholders inside one HTML file. Replace the placeholders with the
+reader's content and embedded screenshots, then inspect the HTML offline and
+every exported PDF page. The delivered guide has no runtime dependency on
+Lookie-Link. HTML comments travel with the file too: keep the provenance record
+appropriate for its recipients.
+
+The kit's recovered development history is now integrated into `main`; see the
+[source-history record](../../docs/RELEASE.md#recovered-kit-history). The shared
+stylesheet remains the 1.30 component bytes; 1.31 adds the standalone template.
+Bundled versioned stylesheet URLs serve the current effective version only, so
+the bump replaces the 1.30 URL with 1.31. Already-inlined publications retain
+their stylesheet bytes.
 
 Bump `Version` here and add a dated note when tokens/components or bundled templates change. Record full version history in `CHANGELOG.md`. Already-produced deliverables that **inlined** the CSS are frozen at their version (a kit update doesn't retroactively restyle them); linked pages pick up changes automatically.
 
