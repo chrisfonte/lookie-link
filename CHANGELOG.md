@@ -1,5 +1,80 @@
 # Changelog
 
+## Unreleased — optional configuration
+
+- Fix recursive appearance-overlay lookup when no configuration file exists, so
+  startup uses the documented defaults. Reloading after config removal also clears
+  the old config path and its sibling overlay; an explicit overlay path still works.
+- Add clean-process regression coverage and correct the editable validator's empty
+  annotation-response expectation to include the existing `ok: true` field.
+
+## Unreleased — catalog cards
+
+- Ops Kit 1.30: catalog status pills sit on the photo corner when placed first in the
+  figure; the photo strip is a uniform grid; catalog grids keep column width for small groups; examples drop `·`-joined meta strings.
+
+- Ops Kit 1.29 adds catalog cards: `.catalog` on a `.gallery` turns each figure into a
+  card for one subject, with a `.photo-strip` of further zoomable photos and a caption of
+  title plus status pill, `.meta`, verbatim `blockquote` and `details`. Adds the neutral
+  `.pill.muted`. Cards with an `id` are deep-link targets. Opt-in and additive. See [catalog cards](kits/ops/README.md#catalog-cards-v129).
+
+## Unreleased — audio markers
+
+- Audio files open in a waveform player (peaks from `ffmpeg`/`ffprobe`, cached beside the audio or in a cache directory); `.aif`/`.aiff` are recognized. New always-on routes `GET /api/audio/:repo/*` and `GET /api/peaks/:repo/*`, discoverable as the `audio` capability.
+- Read-only audio roots (`audioRoots`): browse and play network audio like a repository; edits, saves and non-audio bytes are refused. `/asset` now answers `416`/`404` for bad ranges and missing files instead of `500`.
+- Opt-in marker editor (`markers.enabled`): marker templates (bundled `freeform`, `song-structure` and `radio-imaging`, plus operator-managed ones) and immutable marker records keyed by the audio's SHA-256, with revision conflicts (`409 revision_conflict`), constraint validation, reference sources, and a dry-run preview. Routes under `/api/markers/`, the `markers` capability and endpoint templates, and OpenAPI entries when enabled.
+- Optional projections write saved markers back into a YAML target through a guarded tool (target-hash checks, snapshot and receipt files); the `rivendell` projection is a preview-only stub. See the Audio and markers sections of `docs/CAPABILITIES.md` and `docs/API.md`.
+- Declared `ffmpeg` and `ffprobe` as referenced system dependencies (`fossa-deps.yml`, README).
+
+## Unreleased — generic diagram authoring
+
+- Ops Kit 1.28 adds numbered-key diagrams (markers on the drawing, a reflowing HTML
+  key) and `node scripts/check-diagrams.mjs <url>`, which renders a page at desktop and
+  phone widths and fails on overlapping, clipped, struck-through or unreadable
+  labels. See [the numbered-key contract](kits/ops/README.md#numbered-key-v128).
+- Make the bundled kit's authoring guide and history discoverable and fetchable;
+  cover transformed SVG label bounds with positive and negative browser checks.
+- Ops Kit 1.27 adds accessible annotated SVG recipes, contained horizontal scrolling,
+  reusable drawing classes, and a responsive ordered-flow example. See
+  [the kit authoring contract](kits/ops/README.md#annotated-diagrams).
+
+
+## Unreleased — YouTube clip playback
+
+- Authored HTML clips now open a viewer-owned player with their start/end windows and a timestamped source fallback. This supplies provider identity while preserving the document sandbox.
+- Provider referrers expose only the viewer origin. Unknown source parameters are removed; source-window checks, user-gesture/message-source checks, phone geometry and close/focus behavior have regression coverage.
+
+## Unreleased — List trackers
+
+- Added first-class `kind: 'list'` templates: mutable checklist state with
+  sections, items, optional owner, revision CAS, and a stable `/forms/:id` UI.
+- List state is separate from submissions. `GET /api/forms/:id/list` is
+  read-only (virtual revision `0` when absent); writes initialize via
+  `PUT` / validate via `POST …/list/validate`. Discovery key `formsList`.
+- The list page is check-first: one compact row per item, with a filter,
+  jump-to-section, hide-completed and a single quick-add always available.
+  Empty sections are hidden in the normal view. Edit list reveals a per-row
+  menu (inline text edit, move, section, confirmed remove) and add-section;
+  Done editing returns. Filter, hide-completed and checked state survive mode
+  changes. A group's list member now opens the checklist instead of offering
+  Log entry.
+- Hide-completed is a per-browser display preference, not shared list state.
+- Autosave is single-flight: the revision is read at dispatch, later ticks made
+  during a save are kept, and a stale-revision conflict keeps the unsaved edits
+  visible with explicit "Keep my changes" / "Load latest" choices.
+- Items can be removed from the page (two-step Remove / Confirm remove). The
+  list page is verified free of horizontal overflow at 390px, document-wide.
+- Form pages now allow same-origin `connect-src` so the list can autosave.
+
+## Unreleased — House standards routing
+
+- AGENTS.md now points at the house standards router and the review-termination doctrine (§46.7 — terminal ACCEPT, findings versus blockers, two-round cap) rather than leaving each lane to improvise its own review procedure.
+
+## Unreleased — Dependency declaration baseline
+
+- Added `SECURITY.md` with the project's reporting posture, supported-version
+  policy, and runtime security boundaries.
+
 ## Unreleased — Codex desktop theme
 
 - Added Codex as an eleventh built-in theme, with dark and light variants based
@@ -38,7 +113,7 @@
 ## 2026-07-30 — Unreleased — Public/private product-information boundary
 
 - Removed product-planning packages, historical build prompts, product research,
-  and the Paperclip organizational grant workflow from the current public tree.
+  and the internal issue-tracker grant workflow from the current public tree.
   Their prior publication remains truthfully recorded in Git history and older
   changelog entries; no history rewrite was performed.
 - Kept source, tests, generated skill packages, examples, and implemented
@@ -112,7 +187,7 @@
 - Added `GET /api/repos` JSON discovery endpoint so agents can enumerate served repos at runtime. It now returns opaque repo/view/asset identifiers and is filtered by the same access-control logic as the home page.
 - Added `bin/lookie-read.js` CLI shim (`lookie-read <repo>/<path>`) declared in `package.json#bin`. Encapsulates discovery, local-fallback, HTTP fetch with Range, and `LOOKIE_LINK_TOKEN` auth.
 - Extended `/asset/<repo>/<path>` mime allowlist to cover text/source extensions (markdown, yaml, json, sh/py/js/ts/go/rs/c/cpp/etc.) so the read shim can fetch source files. Source-code and HTML extensions are served as `text/plain; charset=utf-8` to prevent browser auto-rendering. Unknown extensions still return `415`.
-- Added `scripts/lookie-link-config-audit.sh` + `scripts/lookie-link-config-audit-cron.sh` and `scripts/launchd/com.lookie-link.config-audit.plist` to enumerate configured operations directories, classify them (served / worktree-skip / placeholder-skip / missing), and post deltas to Paperclip.
+- Added `scripts/lookie-link-config-audit.sh` + `scripts/lookie-link-config-audit-cron.sh` and `scripts/launchd/com.lookie-link.config-audit.plist` to enumerate configured operations directories, classify them (served / worktree-skip / placeholder-skip / missing), and post deltas to the internal issue tracker.
 - Added test coverage for `/api/repos` in `scripts/validate-editable-mode.js`.
 - Documented repository discovery and agent file-reference conventions in the public API and shim documentation.
 
@@ -139,7 +214,7 @@
 - Added audio playback support for `.m4a`, `.mp3`, `.wav`, `.ogg`, `.oga`, `.opus`, `.flac`, `.aac`
 - Browsing an audio file directly renders a dedicated player page with controls and a download link
 - Markdown links to audio files (e.g. NotebookLM `.m4a` overviews) get an inline `<audio>` player with the original link caption
-- Inline player also triggers for fully-qualified `http(s)://<host>:9876/view/<repo>/<path>.<audio-ext>` URLs — the Paperclip-style labeled-link form — not just `./relative` and `~/repo` paths
+- Inline player also triggers for fully-qualified `http(s)://<host>:9876/view/<repo>/<path>.<audio-ext>` URLs — the internal tracker's labeled-link form convention — not just `./relative` and `~/repo` paths
 - `/asset/<repo>/<path>` route serves audio with correct MIME types and Range requests for seeking
 - Audio files are excluded from editable mode (binary)
 - Documented in `docs/FEATURES.md` (new Audio Playback section).

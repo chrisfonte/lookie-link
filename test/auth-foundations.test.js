@@ -133,6 +133,8 @@ test('publish remains independent from write and is consumed by the publish endp
     '/api/publish',
     '/api/publish/:slug',
     '/api/publish/:slug/revoke',
+    '/api/publish',
+    '/api/publish/:slug',
   ]);
 
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lookie-auth-publish-'));

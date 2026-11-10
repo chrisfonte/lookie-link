@@ -460,7 +460,10 @@ test('embed transforms authorized HTML while raw remains exact and bearer creden
     const queryHtml = await queryEmbed.text();
     assert.match(queryHtml, /<base href="\/asset\/alpha\/docs\/">/);
     assert.match(queryHtml, /src="\/asset\/alpha\/docs\/diagram\.png\?token=viewer-token"/);
-    assert.match(queryHtml, /lookie-link-annotations-bootstrap/);
+    // Opaque-origin /embed keeps the gate style but must not ship the network bootstrap.
+    assert.match(queryHtml, /lookie-link-embed-annotation-gate/);
+    assert.doesNotMatch(queryHtml, /lookie-link-annotations-bootstrap/);
+    assert.doesNotMatch(queryHtml, /\/public\/annotations\.js/);
 
     const framedView = await server.request('/view/alpha/docs/landing.htm?token=viewer-token');
     assert.equal(framedView.status, 200);
@@ -481,7 +484,9 @@ test('embed transforms authorized HTML while raw remains exact and bearer creden
     assert.equal(bearerEmbed.status, 200);
     const bearerHtml = await bearerEmbed.text();
     assert.doesNotMatch(bearerHtml, /viewer-token/);
-    assert.match(bearerHtml, /"queryToken":null/);
+    // No annotations bootstrap means no queryToken field to leak either.
+    assert.doesNotMatch(bearerHtml, /lookie-link-annotations-bootstrap/);
+    assert.doesNotMatch(bearerHtml, /queryToken/);
 
     const deniedView = await server.request('/view/beta/notes.md?token=viewer-token');
     const deniedAsset = await server.request('/asset/beta/notes.md?token=viewer-token');
@@ -582,7 +587,7 @@ test('bearer auth is preferred for agent flows and preserves token metadata for 
             agentIds: ['agent-cli-1'],
           },
           issuer: {
-            system: 'paperclip',
+            system: 'tracker',
             issueId: 'ACME-3671',
           },
           audit: {
@@ -610,7 +615,7 @@ test('bearer auth is preferred for agent flows and preserves token metadata for 
             agentIds: ['agent-cli-1'],
           },
           issuer: {
-            system: 'paperclip',
+            system: 'tracker',
             issueId: 'ACME-3671',
           },
           audit: {
@@ -636,7 +641,7 @@ test('bearer auth is preferred for agent flows and preserves token metadata for 
       agentIds: ['agent-cli-1'],
     });
     assert.deepEqual(accessContext.issuer, {
-      system: 'paperclip',
+      system: 'tracker',
       issueId: 'ACME-3671',
     });
     assert.deepEqual(accessContext.audit, {
@@ -685,7 +690,7 @@ test('managed grant API creates issue-linked grants and enforces grant tokens', 
         },
         repoRoots: fixture.mappings,
         adminTokens: {
-          paperclip: {
+          tracker: {
             secretEnv: 'LOOKIE_TEST_GRANT_ADMIN_TOKEN',
           },
         },
@@ -856,7 +861,7 @@ test('managed grant API rejects issue-linked creates and renewals without explic
         },
         repoRoots: fixture.mappings,
         adminTokens: {
-          paperclip: {
+          tracker: {
             secretEnv: 'LOOKIE_TEST_GRANT_ADMIN_TOKEN',
           },
         },
@@ -895,7 +900,8 @@ test('managed grant API rejects issue-linked creates and renewals without explic
     });
     assert.equal(createResponse.status, 400);
     const createPayload = await createResponse.json();
-    assert.match(createPayload.error, /expiresAt is required/);
+    assert.equal(createPayload.error.code, 'invalid_request');
+    assert.match(createPayload.error.message, /expiresAt is required/);
 
     const seededCreate = await server.request('/api/grants', {
       method: 'POST',
@@ -947,7 +953,8 @@ test('managed grant API rejects issue-linked creates and renewals without explic
     });
     assert.equal(renewResponse.status, 400);
     const renewPayload = await renewResponse.json();
-    assert.match(renewPayload.error, /expiresAt is required/);
+    assert.equal(renewPayload.error.code, 'invalid_request');
+    assert.match(renewPayload.error.message, /expiresAt is required/);
   } finally {
     await server.close();
     await fs.rm(fixture.root, { recursive: true, force: true });
@@ -977,7 +984,7 @@ test('managed grant expiry emits a linked issue comment helper in audit events',
         },
         repoRoots: fixture.mappings,
         adminTokens: {
-          paperclip: {
+          tracker: {
             secretEnv: 'LOOKIE_TEST_GRANT_ADMIN_TOKEN',
           },
         },

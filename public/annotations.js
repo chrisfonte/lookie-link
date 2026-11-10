@@ -1,6 +1,13 @@
 'use strict';
 
 (function () {
+  // Opaque-origin sandboxed frames (e.g. /embed without allow-same-origin) report
+  // origin as the string "null". Any fetch from there is CORS-blocked; bail before
+  // network I/O. The outer /view page has a real origin and continues normally.
+  if (window.origin === 'null' || (typeof location !== 'undefined' && location.origin === 'null')) {
+    return;
+  }
+
   const bootstrap = window.__lookieLinkAnnotations;
   if (!bootstrap || !bootstrap.repo || !bootstrap.relativePath) {
     return;
@@ -120,7 +127,8 @@
     }
 
     if (!response.ok) {
-      const error = new Error((data && data.error) || `HTTP ${response.status}`);
+      const serverError = data && data.error;
+      const error = new Error((serverError && typeof serverError === 'object' ? serverError.message : serverError) || `HTTP ${response.status}`);
       error.status = response.status;
       error.data = data;
       throw error;

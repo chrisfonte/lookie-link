@@ -150,7 +150,7 @@
         if (response.status === 409) {
           setStatus('File changed on disk since you opened it. Refresh before saving.', 'error');
         } else {
-          setStatus(payload.error || 'Save failed.', 'error');
+          setStatus((payload.error && typeof payload.error === 'object' ? payload.error.message : payload.error) || 'Save failed.', 'error');
         }
         return;
       }

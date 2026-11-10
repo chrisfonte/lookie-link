@@ -1,6 +1,9 @@
 node_modules
 /test/browser/.artifacts/
 
+# real config never belongs in the repo; only the .example is tracked
+/lookie-link.yaml
+
 # Runtime / local-only artifacts
 .cache/
 *.log

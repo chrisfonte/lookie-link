@@ -1,0 +1,27 @@
+{
+  "contractVersion": 1,
+  "resourceKind": "marker-template",
+  "templateId": "song-structure",
+  "revision": 1,
+  "title": "Song structure",
+  "description": "Intro, verse, chorus, bridge, outro regions.",
+  "unit": "ms",
+  "destinationId": "default",
+  "groups": [{ "id": "structure", "label": "Structure" }],
+  "markers": [
+    { "id": "intro", "label": "Intro", "kind": "region", "group": "structure", "color": "#4fd8e8", "multiple": false, "required": false,
+      "constraints": { "noOverlap": "structure" } },
+    { "id": "verse", "label": "Verse", "kind": "region", "group": "structure", "color": "#9d96f3", "multiple": true,
+      "constraints": { "noOverlap": "structure" } },
+    { "id": "chorus", "label": "Chorus", "kind": "region", "group": "structure", "color": "#e1886e", "multiple": true,
+      "constraints": { "noOverlap": "structure" } },
+    { "id": "bridge", "label": "Bridge", "kind": "region", "group": "structure", "color": "#bfd22b", "multiple": true,
+      "constraints": { "noOverlap": "structure" } },
+    { "id": "outro", "label": "Outro", "kind": "region", "group": "structure", "color": "#f2695f", "multiple": false,
+      "constraints": { "noOverlap": "structure", "after": "intro" } }
+  ],
+  "keys": { "intro": "1", "verse": "2", "chorus": "3", "bridge": "4", "outro": "5" },
+  "sources": [],
+  "pickers": [],
+  "projections": []
+}

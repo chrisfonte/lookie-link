@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Email table template</title>
+</head>
+<body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.4;color:#222;">
+<!--
+  Ops HTML Kit — plain email-safe HTML table template.
+
+  Use when an email needs structure that plain text cannot carry well:
+  cancellation lists, service inventories, approvals, small status matrices,
+  or recipient-facing action tables.
+
+  This is intentionally NOT a rich HTML deliverable style. It is for actual
+  email bodies: inline CSS only, no external stylesheet, no JavaScript, no
+  sticky nav, no cards/hero/layout components. Keep it simple so Gmail and
+  recipient clients render it predictably.
+
+  Agent rule of thumb:
+  - For structured HTML email, write purpose-built email-safe HTML like this.
+  - Do not draft in Markdown and convert to HTML when the email depends on
+    exact table columns, inline lists, or recipient-action clarity.
+  - Always provide a plain-text fallback when the sending tool supports it.
+-->
+
+<p>Hi NAME,</p>
+
+<p>Opening context paragraph.</p>
+
+<p><strong>Summary:</strong></p>
+<ul>
+  <li>First summary point</li>
+  <li>Second summary point</li>
+  <li>Third summary point</li>
+</ul>
+
+<p><strong>Important note:</strong> Call out any constraint, exception, or do-not-do instruction.</p>
+
+<p><strong>Full list:</strong></p>
+<table style="border-collapse:collapse;width:100%;font-size:13px;">
+  <thead>
+    <tr>
+      <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;background:#eee;">Item</th>
+      <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;background:#eee;">Date</th>
+      <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;background:#eee;">Action</th>
+      <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;background:#eee;">Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="border:1px solid #ccc;padding:4px 6px;"><code>example-item</code></td>
+      <td style="border:1px solid #ccc;padding:4px 6px;white-space:nowrap;">YYYY-MM-DD</td>
+      <td style="border:1px solid #ccc;padding:4px 6px;">Action to take</td>
+      <td style="border:1px solid #ccc;padding:4px 6px;">Context or exception</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Thanks,<br>NAME</p>
+</body>
+</html>

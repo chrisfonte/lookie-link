@@ -72,7 +72,7 @@ Click any inline image to open it in a full-screen lightbox. Close with the X bu
 
 Markdown links to local audio files are rendered as an inline `<audio>` player so you can tap **Play** without leaving the page. The original link text is preserved underneath as a caption that points at the dedicated player page.
 
-Supported extensions: `.m4a`, `.mp3`, `.wav`, `.ogg`, `.oga`, `.opus`, `.flac`, `.aac`
+Supported extensions: `.m4a`, `.mp3`, `.wav`, `.aif`, `.aiff`, `.ogg`, `.oga`, `.opus`, `.flac`, `.aac`
 
 All three of these link forms render as a player:
 
@@ -82,13 +82,15 @@ All three of these link forms render as a player:
 [NotebookLM overview](http://<your-lookie-host>/view/my-repo/notebooks/2026-05-12-cruz-meeting.m4a)
 ```
 
-Browsing an audio file directly at `/view/<repo>/<path>.<audio-ext>` renders a dedicated player page with the same controls plus a **Download** link and file metadata (size, mtime).
+Browsing an audio file directly at `/view/<repo>/<path>.<audio-ext>` renders the waveform player page: a peaks waveform per channel, zoom, scrubbing, loop, playback speed, a **Download** link and file metadata (size, mtime). The waveform needs `ffmpeg` and `ffprobe` (see System dependencies in the README); without them the page still plays the file. Query parameters: `?template=<id>` picks the marker template, `?record=<recordId>` opens a specific saved set, `?t=<seconds>` starts the playhead there.
+
+With `markers.enabled: true` the same page is a marker editor: points and regions typed into the waveform by key, nudge or typed sample position, validated against a marker template (constraints, snapping to reference sources) and saved as immutable, superseding records keyed by the audio's SHA-256. A template may declare a projection that writes the saved values back into a YAML file through a guarded tool, with a dry-run preview first. Audio roots (`audioRoots`) are read-only directories that browse and play like repositories. See [the Audio and markers section of the capability matrix](CAPABILITIES.md#audio-and-markers) and [the API](API.md#audio-and-markers).
 
 Under the hood, audio is streamed from `/asset/<repo>/<path>.<audio-ext>` with the correct `Content-Type` and `Range` request support, so `<audio>` can seek without re-downloading.
 
 Notes:
 
-- Audio files are classified as binary, so they are **not** editable in editable mode.
+- Audio files are classified as binary, so they are **not** editable in editable mode. Marker records are separate documents; the audio file is never modified.
 - Audio links inside fenced ` ``` ` code blocks are left as code, not rewritten to a player.
 - The image lightbox does not apply to `<audio>` (it's a separate, non-binary widget).
 
@@ -130,8 +132,22 @@ Behavior:
 - `<script>` tags and inline event handlers are stripped by DOMPurify
 - Local `<img src="./file.png">` references are rewritten through `/asset/<repo>/<path>` so images still load from the repo
 - Heading anchors and TOC generation apply to rendered HTML headings the same way they do for markdown
-- Agents can inspect a local HTML bundle without launching a browser by requesting `/view/<repo>/<path>.html?validate=1`. The JSON response checks stylesheet, script, image/source, and local HTML navigation references, reports missing/unsupported counts, and contains repo-relative URLs only. Reference checks enforce the caller's view scope; unreadable and absent targets use the same not-found result.
-- When raw HTML is enabled, the viewer uses the transformed `/embed` runtime for the rendered pane and exposes separate transformed and byte-preserving `/raw` actions. Both preserve authored scripts and therefore share the trusted-content requirement. `/embed` rewrites local navigation/assets, injects theme synchronization, redacts sensitive host values, and can inject the annotation client; `/raw` returns authored bytes unchanged.
+- Agents can inspect a local HTML bundle without launching a browser by requesting `/view/<repo>/<path>.html?validate=1`. The JSON response checks stylesheet, script, image/source, and local HTML navigation references, reports missing/unsupported counts, and contains repo-relative URLs only. Reference checks enforce the caller's view scope; unreadable and absent targets use the same not-found result. The same report adds advisory `kit` and `pageContract` sections (warnings never change the HTTP status or block rendering). `summary` includes `kitWarningCount` and `contractWarningCount`. Non-HTML targets ignore `validate` and render normally (no validation JSON, so no `kit` / `pageContract` keys).
+  - **`kit`**: `{ detected: {name, version} | null, source: "inline-style" | "link" | "inline-unmarked" | null, current: {name, version, effectiveVersion} | null, stale: bool, warnings: [] }`. Detects `<style data-kit data-kit-version>`, a leftover `<link rel="stylesheet" data-kit>` placeholder, or an unmarked inlined kit block (signature comment / `Ops HTML Kit`).
+  - **`pageContract`**: `{ renderMode: "viewport" | "content-height", themeFollow: { declared, consumesTokens }, stickyNav: { present, sectionScrollMargin, overflowXHiddenOnAncestor }, warnings: [] }` from `data-lookie-render`, `data-lookie-follow-theme`, `.topnav`, and inline `<style>` text.
+  - **Warning codes** (strings in each section's `warnings[]`):
+    | Code | Meaning | Fix |
+    |---|---|---|
+    | `kit-placeholder-not-inlined` | Placeholder `<link … data-kit>` still present | Publish with `kit:` or replace with an inlined `<style data-kit data-kit-version>` |
+    | `kit-inlined-unmarked` | Kit CSS inlined without `data-kit` / `data-kit-version` | Add the attributes (or republish with `kit:`) |
+    | `kit-stale` | `data-kit-version` is older than the loaded kit | Re-inline / republish against the current kit |
+    | `kit-unknown` | `data-kit` name is not in the server catalog | Use a loaded kit name or install the kit |
+    | `kit-version-unparsable` | Version string is not dotted numeric segments | Use a parseable version like `1.26` |
+    | `theme-follow-inert` | `data-lookie-follow-theme` set but no `--lookie-*` in inline CSS | Map page tokens to `--lookie-*` (or inline a kit that does) |
+    | `sticky-nav-without-viewport-mode` | `.topnav` present without `data-lookie-render="viewport"` | Add viewport render mode on `<html>` |
+    | `sticky-nav-sections-missing-scroll-margin` | Sticky nav present but inline CSS has no `scroll-margin-top` | Add `scroll-margin-top` for section targets |
+    | `overflow-x-hidden-kills-sticky` | Inline CSS sets `overflow-x: hidden` on `html`/`body` | Remove that overflow rule so sticky can pin |
+- When raw HTML is enabled, the viewer uses the transformed `/embed` runtime for the rendered pane and exposes separate transformed and byte-preserving `/raw` actions. Both preserve authored scripts and therefore share the trusted-content requirement. `/embed` rewrites local navigation/assets, injects theme synchronization, redacts sensitive host values, and can inject annotation mount/gate markup (not the network annotation client — the sandboxed frame has an opaque origin, so annotation reads stay on the outer `/view` page for non-embedded documents); `/raw` returns authored bytes unchanged.
 
 ### Table of contents
 

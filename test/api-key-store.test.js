@@ -285,7 +285,7 @@ test('key-ID denials are uniform before and after authorized lookup', async () =
     assert.deepEqual(missingRevoked, missingRandom);
     assert.deepEqual(missingRevoked, {
       status: 404,
-      body: { ok: false, error: 'Agent API key not found.' },
+      body: { ok: false, error: { code: 'not_found', message: 'Agent API key not found.' } },
     });
   } finally {
     await fs.rm(root, { recursive: true, force: true });

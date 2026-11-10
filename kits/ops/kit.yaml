@@ -1,0 +1,24 @@
+name: ops
+label: Ops HTML Kit
+version: "1.31"
+stylesheet: kit.css
+templates:
+  - research-packet-template.html
+  - email-table-template.html
+  - guide-template.html
+examples:
+  - README.md
+  - CHANGELOG.md
+  - diagram-examples.html
+  - EXAMPLES.html
+  - theme-follow-demo.html
+consumes:
+  - --lookie-accent
+  - --lookie-bg
+  - --lookie-bg-code
+  - --lookie-bg-elev
+  - --lookie-border
+  - --lookie-link
+  - --lookie-text
+  - --lookie-text-soft
+description: Design-token stylesheet and HTML templates for Ops research packets, email tables and how-to guides.

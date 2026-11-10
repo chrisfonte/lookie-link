@@ -1,0 +1,30 @@
+<!-- Body fragment for GET /api/docs; wrapped in the shared baseHtml shell. -->
+<style>
+  .apidocs { display: grid; grid-template-columns: minmax(14rem, 22rem) 1fr; gap: 1rem; max-width: 80rem; margin: 0 auto; padding: 1.5rem 1rem 4rem; color: var(--text); }
+  .apidocs h1 { grid-column: 1 / -1; margin: 0; font-size: 1.4rem; }
+  .apidocs h1 small { color: var(--text-soft); font-weight: 400; font-size: 0.85rem; margin-left: 0.5rem; }
+  .apidocs-panel { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 0.6rem; padding: 0.75rem; }
+  .apidocs-nav { max-height: 80vh; overflow: auto; }
+  .apidocs-nav h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-soft); margin: 0.75rem 0 0.25rem; }
+  .apidocs-nav button { display: block; width: 100%; text-align: left; background: none; border: 0; color: var(--text); padding: 0.25rem 0.35rem; border-radius: 0.3rem; cursor: pointer; font: inherit; font-size: 0.85rem; }
+  .apidocs-nav button:hover, .apidocs-nav button[aria-current="true"] { background: var(--bg); color: var(--accent); }
+  .apidocs code, .apidocs pre, .apidocs .method { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .apidocs .method { display: inline-block; min-width: 3.6rem; font-weight: 700; color: var(--accent); }
+  .apidocs label { display: block; margin: 0.5rem 0 0.15rem; color: var(--text-soft); font-size: 0.85rem; }
+  .apidocs input, .apidocs textarea { width: 100%; box-sizing: border-box; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 0.3rem; padding: 0.35rem 0.5rem; font: inherit; }
+  .apidocs textarea { min-height: 9rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+  .apidocs button.send { margin-top: 0.75rem; background: var(--accent); color: var(--bg); border: 0; border-radius: 0.3rem; padding: 0.4rem 1rem; font: inherit; font-weight: 600; cursor: pointer; }
+  .apidocs pre { background: var(--bg); border: 1px solid var(--border); border-radius: 0.3rem; padding: 0.6rem; overflow: auto; max-height: 28rem; white-space: pre-wrap; word-break: break-word; font-size: 0.8rem; }
+  .apidocs .soft { color: var(--text-soft); }
+  @media (max-width: 800px) { .apidocs { grid-template-columns: 1fr; } }
+</style>
+<main class="apidocs" data-api-docs data-spec-url="/openapi.json">
+  <h1>Lookie API explorer <small>from <a href="/openapi.json">/openapi.json</a></small></h1>
+  <nav class="apidocs-panel apidocs-nav" data-api-docs-nav aria-label="Operations"><p class="soft">Loading openapi.json&hellip;</p></nav>
+  <section class="apidocs-panel" data-api-docs-detail>
+    <label for="api-docs-token">Bearer token (kept in this tab's sessionStorage)</label>
+    <input id="api-docs-token" type="password" autocomplete="off" data-api-docs-token />
+    <div data-api-docs-operation><p class="soft">Select an operation.</p></div>
+  </section>
+</main>
+<script src="/public/api-docs.js" defer></script>

@@ -2740,3 +2740,19 @@ test('no user-facing copy carries an internal issue number (#368)', async () => 
     await cleanup(fixture, server);
   }
 });
+
+test('Trackers pages pick up theme CSS set after startup (live reload), not the value copied at construction', async () => {
+  const fixture = await makeFixture();
+  const server = await startServer(fixture, { customThemeCss: '' });
+  try {
+    const before = await (await server.request('/forms/gym-session-entry')).text();
+    assert.ok(!before.includes('--forms-live-theme-marker'), 'no marker before the reload');
+    server.app.locals.setCustomThemeCss(':root { --forms-live-theme-marker: #abcdef; }');
+    const after = await (await server.request('/forms/gym-session-entry')).text();
+    assert.ok(after.includes('--forms-live-theme-marker: #abcdef'), 'forms page ships the theme CSS set after startup');
+    const index = await (await server.request('/forms')).text();
+    assert.ok(index.includes('--forms-live-theme-marker'), 'forms index too');
+  } finally {
+    await server.close();
+  }
+});

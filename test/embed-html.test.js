@@ -17,8 +17,6 @@ const { renderDocumentPage } = require('../lib/renderer');
 const CURRENT_ANNOTATION_SELECTORS = [
   '[data-annotations-mount]',
   '[data-annotate-trigger]',
-  '[data-annotations-stale]',
-  '[data-annotations-toggle]',
   '[data-rendered-view]',
 ];
 
@@ -46,6 +44,14 @@ function assertCurrentAnnotationContract(html) {
   const oldAnchors = Array.from(document.querySelectorAll('a.anchor-link[data-anchor-id]'));
   const isOldAnchorLinkOnlyContract = oldAnchors.length > 0 && mounts.length === 0 && triggers.length === 0;
   assert.equal(isOldAnchorLinkOnlyContract, false, 'obsolete anchor-link-only markup must not be the annotation mount');
+
+  // Network client must not ship inside the opaque-origin /embed frame.
+  assert.equal(document.getElementById('lookie-link-annotations-bootstrap'), null,
+    'embed must not carry the annotations network bootstrap');
+  assert.equal(document.querySelector('script[src="/public/annotations.js"]'), null,
+    'embed must not load /public/annotations.js');
+  assert.ok(document.getElementById('lookie-link-embed-annotation-gate'),
+    'embed must still carry the annotation gate style');
 }
 
 async function makeFixture() {
@@ -266,8 +272,10 @@ test('embed annotations are opt-in and query credentials are limited to required
       })
     );
     assertCurrentAnnotationContract(enabled);
-    assert.match(enabled, /lookie-link-annotations-bootstrap/);
-    assert.match(enabled, /"queryToken":"query-example"/);
+    // Gate + mounts stay; the network bootstrap must not (opaque-origin CORS).
+    assert.doesNotMatch(enabled, /lookie-link-annotations-bootstrap/);
+    assert.doesNotMatch(enabled, /\/public\/annotations\.js/);
+    assert.doesNotMatch(enabled, /"queryToken":"query-example"/);
     assert.match(enabled, /src="\/asset\/alpha\/docs\/image\.png\?token=query-example"/);
     assert.match(enabled, /href="\/view\/alpha\/docs\/guide\.html\?mode=print&amp;token=query-example"/);
     assert.doesNotMatch(enabled, /authored-token/);
@@ -275,6 +283,7 @@ test('embed annotations are opt-in and query credentials are limited to required
 
     const disabled = transformEmbedHtml('<h1>Plain</h1>', options(fixture, { annotationsEnabled: false }));
     assert.doesNotMatch(disabled, /lookie-link-annotations-bootstrap/);
+    assert.doesNotMatch(disabled, /lookie-link-embed-annotation-gate/);
     for (const selector of CURRENT_ANNOTATION_SELECTORS) {
       assert.equal(new JSDOM(disabled).window.document.querySelector(selector), null);
     }

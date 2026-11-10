@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- File: kits/ops/research-packet-template.html (Lookie-Link, Ops HTML Kit v1.26)
+     Findings-first research packet scaffold.
+     Replace every [pending] marker with sourced content or preserve it as an honest
+     .pending value. The stylesheet link below is a publish placeholder: publishing the
+     bundle with "kit": "ops" inlines the served kit.css in its place (scroll-margin for
+     anchored sections comes with it). For a standalone file, inline kit.css yourself as
+     <style data-kit="ops" data-kit-version="1.26">. Replace or remove the alternate link. -->
+<html lang="en" data-lookie-follow-theme data-lookie-render="viewport">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>[Research question] — research packet</title>
+  <link rel="alternate" type="application/x-yaml" href="[research-slug].yaml">
+  <link rel="stylesheet" href="kit.css" data-kit>
+</head>
+<body>
+  <header class="hero" style="padding-bottom:0">
+    <div class="wrap">
+      <p class="eyebrow">Research packet · [as-of date]</p>
+      <h1>[Decision-bearing thesis]</h1>
+      <p class="sub">[One sentence: scope, population, and time window.]</p>
+      <div class="badges"><span class="badge">[freshness]</span><span class="badge">[completeness]</span><span class="badge">[method]</span></div>
+    </div>
+    <div class="herostats">
+      <div class="hs"><div class="hsv"><span class="pending">pending</span></div><div class="hsk">Finding one</div><div class="hsd">[Source-backed meaning, not a decorative number.]</div></div>
+      <div class="hs"><div class="hsv"><span class="pending">pending</span></div><div class="hsk">Finding two</div><div class="hsd">[Meter, unit, plan, or population.]</div></div>
+      <div class="hs"><div class="hsv"><span class="pending">pending</span></div><div class="hsk">Finding three</div><div class="hsd">[What the reader must not scroll past.]</div></div>
+      <div class="hs"><div class="hsv"><span class="pending">pending</span></div><div class="hsk">Key uncertainty</div><div class="hsd">[Unknown stated as unknown.]</div></div>
+    </div>
+  </header>
+
+  <nav class="topnav" aria-label="Research packet sections"><div class="inner">
+    <a href="#answer">Answer</a><a href="#findings">Findings</a><a href="#evidence">Evidence</a><a href="#gaps">Gaps</a><a href="#method">Method</a><a href="#sources">Sources</a><a href="#standards">Standards</a>
+  </div></nav>
+
+  <main class="wrap">
+    <section id="answer">
+      <h2>Answer</h2>
+      <div class="callout info"><strong>[Direct answer.]</strong> [One short qualification that materially changes how to use it.]</div>
+    </section>
+
+    <section id="findings">
+      <h2>Findings</h2>
+      <div class="dg">
+        <p class="dg-eyebrow">Visual argument · [diagram family]</p>
+        <p class="dg-title">[One claim, written as a sentence.]</p>
+        <div class="dg-gauge">
+          <div class="gcell"><div class="ghead"><span class="gname">[Measured meter]</span><span class="gnum"><span class="pending">pending</span></span></div><div class="gbar"><div class="gfill" style="width:0%"></div></div><p class="gnote">[Unit, window, measurement state, and source.]</p></div>
+          <div class="gcell"><div class="ghead"><span class="gname">[Comparison meter]</span><span class="gnum"><span class="pending">pending</span></span></div><div class="gbar"><div class="gfill" style="width:0%;background:var(--warn)"></div></div><p class="gnote">[Do not infer a missing value from another meter.]</p></div>
+        </div>
+        <p class="dg-note">Evidence: [citation IDs]. Confidence: [direct / corroborated / lead only].</p>
+      </div>
+    </section>
+
+    <section id="evidence">
+      <h2>Evidence</h2>
+      <figure class="evidence-figure">
+        <img src="data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22320%22><rect width=%22800%22 height=%22320%22 fill=%22%23eef3f8%22/><text x=%2240%22 y=%22155%22 font-family=%22sans-serif%22 font-size=%2230%22 fill=%22%235a6675%22>Replace with primary evidence capture</text></svg>" alt="Placeholder indicating where a primary evidence capture belongs">
+        <figcaption>[Source, capture date, and what this image establishes.] <span class="confidence">Confidence: [direct observation].</span></figcaption>
+      </figure>
+      <div class="evidence-list">
+        <article class="evidence"><div class="src-title">[Source title]</div><div class="src-note">[Claim supported, provenance, and freshness.]</div></article>
+      </div>
+    </section>
+
+    <section id="gaps">
+      <h2>Gaps and limits</h2>
+      <div class="callout warn">[Sampling bias, unresolved conflicts, excluded populations, unknown values, and what would close each gap.]</div>
+    </section>
+
+    <section id="method">
+      <h2>Method</h2>
+      <p>[Discovery routes, verification rules, query/retrieval budget, sampling frame, deduplication, author/thread independence, capture dates, and completeness label.]</p>
+    </section>
+
+    <section id="sources">
+      <h2>Sources</h2>
+      <ol><li><a href="https://example.com" target="_blank">[Primary source]</a> — [captured date; claim supported].</li></ol>
+    </section>
+
+    <section id="standards">
+      <h2>Documentation Standards Used</h2>
+      <ul><li><a href="~/operations/docs/meta/research/research-documentation-standards.md">Research Documentation Standards</a></li><li><a href="~/operations/docs/meta/documentation/documentation-best-practices.md">Documentation Best Practices</a></li></ul>
+    </section>
+  </main>
+
+  <footer class="wrap">[Package title] · version [x.y.z] · updated [date]</footer>
+</body>
+</html>

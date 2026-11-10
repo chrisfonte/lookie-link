@@ -35,10 +35,10 @@ repositories:
 #     docs_reader:
 #       secretEnv: LOOKIE_TOKEN_DOCS_READER
 #       subject:
-#         companyId: fontastic
+#         companyId: acme-co
 #         agentIds: [agent-bob]
 #       issuer:
-#         system: paperclip
+#         system: tracker
 #         issueId: ACME-1234
 #       audit:
 #         grantId: static-phase1-docs-reader
@@ -73,7 +73,7 @@ repositories:
 #     repoRoots:
 #       docs: /srv/lookie-link/repos/docs
 #     adminTokens:
-#       paperclip:
+#       tracker:
 #         secretEnv: LOOKIE_LINK_GRANT_ADMIN_TOKEN
 
 # Optional mutable managed repositories. Every allow-root must already exist;
@@ -116,6 +116,41 @@ repositories:
 #   # Required for browser mutations. Each entry is an exact scheme/host/port;
 #   # Host and X-Forwarded-* request headers are never trusted as substitutes.
 #   publicOrigins:
+#     - http://lookie-host.local:3000
+
+# Optional audio roots: read-only directories browsed like repositories and
+# served as audio only (other files are listed but not served). An id must not
+# collide with a repository or managed repository id. Value is a path or
+# { path, label }.
+# audioRoots:
+#   station-audio:
+#     path: /path/to/share
+#     label: Station audio
+
+# Optional audio marker viewer. Enabling needs templatesPath and destinations.
+# markers:
+#   enabled: true
+#   templatesPath:                                     # string or list; first entry is writable
+#     - ~/.local/share/lookie-link/marker-templates
+#     - /path/to/client-repo/marker-templates          # read-only
+#   destinations:                                      # marker record directories only
+#     default: ~/.local/share/lookie-link/marker-records
+#   roots:                                             # projection / locate / evidence roots
+#     records-repo:
+#       path: /path/to/client-repo
+#       allowProjections: true                         # default false
+#       requireValidator: true                         # default true
+#   peaksCachePath: ~/.local/share/lookie-link/peaks   # default
+#   blockSize: 1152                                    # samples per peak block
+#   ffmpegPath: ffmpeg
+#   ffprobePath: ffprobe
+#   maxAudioBytes: 2147483648                          # default
+#   operatorName: Operator                             # default save name for browser saves
+#   timezone: America/Chicago                          # optional; default server zone
+#   yamlToolPath: ~/path/to/yaml-tool                  # needed for yaml-pointers projections
+#   validators:                                        # templates reference these by id
+#     record-check: ["python3", "~/path/validate-record.py", "{candidate}"]
+#   publicOrigins:                                     # defaults to forms.publicOrigins
 #     - http://lookie-host.local:3000
 
 # Custom themes

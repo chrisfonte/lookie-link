@@ -1,0 +1,46 @@
+schema_version: 1
+kind: demo-record
+piece:
+  id: demo-0001
+  label: Demo piece
+  derived_from: null
+asset:
+  sha256: 0000000000000000000000000000000000000000000000000000000000000001
+  sample_rate_hz: 48000
+result:
+  status: candidate
+  start_sample: 48000
+  end_sample: 240000
+  body_start_ms: 1000
+  body_end_s: 5.0
+  notes: 'A wrapped single-quoted scalar that continues
+    onto a second line and holds a doubled quote ''here''
+    before it ends.'
+  decision:
+    kind: continuous
+    reason: 'Agent reason, wrapped across two lines so
+      the splicer has to drop the continuation.'
+    conditions: []
+  windows:
+  - start_sample: 48000
+    end_sample: 240000
+    rationale: 'window rationale that also wraps onto
+      a continuation line.'
+  verification:
+    tolerance: 96
+    proof_ids:
+    - p-00
+proofs:
+- id: p-00
+  kind: discovery
+  path: notes/discovery.txt
+  sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+- id: p-01
+  kind: measurement
+  path: notes/measure.txt
+  sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+log:
+- record_path: notes/first-pass.yaml
+  record_sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+  reason: Initial pass.
+extras: []

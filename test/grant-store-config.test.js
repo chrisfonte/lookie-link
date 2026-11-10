@@ -12,7 +12,7 @@ test('fromAccessConfig expands ~ in storePath, projectionPath, and repoRoots', (
     storePath: '~/.local/share/lookie-link/grants.yaml',
     projectionPath: '~/.local/share/lookie-link/grants-projection.yaml',
     repoRoots: {
-      docs: '~/operations',
+      docs: '~/documents',
       notes: '~/projects/notes',
     },
   });
@@ -20,7 +20,7 @@ test('fromAccessConfig expands ~ in storePath, projectionPath, and repoRoots', (
   assert.ok(store);
   assert.equal(store.storePath, path.join(os.homedir(), '.local/share/lookie-link/grants.yaml'));
   assert.equal(store.projectionPath, path.join(os.homedir(), '.local/share/lookie-link/grants-projection.yaml'));
-  assert.equal(store.getRepoRoot('docs'), path.join(os.homedir(), 'operations'));
+  assert.equal(store.getRepoRoot('docs'), path.join(os.homedir(), 'documents'));
   assert.equal(store.getRepoRoot('notes'), path.join(os.homedir(), 'projects/notes'));
 });
 

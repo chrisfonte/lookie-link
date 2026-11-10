@@ -2985,6 +2985,1123 @@ tbody tr:last-child td {
 .form-layout .container-member-quick { display: grid; gap: 0.7rem; margin-bottom: 0.7rem; }
 .form-layout .container-member-quick .field label { display: block; margin-bottom: 0.25rem; font-size: 0.85rem; color: var(--text-soft); }
 
+/* ============ Wallpaper menu (shared by the viewer runtime and the embed bridge) ============
+   Mirrors .doc-properties-grid: the same translucent, blurred surface, hairline
+   border and radius, so the menu reads as one of the toolbar set. */
+.toolbar-wallpaper { margin: 0; }
+[data-wallpaper-menu][hidden] { display: none !important; }
+.wallpaper-settings {
+  position: absolute; right: 0; top: calc(100% + 0.5rem); z-index: 40;
+  width: min(19rem, calc(100vw - 1.6rem)); max-height: min(60vh, 28rem); overflow: auto;
+  padding: 0.85rem 0.95rem 0.95rem;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg-elev);
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--bg-elev) 86%, var(--text-soft)) 84%, transparent);
+  backdrop-filter: blur(10px);
+  color: var(--text); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  font-size: 0.85rem; line-height: 1.3;
+}
+.wallpaper-pick { display: flex; gap: 0.4rem; margin-bottom: 0.9rem; }
+.wallpaper-pick select { flex: 1 1 auto; min-width: 0; min-height: 2.2rem; padding: 0.3rem 0.5rem; font: inherit; color: var(--text); background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px; }
+.wallpaper-pick select:disabled { color: var(--text-soft); }
+.wallpaper-step { display: inline-flex; flex: none; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--bg-elev); }
+.wallpaper-step button { width: 2.2rem; min-height: 2.2rem; padding: 0; font: inherit; font-size: 1.25rem; line-height: 1; color: var(--text); background: transparent; border: 0; cursor: pointer; }
+.wallpaper-step button + button { border-left: 1px solid var(--border); }
+.wallpaper-step button:hover:not(:disabled) { background: var(--toolbar-btn-hover); }
+.wallpaper-step button:disabled { color: var(--text-soft); cursor: default; }
+.wallpaper-empty { margin: -0.4rem 0 0.9rem; color: var(--text-soft); font-size: 0.8rem; line-height: 1.35; }
+.wallpaper-range { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0.2rem 0.6rem; margin: 0 0 0.7rem; }
+.wallpaper-range output { color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.wallpaper-range input { grid-column: 1 / -1; width: 100%; margin: 0; accent-color: var(--accent); }
+.wallpaper-reset { display: block; width: 100%; margin-top: 0.2rem; padding: 0.45rem 0.6rem; font: inherit; font-size: 0.82rem; color: var(--text-soft); background: transparent; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.wallpaper-reset:hover { color: var(--text); background: var(--toolbar-btn-hover); }
+.wallpaper-settings :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ============ Viewer-wide wallpaper ============
+   A fixed picture behind the page. The picture is the point, so the chrome
+   gets out of its way: a scrim fades the top of the picture into the theme
+   ground so the toolbar and header never end in a hard edge, and every reading
+   surface becomes frosted glass -- translucent to the tunable panel opacity,
+   blurred behind to the tunable amount, text fully opaque. The layer is
+   display:none until the runtime confirms a picture, so pages without one are
+   byte-for-byte the plain viewer. */
+.viewer-wallpaper { position: fixed; inset: 0; z-index: 0; display: none; pointer-events: none; overflow: hidden; }
+html[data-wallpaper="on"] .viewer-wallpaper { display: block; }
+.viewer-wallpaper img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; opacity: 0; transition: opacity 0.5s ease; }
+.viewer-wallpaper img.is-ready { opacity: 1; }
+.viewer-wallpaper::after { content: ""; position: absolute; inset: 0 0 auto; height: min(38vh, 320px); background: linear-gradient(to bottom, var(--bg) 0%, color-mix(in srgb, var(--bg) 55%, transparent) 45%, color-mix(in srgb, var(--bg) 0%, transparent) 100%); }
+html[data-wallpaper="on"] body { background: var(--bg); }
+html[data-wallpaper="on"] .layout,
+html[data-wallpaper="on"] .form-layout { position: relative; z-index: 1; }
+html[data-wallpaper="on"] .content,
+html[data-wallpaper="on"] .table-wrap,
+html[data-wallpaper="on"] .form-card,
+html[data-wallpaper="on"] .form-layout .card {
+  background: color-mix(in srgb, var(--bg-elev) var(--wallpaper-panel, 72%), transparent);
+  backdrop-filter: blur(var(--wallpaper-blur, 12px));
+  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 12px));
+  border-color: color-mix(in srgb, var(--border) 55%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 30px 80px -24px rgba(0, 0, 0, 0.45);
+}
+html[data-wallpaper="on"] .content { border-radius: 18px; }
+@media (prefers-reduced-motion: reduce) { .viewer-wallpaper img { transition: none; } }
+
+/* List tracker (kind: list): check-first. Rows are single lines; edit
+   controls live behind Edit list and a per-row menu. Theme tokens only. */
+.list-layout { padding-top: calc(var(--toolbar-height, 3.1rem) + 0.5rem); }
+.list-layout .topbar { margin: 0; }
+.list-layout .crumb-title { font-size: 1.05rem; margin: 0; }
+.list-layout .crumb-title,
+.list-layout .crumb-title a { min-width: 0; overflow-wrap: anywhere; }
+.list-layout .form-hub-nav { margin: 0.4rem 0 0.5rem; position: static; }
+.list-layout .form-hub-nav a { min-height: 44px; }
+.form-layout .list-card { display: grid; gap: 0.6rem; padding: 0.5rem 0.75rem 1rem; }
+.list-bar {
+  position: sticky;
+  top: calc(var(--toolbar-height, 3.1rem) + 0.25rem);
+  z-index: 14;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 0.75rem;
+  margin: 0 -0.75rem;
+  padding: 0.25rem 0.75rem 0;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+.list-summary { margin: 0; font-weight: 700; }
+.list-save-status { margin: 0 auto 0 0; min-height: 44px; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; color: var(--text-soft); font-size: 0.9rem; }
+.list-save-status[data-status="saving"] { color: var(--text-soft); }
+.list-save-status[data-status="error"] { flex-basis: 100%; order: 5; color: var(--text); font-weight: 700; margin: 0; }
+.list-mode-btn { min-height: 44px; min-width: 44px; padding: 0.4rem 0.9rem; text-transform: none; }
+.list-layout[data-mode="edit"] .list-mode-btn { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 700; }
+.list-progress { flex-basis: 100%; order: 9; width: 100%; height: 4px; margin: 0; border: 0; appearance: none; -webkit-appearance: none; background: var(--border); accent-color: var(--accent); display: block; }
+.list-progress::-webkit-progress-bar { background: var(--border); }
+.list-progress::-webkit-progress-value { background: var(--accent); }
+.list-progress::-moz-progress-bar { background: var(--accent); }
+.list-retry { min-height: 44px; min-width: 44px; padding: 0.4rem 0.75rem; }
+.list-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.4rem 0.5rem; align-items: center; }
+.list-finder,
+.list-add-form { display: contents; }
+.list-controls label { display: block; min-width: 0; text-transform: none; }
+.list-filter { order: 1; }
+.list-jump { order: 2; }
+.list-add-text { order: 3; }
+.list-add-btn { order: 4; }
+.list-add-section-pick { order: 5; }
+.list-hide-completed { order: 6; display: inline-flex !important; align-items: center; gap: 0.5rem; min-height: 44px; }
+.list-filter input,
+.list-jump select,
+.list-add-form input,
+.list-add-form select { width: 100%; min-height: 44px; text-transform: none; }
+.form-layout .form-card .list-hide-completed input[type="checkbox"] { width: 1.5rem; height: 1.5rem; min-height: 0; padding: 0; flex: none; accent-color: var(--accent); }
+.list-add-btn { min-height: 44px; min-width: 44px; padding: 0.4rem 1.1rem; text-transform: none; }
+.list-root { display: block; }
+.list-section { margin: 0 0 0.75rem; scroll-margin-top: calc(var(--toolbar-height, 3.1rem) + 4.5rem); }
+.list-section-header { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; padding: 0.35rem 0; border-bottom: 2px solid var(--border); }
+.list-section-header h2 { margin: 0; font-size: 1rem; text-transform: none; min-width: 0; overflow-wrap: anywhere; }
+.list-section-count { margin: 0; color: var(--text-soft); font-size: 0.9rem; flex: none; }
+.list-empty { margin: 0.5rem 0; color: var(--text-soft); }
+.list-items { list-style: none; margin: 0; padding: 0; }
+.list-item { border-bottom: 1px solid var(--border); }
+.list-row { display: flex; align-items: center; gap: 0.25rem; }
+.list-item.is-checked .list-check-text { text-decoration: line-through; color: var(--text-soft); }
+.list-check { flex: 1 1 auto; display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 0.25rem; min-height: 48px; padding: 0.1rem 0; text-transform: none; cursor: pointer; position: relative; }
+.form-layout .form-card .list-check input[type="checkbox"] { position: absolute; opacity: 0; width: 1px; height: 1px; min-height: 0; padding: 0; margin: 0; }
+.list-check input:focus-visible + .list-check-mark { outline: 3px solid var(--text); outline-offset: 2px; }
+.list-check-mark { width: 28px; height: 28px; margin: 8px; border: 2px solid var(--accent); border-radius: 6px; display: inline-block; position: relative; }
+.list-check input:checked + .list-check-mark { background: var(--accent); }
+.list-check input:checked + .list-check-mark::after { content: ""; position: absolute; left: 8px; top: 3px; width: 7px; height: 14px; border: solid var(--bg); border-width: 0 3px 3px 0; transform: rotate(45deg); }
+.list-check-text { text-transform: none; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
+.list-owner { color: var(--text-soft); font-weight: 400; }
+.list-row-menu { flex: none; }
+.list-item-panel { display: grid; gap: 0.5rem; padding: 0.25rem 0 0.75rem 44px; }
+.list-edit-form { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: end; }
+.list-edit-form label { flex: 1 1 10rem; display: grid; gap: 0.2rem; text-transform: none; font-size: 0.9rem; }
+.list-edit-form input { min-height: 44px; width: 100%; }
+.list-item-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+.list-remove-confirm { font-weight: 700; border-width: 2px; }
+.list-icon-btn { min-height: 44px; min-width: 44px; padding: 0.4rem 0.75rem; text-transform: none; }
+.list-section-assign { display: grid; gap: 0.2rem; text-transform: none; font-size: 0.9rem; }
+.list-section-assign select { min-height: 44px; max-width: 100%; text-transform: none; }
+.list-add-section { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end; margin: 0.5rem 0 0; }
+.list-add-section[hidden] { display: none; }
+.list-add-section label { flex: 1 1 12rem; display: grid; gap: 0.25rem; text-transform: none; }
+.list-add-section input { min-height: 44px; width: 100%; }
+.list-add-section button { min-height: 44px; min-width: 44px; padding: 0.4rem 0.75rem; text-transform: none; }
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* audio markers */
+/* markers feature off: player and waveform only */
+.audio-markers-off .content.audio-markers .am-bar-markers,
+.audio-markers-off .content.audio-markers .am-lanes,
+.audio-markers-off .content.audio-markers .am-side,
+.audio-markers-off .content.audio-markers .am-save,
+.audio-markers-off .content.audio-markers .am-checks-main,
+.audio-markers-off .content.audio-markers .am-notice { display: none; }
+
+.layout.layout-audio {
+  max-width: 1400px;
+}
+
+/* Type scale 13 / 15 / 17 / 22 on one 1.45 line height; the host UI family throughout. */
+.content.audio-markers {
+  --am-danger: color-mix(in srgb, #e5484d 62%, var(--text));
+  --am-ruler-h: 26px;
+  --am-lane-h: 30px;
+  --am-hair: color-mix(in srgb, var(--border) 60%, transparent);
+  --am-fs-s: 13px;
+  --am-fs-m: 15px;
+  --am-fs-l: 17px;
+  --am-fs-xl: 22px;
+  padding: 1rem;
+  overflow: visible;
+  color: var(--text);
+  font-size: var(--am-fs-m);
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.audio-markers .am-app[hidden],
+.audio-markers [hidden] {
+  display: none !important;
+}
+
+.audio-markers .am-muted {
+  color: var(--text-soft);
+  font-size: var(--am-fs-s);
+}
+
+/* Toolbar: transport | view | taps | help on one row; template, set and add on a second. */
+.audio-markers .am-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.audio-markers .am-bar-markers {
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.audio-markers .am-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+}
+
+.audio-markers .am-help-btn {
+  margin-left: auto;
+  min-width: 2rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.audio-markers .am-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.25rem 0.7rem;
+  min-height: 2rem;
+  font: inherit;
+  font-size: var(--am-fs-s);
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.audio-markers .am-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.audio-markers .am-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.audio-markers .am-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+/* A secondary action that reads as text until it is hovered. */
+.audio-markers .am-btn-text {
+  border-color: transparent;
+  color: var(--link);
+}
+
+.audio-markers .am-btn-text:hover:not(:disabled) {
+  border-color: var(--border);
+}
+
+.audio-markers .am-btn.am-on,
+.audio-markers .am-btn[aria-pressed="true"]:not(.am-btn-primary) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.audio-markers .am-btn-danger {
+  color: var(--am-danger);
+}
+
+.audio-markers .am-btn:focus-visible,
+.audio-markers .am-marker:focus-visible,
+.audio-markers .am-check-link:focus-visible,
+.audio-markers .am-detail-pre:focus-visible,
+.audio-markers input:focus-visible,
+.audio-markers select:focus-visible,
+.audio-markers textarea:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+/* A point marker has no width of its own: ring its flag and thicken its tick instead. */
+.audio-markers .am-point.am-marker:focus-visible {
+  outline: none;
+}
+
+.audio-markers .am-point.am-marker:focus-visible .am-flag {
+  outline: 2px solid var(--link);
+  outline-offset: 1px;
+}
+
+.audio-markers .am-point.am-marker:focus-visible .am-pline {
+  width: 4px;
+  left: -2px;
+}
+
+.audio-markers .am-time {
+  min-width: 6.2rem;
+  font-size: var(--am-fs-xl);
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.audio-markers .am-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--am-fs-s);
+  color: var(--text-soft);
+}
+
+.audio-markers .am-field-block {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+  margin: 0.5rem 0;
+}
+
+.audio-markers .am-field-label {
+  font-size: var(--am-fs-s);
+  font-weight: 400;
+  color: var(--text-soft);
+}
+
+.audio-markers select,
+.audio-markers input[type="text"],
+.audio-markers input[type="number"],
+.audio-markers textarea {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.25rem 0.45rem;
+  font: inherit;
+  font-size: var(--am-fs-s);
+  min-height: 2rem;
+  max-width: 100%;
+}
+
+/* The Set select keeps one width however long its entries are. */
+.audio-markers .am-bar-markers select {
+  width: 14rem;
+  text-overflow: ellipsis;
+}
+
+.audio-markers .am-bar-markers select[data-am="type"] {
+  width: 15rem;
+}
+
+.audio-markers textarea {
+  resize: vertical;
+}
+
+.audio-markers .am-notice {
+  margin: -0.4rem 0 0.8rem;
+  padding: 0.35rem 0.6rem;
+  border-left: 3px solid var(--am-danger);
+  color: var(--text);
+  font-size: var(--am-fs-s);
+  overflow-wrap: anywhere;
+}
+
+.audio-markers .am-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 19rem;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.audio-markers .am-main {
+  min-width: 0;
+}
+
+/* One surface: ruler, waveform, strip and lanes sit together; hairlines only between lanes. */
+.audio-markers .am-stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--bg);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.audio-markers .am-ruler {
+  height: var(--am-ruler-h);
+  cursor: col-resize;
+  touch-action: pan-y;
+}
+
+.audio-markers canvas {
+  display: block;
+}
+
+.audio-markers .am-wave {
+  position: relative;
+  cursor: col-resize;
+  touch-action: pan-y;
+}
+
+.audio-markers .am-over {
+  position: absolute;
+  inset: 0 auto auto 0;
+  pointer-events: none;
+}
+
+.audio-markers .am-image {
+  margin-top: 2px;
+  cursor: col-resize;
+  touch-action: pan-y;
+}
+
+.audio-markers .am-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--link);
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg) 60%, transparent);
+}
+
+.audio-markers .am-lanes {
+  margin-top: 6px;
+}
+
+.audio-markers .am-lane {
+  position: relative;
+  height: var(--am-lane-h);
+  border-top: 1px solid var(--am-hair);
+  background: transparent;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.audio-markers .am-lane-stacked {
+  height: 54px;
+}
+
+.audio-markers .am-lane-source {
+  height: 22px;
+}
+
+.audio-markers .am-lane-label {
+  position: absolute;
+  left: 6px;
+  top: 5px;
+  z-index: 4;
+  padding: 0 0.4rem;
+  border-radius: 10px;
+  font-size: var(--am-fs-s);
+  font-weight: 400;
+  line-height: 20px;
+  color: var(--text-soft);
+  /* A solid pill drawn above the flags, so a flag at x=0 never hides the lane name. */
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--am-hair);
+  pointer-events: auto;
+  user-select: none;
+}
+
+.audio-markers .am-lane-source .am-lane-label {
+  top: 1px;
+}
+
+.audio-markers .am-lane-empty {
+  position: absolute;
+  left: 7rem;
+  top: 5px;
+  font-size: var(--am-fs-s);
+  line-height: 20px;
+  color: var(--text-soft);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.audio-markers .am-marker {
+  z-index: 1;
+  --am-fill: var(--am-c, var(--accent));
+  --am-ink-c: var(--am-ink, var(--bg));
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.audio-markers .am-region {
+  top: 4px;
+  bottom: 4px;
+  border-radius: 4px;
+  background: var(--am-fill);
+  color: var(--am-ink-c);
+  display: flex;
+  align-items: center;
+  min-width: 2px;
+}
+
+.audio-markers .am-region .am-body {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  padding: 0 0.5rem;
+  font-size: var(--am-fs-s);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: grab;
+}
+
+.audio-markers .am-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.audio-markers .am-edge-l {
+  left: -4px;
+  border-left: 3px solid color-mix(in srgb, var(--am-ink-c) 80%, transparent);
+  border-radius: 4px 0 0 4px;
+}
+
+.audio-markers .am-edge-r {
+  right: -4px;
+  border-right: 3px solid color-mix(in srgb, var(--am-ink-c) 80%, transparent);
+  border-radius: 0 4px 4px 0;
+}
+
+.audio-markers .am-point {
+  width: 0;
+}
+
+/* A point is a tick through the lane plus a label pill; the pill flips left at the right edge. */
+.audio-markers .am-pline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: var(--am-fill);
+}
+
+.audio-markers .am-flag {
+  position: absolute;
+  left: 0;
+  top: calc(4px + var(--am-row, 0) * 24px);
+  max-width: 11rem;
+  padding: 0 0.5rem;
+  line-height: 20px;
+  border-radius: 0 4px 4px 0;
+  background: var(--am-fill);
+  color: var(--am-ink-c);
+  font-size: var(--am-fs-s);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.audio-markers .am-flip .am-flag {
+  left: auto;
+  right: 0;
+  border-radius: 4px 0 0 4px;
+}
+
+.audio-markers .am-point::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  cursor: ew-resize;
+}
+
+/* Unsaved edits: a solid fill with an accent ring. Recorded in the target:
+   translucent with a dashed outline. Saved: solid. */
+.audio-markers .am-unsaved {
+  outline: 2px solid var(--link);
+  outline-offset: 1px;
+}
+
+.audio-markers .am-point.am-unsaved {
+  outline: none;
+}
+
+.audio-markers .am-point.am-unsaved .am-flag {
+  box-shadow: 0 0 0 2px var(--link);
+}
+
+.audio-markers .am-target.am-region {
+  background: color-mix(in srgb, var(--am-fill) 28%, var(--bg));
+  border: 2px dashed var(--am-fill);
+  color: var(--text);
+}
+
+.audio-markers .am-target .am-flag {
+  background: color-mix(in srgb, var(--am-fill) 28%, var(--bg));
+  border: 2px dashed var(--am-fill);
+  border-left: 0;
+  color: var(--text);
+}
+
+.audio-markers .am-target.am-flip .am-flag {
+  border-left: 2px dashed var(--am-fill);
+  border-right: 0;
+}
+
+.audio-markers .am-target .am-pline {
+  background: repeating-linear-gradient(to bottom, var(--am-fill) 0 5px, transparent 5px 8px);
+}
+
+.audio-markers .am-selected {
+  z-index: 3;
+  filter: brightness(1.12);
+}
+
+.audio-markers .am-selected.am-region,
+.audio-markers .am-selected .am-flag {
+  box-shadow: 0 0 0 2px var(--text);
+}
+
+.audio-markers .am-invalid.am-region,
+.audio-markers .am-invalid .am-flag {
+  box-shadow: 0 0 0 2px var(--am-danger);
+}
+
+.audio-markers .am-ghost {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  pointer-events: none;
+  border: 1px dashed var(--am-c, var(--text-soft));
+  opacity: 0.8;
+}
+
+.audio-markers .am-ghost.am-point {
+  width: 0;
+  top: 0;
+  bottom: 0;
+  border-width: 0 0 0 1px;
+}
+
+.audio-markers .am-src-tick {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 0;
+  border-left: 2px solid var(--am-c, var(--text-soft));
+}
+
+.audio-markers .am-src-band {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  border: 1px solid var(--am-c, var(--text-soft));
+  background: color-mix(in srgb, var(--am-c, var(--text-soft)) 20%, transparent);
+}
+
+.audio-markers .am-dashed {
+  border-style: dashed;
+}
+
+.audio-markers .am-pan {
+  width: 100%;
+  margin: 0.5rem 0 0;
+  accent-color: var(--accent);
+}
+
+/* Status: one quiet sentence, tap compensation on a second muted line. */
+.audio-markers .am-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0.6rem 0 0;
+  font-size: var(--am-fs-m);
+}
+
+.audio-markers .am-status:empty {
+  display: none;
+}
+
+.audio-markers .am-alert {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--am-danger);
+  border-radius: 6px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--am-danger) 12%, var(--bg));
+  font-size: var(--am-fs-s);
+}
+
+/* Problems blocking Save sit under the lanes, one line per marker and rule. */
+.audio-markers .am-checks-main {
+  margin: 0.8rem 0 0;
+  padding: 0 0 0 0.75rem;
+  border-left: 3px solid var(--am-danger);
+}
+
+.audio-markers .am-checks h4 {
+  margin: 0 0 0.2rem;
+  font-size: var(--am-fs-s);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.audio-markers .am-checks ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--am-fs-s);
+}
+
+.audio-markers .am-check-link {
+  padding: 0.1rem 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--am-danger);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* Save: same surface as the lanes, separated by space rather than a box. */
+.audio-markers .am-save {
+  margin-top: 1.5rem;
+  padding: 0;
+}
+
+.audio-markers .am-save-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  align-items: flex-end;
+}
+
+.audio-markers .am-save-row .am-field-block {
+  flex: 1 1 14rem;
+  margin: 0.2rem 0;
+}
+
+.audio-markers .am-save-target .am-field-block {
+  flex: 0 1 22rem;
+}
+
+.audio-markers .am-accept {
+  padding-bottom: 0.4rem;
+  font-size: var(--am-fs-s);
+  color: var(--text-soft);
+}
+
+.audio-markers .am-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.audio-markers .am-save .am-actions .am-btn-primary {
+  min-height: 2.4rem;
+  padding: 0.35rem 1.2rem;
+  font-size: var(--am-fs-m);
+}
+
+.audio-markers .am-save-hint {
+  margin: 0.5rem 0 0;
+}
+
+.audio-markers .am-actions-notes {
+  margin-top: 0.4rem;
+}
+
+.audio-markers .am-preview {
+  margin-top: 0.9rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--am-hair);
+}
+
+.audio-markers .am-diff {
+  max-height: 16rem;
+  overflow: auto;
+  margin: 0.4rem 0 0;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background: var(--bg-code);
+  font-size: var(--am-fs-s);
+  white-space: pre;
+}
+
+/* Right column: no frame, one hairline divides it from the lanes. */
+.audio-markers .am-side {
+  position: sticky;
+  top: 4.5rem;
+  min-width: 0;
+  max-height: calc(100vh - 5rem);
+  overflow-y: auto;
+  padding-left: 1.25rem;
+  border-left: 1px solid var(--am-hair);
+}
+
+.audio-markers .am-inspector {
+  min-width: 0;
+}
+
+.audio-markers .am-inspector-toggle,
+.audio-markers .am-panel-toggle {
+  display: none;
+  width: 100%;
+  text-align: left;
+}
+
+.audio-markers .am-recordpanel {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--am-hair);
+}
+
+.audio-markers .am-panel-toggle {
+  display: block;
+  width: auto;
+  padding: 0;
+  border: 0;
+  font-size: var(--am-fs-l);
+  font-weight: 600;
+  cursor: default;
+}
+
+.audio-markers .am-panel-toggle:hover:not(:disabled) {
+  border-color: transparent;
+}
+
+.audio-markers .am-record-body {
+  margin-top: 0.5rem;
+}
+
+.audio-markers .am-inspector h3,
+.audio-markers .am-help h3 {
+  margin: 0 0 0.5rem;
+  font-size: var(--am-fs-l);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.audio-markers .am-inspector h4 {
+  margin: 0.2rem 0 0.3rem;
+  font-size: var(--am-fs-s);
+  color: var(--text);
+}
+
+.audio-markers .am-pos {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.audio-markers .am-pos input {
+  flex: 1;
+  min-width: 0;
+}
+
+.audio-markers .am-unit {
+  min-width: 3.4rem;
+  font-size: var(--am-fs-s);
+  color: var(--text-soft);
+}
+
+.audio-markers .am-kv {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.25rem 0.8rem;
+  margin: 0;
+  font-size: var(--am-fs-s);
+}
+
+.audio-markers .am-kv dt {
+  color: var(--text-soft);
+}
+
+.audio-markers .am-kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.audio-markers .am-detail-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.audio-markers .am-detail-pre {
+  max-height: 10rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  background: var(--bg-code);
+  color: var(--text);
+  font-size: var(--am-fs-s);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.audio-markers .am-doc {
+  margin-top: 0.9rem;
+}
+
+.audio-markers .am-doc-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+  font-size: var(--am-fs-s);
+}
+
+.audio-markers .am-doc-label {
+  font-weight: 600;
+}
+
+.audio-markers .am-doc-text {
+  max-height: 14rem;
+}
+
+.audio-markers .am-badge {
+  padding: 0 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: var(--am-fs-s);
+  line-height: 1.4;
+  color: var(--text-soft);
+}
+
+.audio-markers .am-check {
+  cursor: pointer;
+}
+
+.audio-markers .am-help {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--am-hair);
+}
+
+.audio-markers .am-help dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.25rem 1rem;
+  margin: 0 0 0.6rem;
+  font-size: var(--am-fs-s);
+}
+
+.audio-markers .am-help dt {
+  font-weight: 600;
+}
+
+.audio-markers .am-help dd {
+  margin: 0;
+}
+
+@media (max-width: 800px) {
+  .layout.layout-audio {
+    padding: 0.5rem;
+  }
+
+  .content.audio-markers {
+    padding: 0.5rem;
+  }
+
+  .audio-markers .am-cols {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .audio-markers .am-side {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .audio-markers .am-inspector-toggle {
+    display: block;
+  }
+
+  .audio-markers .am-recordpanel {
+    margin-top: 0.5rem;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .audio-markers .am-panel-toggle {
+    display: block;
+    width: 100%;
+    padding: 0.25rem 0.7rem;
+    border: 1px solid var(--border);
+    font-size: var(--am-fs-s);
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .audio-markers .am-inspector-closed .am-inspector-body,
+  .audio-markers .am-record-closed .am-record-body {
+    display: none;
+  }
+
+  .audio-markers .am-bar {
+    gap: 0.5rem 0.9rem;
+  }
+
+  .audio-markers .am-help-btn {
+    margin-left: 0;
+  }
+
+  .audio-markers .am-bar-markers select,
+  .audio-markers .am-bar-markers select[data-am="type"] {
+    width: 11rem;
+  }
+
+  .audio-markers .am-btn {
+    min-height: 2.5rem;
+  }
+
+  .audio-markers .am-help dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .audio-markers .am-lane-empty {
+    left: 6rem;
+    white-space: normal;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .audio-markers *,
+  .audio-markers *::before,
+  .audio-markers *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.audio-markers .am-cal {
+  width: 4.5rem;
+}
+
+.audio-markers .am-check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.audio-markers .am-readonly {
+  opacity: 0.6;
+}
+
+/* Drift badge: sits inside the flag's leading edge so the lane's overflow never clips it. */
+.audio-markers .am-drift {
+  position: absolute;
+  top: calc(6px + var(--am-row, 0) * 24px);
+  left: 3px;
+  z-index: 4;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--am-danger);
+  color: var(--bg);
+  font-size: var(--am-fs-s);
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.audio-markers .am-flip .am-drift {
+  left: auto;
+  right: 3px;
+}
+
+.audio-markers .am-drifted .am-flag {
+  padding-left: 1.5rem;
+}
+
+.audio-markers .am-flip.am-drifted .am-flag {
+  padding-left: 0.5rem;
+  padding-right: 1.5rem;
+}
+
+.audio-markers .am-region .am-drift {
+  top: 6px;
+  left: 3px;
+  right: auto;
+}
+
+.audio-markers .am-driftbox {
+  margin-top: 0.8rem;
+  padding: 0.5rem 0 0.5rem 0.7rem;
+  border-left: 3px solid var(--am-danger);
+}
+
 /* ============================================================================
    Document components
    ----------------------------------------------------------------------------
@@ -3131,3 +4248,4 @@ tbody tr:last-child td {
   color: var(--text-soft);
   font-size: 0.8rem;
 }
+

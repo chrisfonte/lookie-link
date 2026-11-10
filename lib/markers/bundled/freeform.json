@@ -1,0 +1,14 @@
+{
+  "contractVersion": 1,
+  "resourceKind": "marker-template",
+  "templateId": "freeform",
+  "revision": 1,
+  "title": "Free-form markers",
+  "description": "Drop labelled points and regions anywhere in the file. No constraints.",
+  "unit": "ms",
+  "markers": [
+    { "id": "note", "label": "Note", "kind": "point", "color": "#4fd8e8", "multiple": true },
+    { "id": "span", "label": "Span", "kind": "region", "color": "#9d96f3", "multiple": true }
+  ],
+  "keys": { "note": "n" }
+}

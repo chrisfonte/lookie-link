@@ -87,6 +87,8 @@ test('valid HTML bundle reports local assets and document targets', async (t) =>
     unsupportedLocalAssetCount: 0,
     navigationLinkCount: 1,
     missingNavigationTargetCount: 0,
+    kitWarningCount: 0,
+    contractWarningCount: 0,
   });
   assert.deepEqual(response.body.localAssets.map((entry) => entry.resolvedPath), [
     'bundle/styles.css',
@@ -203,6 +205,8 @@ test('validation response keeps the deployed schema', async (t) => {
     'urls',
     'localAssets',
     'navigationLinks',
+    'kit',
+    'pageContract',
     'summary',
   ]);
   assert.equal(response.body.kind, 'html-render-validation');
