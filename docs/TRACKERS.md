@@ -367,8 +367,8 @@ Every JSON request needs `Content-Type: application/json` (otherwise `415`).
     JavaScript's `Date#getTimezoneOffset()`, so never pass that value through.
   Supplying only some of the three is `422`; offsets that disagree are `400`.
 - **`idempotencyKey`** (1–128 visible ASCII characters) identifies one
-  intended submission for this actor and tracker. The `Idempotency-Key`
-  header takes precedence over the body key. Reusing the key returns the
+  intended submission for this actor and tracker. A nonempty
+  `Idempotency-Key` header takes precedence over the body key. Reusing the key returns the
   original record only when the normalized captured submission is identical
   (a body that differs only by values the server fills in counts as
   identical); otherwise it returns `409 idempotency_conflict`. A live schema

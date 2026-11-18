@@ -467,3 +467,53 @@ test('a correction that omits the pinned value gets it filled like a new entry',
     await server.cleanup();
   }
 });
+
+test('a legacy retry that left an optional pinned select out replays, for entries and corrections', async () => {
+  const server = await makeServer();
+  try {
+    const submit = await jsonClient(server, 'edge-select-log');
+    const probe = await submit({ values: { count: 99, room: 'east' } });
+    assert.equal(probe.status, 201, probe.text);
+    const actor = probe.json().receipt.actor;
+    const legacyService = new SubmissionService({
+      registry: new TemplateRegistry({ templatesPath: server.templatesPath }),
+      store: new SubmissionStore({ storageRoot: server.submissionsPath }),
+    });
+
+    // Before this change an optional pinned select could be left out, and the
+    // entry was stored without it.
+    const legacy = await legacyService.submit({
+      templateId: 'edge-select-log', values: { count: 1 }, actor, idempotencyKey: 'legacy-optional-pinned',
+    });
+    assert.equal(legacy.error, undefined, JSON.stringify(legacy.error));
+    assert.deepEqual(legacy.receipt.values.map((entry) => entry.fieldId), ['count']);
+    const legacyCorrection = await legacyService.submit({
+      templateId: 'edge-select-log', values: { count: 2 }, actor, idempotencyKey: 'legacy-optional-pinned-fix',
+      supersedesRecord: { resourceKind: 'form-submission', id: legacy.submissionId },
+    });
+    assert.equal(legacyCorrection.error, undefined, JSON.stringify(legacyCorrection.error));
+    const before = await storedRecords(server.submissionsPath);
+
+    const replay = await submit({ values: { count: 1 }, idempotencyKey: 'legacy-optional-pinned' });
+    assert.equal(replay.status, 201, replay.text);
+    assert.equal(replay.json().submissionId, legacy.submissionId);
+    assert.deepEqual(replay.json().receipt.values.map((entry) => entry.fieldId), ['count'], 'original receipt, unfilled');
+
+    const replayCorrection = await submit({
+      values: { count: 2 }, idempotencyKey: 'legacy-optional-pinned-fix',
+      supersedesRecord: { resourceKind: 'form-submission', id: legacy.submissionId },
+    });
+    assert.equal(replayCorrection.status, 201, replayCorrection.text);
+    assert.equal(replayCorrection.json().submissionId, legacyCorrection.submissionId);
+
+    // Changed values under either key still conflict.
+    assert.equal((await submit({ values: { count: 3 }, idempotencyKey: 'legacy-optional-pinned' })).status, 409);
+    assert.equal((await submit({
+      values: { count: 3 }, idempotencyKey: 'legacy-optional-pinned-fix',
+      supersedesRecord: { resourceKind: 'form-submission', id: legacy.submissionId },
+    })).status, 409);
+    assert.deepEqual(await storedRecords(server.submissionsPath), before, 'stored records untouched');
+  } finally {
+    await server.cleanup();
+  }
+});
