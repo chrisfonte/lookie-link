@@ -261,6 +261,7 @@ const ROUTE_FOR_ENDPOINT = Object.freeze({
   formsTemplates: ['get', '/api/forms/templates'],
   formsSubmissions: ['get', '/api/forms/:templateId/submissions'],
   formsList: ['get', '/api/forms/:templateId/list'],
+  formsFields: ['get', '/api/forms/:templateId/fields'],
   audioInfo: ['get', '/api/audio/:repo/*'],
   audioPeaks: ['get', '/api/peaks/:repo/*'],
   markerTemplates: ['get', '/api/markers/templates'],
@@ -306,7 +307,7 @@ const CAPABILITY_ENDPOINTS = Object.freeze({
   wallpapers: ['wallpaperImage'],
   appearance: ['appearance', 'appearanceTheme'],
   kits: ['kits', 'kit', 'kitStylesheet', 'kitFile'],
-  forms: ['forms', 'formsTemplates', 'formsSubmissions', 'formsList'],
+  forms: ['forms', 'formsTemplates', 'formsSubmissions', 'formsList', 'formsFields'],
   audio: ['audioInfo', 'audioPeaks'],
   markers: ['markerTemplates', 'markerRecords', 'markerContext', 'markerPreview'],
 });

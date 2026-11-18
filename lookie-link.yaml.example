@@ -60,6 +60,17 @@ repositories:
 #         view: true
 #         write: true
 #         publish: false
+#     tracker_logger:
+#       # Forms capabilities are separate from repo permissions. A static token
+#       # needs subject.agentId to act on forms; managed API keys take the same
+#       # list as `formsCapabilities` when created.
+#       secretEnv: LOOKIE_TOKEN_TRACKER_LOGGER
+#       subject:
+#         agentId: tracker-logger
+#       permissions:
+#         view: true
+#       repos: []
+#       formsCapabilities: [forms.submit]   # add forms.manage to edit trackers
 #   apiKeys:
 #     storePath: ~/.local/share/lookie-link/agent-api-keys.yaml
 #     adminTokens:
