@@ -1249,9 +1249,11 @@ test('entries page is reverse chronological, grouped with date and time, and str
       });
       assert.equal(response.status, 201);
     };
-    await submit('owner', jsonValues({ 'top-weight': 205, notes: 'Older own' }));
-    await submit('owner', jsonValues({ 'top-weight': 225, notes: 'Newer own' }));
-    await submit('other', jsonValues({ 'top-weight': 995, notes: 'Foreign secret' }));
+    // JSON entries are dated by their datetime field (as on the page), so each
+    // carries its own session time.
+    await submit('owner', jsonValues({ 'session-date': '2026-07-19T18:15:00Z', 'top-weight': 205, notes: 'Older own' }));
+    await submit('owner', jsonValues({ 'session-date': '2026-07-20T08:30:00Z', 'top-weight': 225, notes: 'Newer own' }));
+    await submit('other', jsonValues({ 'session-date': '2026-07-21T12:45:00Z', 'top-weight': 995, notes: 'Foreign secret' }));
 
     const refreshedForm = await server.request('/forms/gym-session-entry', {
       headers: { 'X-Principal': 'owner' },

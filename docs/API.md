@@ -218,6 +218,10 @@ A projection writes the saved values into a target file. Send `projection: { id,
 
 Agents present a bearer token. Browsers use the cookie `lookie_markers_context` set when the viewer page is served, send its token as `X-CSRF-Token`, and must send an `Origin` matching `markers.publicOrigins` (falling back to `forms.publicOrigins`): `403 origin_rejected` or `403 csrf_rejected` name the missing piece, and a bearer together with the cookie is `400 ambiguous_credentials`. Mutations never accept `?token=`. Reads may.
 
+## Tracker submissions
+
+`POST /api/forms/:templateId/submissions` stores one tracker entry. When the key of a pinned select (exactly one enabled option) is missing, that option is recorded. `null` or `""` is still `422`. Datetime values need an explicit offset; minute precision is accepted and stored with `:00` seconds. When `eventAt`/`timezone`/`clientOffsetMinutes` are all absent, they come from the first datetime value with an explicit offset, unless no zone matches that offset (then display falls back to `receiptAt`). Field defaults are not applied. A partial trio is `422` at path `eventTime`. See the [agent quickstart](TRACKERS.md#agent-quickstart).
+
 ## Stale-write guards
 
 Two guard styles exist, for historical reasons:
