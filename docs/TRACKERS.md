@@ -117,12 +117,23 @@ options:
   form a cycle. A child form may name an inherited parent field; that reference
   resolves at serve time.
 - **Meaning.** The field is visible when its target is itself visible and the
-  target's submitted value is one of `optionIds` (for a multi-select, any
-  selected option counts). Values are what was submitted: defaults are not
-  applied, so an API caller that omits the target hides the field.
+  target's value is one of `optionIds` (for a multi-select, any selected
+  option counts).
+- **Fill order.** Visibility is judged on the values after fills:
+  - The server fills an omitted pinned select (one enabled option) first, so
+    an omitted pinned target counts as chosen.
+  - The server applies no other field `default`. An API caller that omits
+    any other target hides the field.
+  - `lookie forms submit` fills declared defaults before sending, so the
+    server then drops any filled value whose condition is false.
 - **Hidden fields.** A hidden field is never required, and any value submitted
   for it is dropped before the entry is stored, on the native form and the JSON
   API alike. A stored entry therefore never contradicts its own condition.
+- **Event time.** `eventAt` is derived only from a datetime that stays visible.
+  A hidden datetime never sets it, on the native form or JSON.
+  - When an explicit trio fills a sole datetime field that is hidden, that
+    copied value is dropped. This is harmless: the trio still sets the event
+    time.
 - **In the browser.** The form, inline corrections and history editors hide and
   disable a conditional field while its condition is false. Without script the
   field stays visible and the server still drops a hidden value. A required
@@ -455,7 +466,7 @@ Every JSON request needs `Content-Type: application/json` (otherwise `415`).
 - **Supply the time trio together, or let JSON derive it.** When all three of
   `eventAt` / `timezone` / `clientOffsetMinutes` are absent, the first active
   datetime field in field order with an explicit-offset value supplies the
-  event time. The server uses its configured forms timezone when its offset
+  event time. A datetime hidden by a `showWhen` condition is skipped. The server uses its configured forms timezone when its offset
   agrees at that instant, otherwise `UTC` or a whole-hour `Etc/GMT` zone. If
   no matching zone is available (for example `+05:30` when the server zone is
   not on that offset), `eventAt` remains absent and the displayed time falls

@@ -3035,3 +3035,63 @@ test('a parent edit that breaks a child showWhen leaves the child accepting entr
     await cleanup(fixture, server);
   }
 });
+
+test('JSON submit derives the event time only from a visible datetime', async () => {
+  const fixture = await makeFixture();
+  const fields = (extra) => [
+    { id: 'scale', type: 'select', label: 'Scale', required: true, options: [{ id: 'home', label: 'Home' }, { id: 'gym', label: 'Gym' }] },
+    ...extra,
+  ];
+  const base = { contractVersion: 1, resourceKind: 'form-template', ownerId: 'operator', revision: 1, grammarVersion: 1 };
+  await fs.writeFile(path.join(fixture.templatesPath, 'json-event.yaml'), yaml.dump({
+    ...base, templateId: 'json-event', title: 'JSON event',
+    fields: fields([
+      { id: 'checked-in-at', type: 'datetime', label: 'Checked in', required: false, showWhen: { fieldId: 'scale', optionIds: ['gym'] } },
+      { id: 'weighed-at', type: 'datetime', label: 'Weighed at', required: false },
+    ]),
+  }), 'utf8');
+  // A pinned target: omitted on JSON, filled by the server, then judged for visibility.
+  await fs.writeFile(path.join(fixture.templatesPath, 'json-pinned.yaml'), yaml.dump({
+    ...base, templateId: 'json-pinned', title: 'JSON pinned',
+    fields: [
+      { id: 'site', type: 'select', label: 'Site', required: true, options: [{ id: 'gym', label: 'Gym' }] },
+      { id: 'checked-in-at', type: 'datetime', label: 'Checked in', required: false, showWhen: { fieldId: 'site', optionIds: ['gym'] } },
+    ],
+  }), 'utf8');
+  // A sole datetime hidden by showWhen, with the explicit trio sent.
+  await fs.writeFile(path.join(fixture.templatesPath, 'json-sole.yaml'), yaml.dump({
+    ...base, templateId: 'json-sole', title: 'JSON sole',
+    fields: fields([
+      { id: 'checked-in-at', type: 'datetime', label: 'Checked in', required: false, showWhen: { fieldId: 'scale', optionIds: ['gym'] } },
+    ]),
+  }), 'utf8');
+  const server = await startServer(fixture);
+  try {
+    const context = await getBrowserContext(server, 'json-event');
+    const headers = { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'X-CSRF-Token': context.token };
+    const submit = async (templateId, body) => {
+      const response = await server.request(`/api/forms/${templateId}/submissions`, { method: 'POST', headers, body: JSON.stringify(body) });
+      return { status: response.status, payload: await response.json() };
+    };
+
+    const home = await submit('json-event', { values: { scale: 'home', 'checked-in-at': '2026-07-20T06:00:00-04:00', 'weighed-at': '2026-07-20T07:15:00-04:00' } });
+    assert.equal(home.status, 201);
+    assert.deepEqual(home.payload.receipt.values.map((entry) => entry.fieldId), ['scale', 'weighed-at']);
+    assert.equal(home.payload.receipt.eventAt, '2026-07-20T07:15:00-04:00', 'the hidden datetime does not set eventAt');
+
+    const gym = await submit('json-event', { values: { scale: 'gym', 'checked-in-at': '2026-07-21T06:00:00-04:00', 'weighed-at': '2026-07-21T07:15:00-04:00' } });
+    assert.equal(gym.payload.receipt.eventAt, '2026-07-21T06:00:00-04:00');
+
+    const pinned = await submit('json-pinned', { values: { 'checked-in-at': '2026-07-22T06:00:00-04:00' } });
+    assert.equal(pinned.status, 201);
+    assert.deepEqual(pinned.payload.receipt.values.map((entry) => entry.fieldId), ['site', 'checked-in-at']);
+    assert.equal(pinned.payload.receipt.eventAt, '2026-07-22T06:00:00-04:00', 'an omitted pinned target is filled before visibility');
+
+    const sole = await submit('json-sole', { values: { scale: 'home' }, eventAt: '2026-07-23T08:00:00-04:00', timezone: 'America/New_York', clientOffsetMinutes: -240 });
+    assert.equal(sole.status, 201, 'an explicit trio filling a sole hidden datetime is harmless');
+    assert.deepEqual(sole.payload.receipt.values.map((entry) => entry.fieldId), ['scale']);
+    assert.equal(sole.payload.receipt.eventAt, '2026-07-23T08:00:00-04:00');
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
