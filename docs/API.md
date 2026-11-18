@@ -174,7 +174,7 @@ Submit with `POST /api/forms/:id/submissions`:
 ```
 
 - Values nest under `values`, keyed by field id; selects take option ids. `GET /api/forms/:id/fields` returns the serving fields and option ids to any caller who can submit or view.
-- The JSON route applies no field `default` and does not derive `eventAt` from a datetime field. Send every required value, including a pinned one-option select, and send the datetime value and the `eventAt`/`timezone`/`clientOffsetMinutes` trio together.
+- Who fills what: the server fills pinned selects and derives `eventAt`; the CLI fills defaults and the datetime explicitly. The server fills an omitted select that has exactly one enabled option. When the trio is absent, it derives the trio from the first datetime value with an explicit offset. It never applies a field `default`, so a raw HTTP caller must send every other required value. `lookie forms submit` always sends the full trio, every declared `default` you omit, and the datetime field set to `eventAt`, so its body does not depend on server inference.
 - `clientOffsetMinutes` is the zone's offset from UTC at `eventAt`, east-positive: `-300` for New York in winter, `-240` in summer. It is not `Date#getTimezoneOffset()`, whose sign is inverted. The three values must agree, or the submission returns `422`.
 - `supersedesRecord` records a correction as a new entry. The prior entry is never edited.
 - `PATCH /api/forms/templates/:id` (with the draft `revision`) changes the draft, and the draft is what serves. `POST …/publish` freezes an immutable version.

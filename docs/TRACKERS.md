@@ -304,10 +304,12 @@ What `forms submit` does for you:
   from now when `--at` is absent. `--at` is RFC 3339 or a wall time read in
   `--tz`. `--tz` defaults to `LOOKIE_LINK_TIMEZONE`, then the host zone. The
   offset is the zone's offset at that instant: `-300` for EST, `-240` for EDT.
-- Fills an empty datetime field with `eventAt` and an omitted field with its
-  declared `default`, such as a pinned one-option `machine` select. The JSON
-  route itself applies neither. Without `--at`, a single datetime value you
-  supply becomes `eventAt`.
+- Fills defaults and the datetime explicitly. The server fills pinned selects
+  and derives `eventAt`; the CLI fills defaults and the datetime explicitly.
+  It sends every declared `default` you omit (the server applies none) and
+  sets an empty datetime field to `eventAt`. It always sends the full time
+  trio, so nothing depends on server inference. Without `--at`, a single
+  datetime value you supply becomes `eventAt`.
 - `--supersedes` starts from the corrected entry's values and `eventAt`, sends
   `supersedesRecord: {id, resourceKind: 'form-submission'}`, and refuses (exit
   `5`) when the entry is already superseded. Correct the latest entry instead.

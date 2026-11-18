@@ -308,3 +308,101 @@ test('lookie forms submit --dry-run prints the body without sending it', async (
   const mine = JSON.parse((await server.cli(['forms', 'submissions', 'meter-log'], server.tokens.manager)).stdout);
   assert.equal(mine.submissions.length, 0);
 });
+
+async function api(server, route, { token, method = 'GET', body, headers = {} } = {}) {
+  const response = await fetch(`${server.baseUrl}${route}`, {
+    method,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...headers,
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const text = await response.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch { /* not JSON */ }
+  return { status: response.status, json, text };
+}
+
+test('POST /api/agent-keys rejects unknown formsCapabilities and stores the allowlisted set', async (t) => {
+  const server = await startServer();
+  t.after(() => server.close());
+  const admin = 'cli-forms-admin-placeholder';
+  const base = { label: 'probe', subject: { agentId: 'probe-agent', companyId: 'example' }, permissions: { view: true }, repos: 'all' };
+  for (const formsCapabilities of [['forms.everything'], ['forms.submit', 'write'], 'forms.submit', [42]]) {
+    const refused = await api(server, '/api/agent-keys', { token: admin, method: 'POST', body: { ...base, formsCapabilities } });
+    assert.equal(refused.status, 400, `${JSON.stringify(formsCapabilities)}: ${refused.text}`);
+    assert.match(refused.text, /formsCapabilities/);
+    assert.ok(!/"token"/.test(refused.text), 'no secret is issued on refusal');
+  }
+  const listed = await api(server, '/api/agent-keys', { token: admin });
+  assert.equal(listed.status, 200);
+  assert.ok(!listed.json.keys.some((key) => key.label === 'probe'), 'refused creates leave no key behind');
+  // Non-admin bearers cannot mint keys, with or without forms capabilities.
+  const notAdmin = await api(server, '/api/agent-keys', { token: server.tokens.manager, method: 'POST', body: { ...base, formsCapabilities: ['forms.manage'] } });
+  assert.ok([401, 403].includes(notAdmin.status), notAdmin.text);
+  const created = await api(server, '/api/agent-keys', {
+    token: admin, method: 'POST', body: { ...base, formsCapabilities: ['forms.manage', 'forms.view', 'forms.view'] },
+  });
+  assert.equal(created.status, 201, created.text);
+  assert.deepEqual(created.json.key.formsCapabilities, ['forms.view', 'forms.manage']);
+});
+
+test('GET /api/forms/:id/fields refuses uniformly and never leaks invisible forms', async (t) => {
+  const server = await startServer();
+  t.after(() => server.close());
+  await createMeterTemplate(server);
+  const manage = server.tokens.manager;
+  const create = async (body) => {
+    const result = await api(server, '/api/forms/templates', { token: manage, method: 'POST', body });
+    assert.equal(result.status, 201, result.text);
+    return result.json;
+  };
+  await create({ templateId: 'meter-group', grammarVersion: 1, title: 'Meters', kind: 'container' });
+  await create({ templateId: 'meter-checklist', grammarVersion: 1, title: 'Checklist', kind: 'list' });
+  const retired = await create({ ...METER_TEMPLATE, templateId: 'retired-meter', title: 'Retired meter' });
+  const archived = await api(server, '/api/forms/templates/retired-meter/archive', {
+    token: manage, method: 'POST', body: { revision: retired.template.revision },
+  });
+  assert.equal(archived.status, 200, archived.text);
+
+  const ok = await api(server, '/api/forms/meter-log/fields', { token: server.tokens.submitter });
+  assert.equal(ok.status, 200, ok.text);
+  assert.deepEqual(Object.keys(ok.json).sort(), ['children', 'fields', 'kind', 'ok', 'schemaDigest', 'templateId', 'title']);
+  assert.ok(!/ownerId|destinationId|revision|submissionsPath|templatesPath/.test(ok.text), 'no management metadata or storage detail');
+
+  // Every refusal for a forms-less, unknown, archived, container or list
+  // target is the same 404 envelope, so existence cannot be probed.
+  const notFound = [
+    ['plain key on a real form', '/api/forms/meter-log/fields', server.tokens.plain],
+    ['unknown id', '/api/forms/no-such-form/fields', server.tokens.manager],
+    ['invalid id', '/api/forms/..%2Fetc/fields', server.tokens.manager],
+    ['archived', '/api/forms/retired-meter/fields', server.tokens.manager],
+    ['container', '/api/forms/meter-group/fields', server.tokens.manager],
+    ['list', '/api/forms/meter-checklist/fields', server.tokens.manager],
+  ];
+  const bodies = new Set();
+  for (const [label, route, token] of notFound) {
+    const result = await api(server, route, { token });
+    assert.equal(result.status, 404, `${label}: ${result.text}`);
+    assert.equal(result.json && result.json.ok, false, label);
+    bodies.add(JSON.stringify({ code: result.json.error.code, message: result.json.error.message }));
+  }
+  assert.equal(bodies.size, 1, `404 bodies differ: ${[...bodies].join(' | ')}`);
+
+  const anonymous = await api(server, '/api/forms/meter-log/fields');
+  assert.equal(anonymous.status, 401, anonymous.text);
+  const invalid = await api(server, '/api/forms/meter-log/fields', { token: 'not-a-real-token' });
+  assert.ok([401, 403].includes(invalid.status), invalid.text);
+  assert.ok(!/fields|Unit A/.test(invalid.text));
+  const queryToken = await api(server, `/api/forms/meter-log/fields?token=${encodeURIComponent(server.tokens.submitter)}`);
+  assert.equal(queryToken.status, 400, queryToken.text);
+  assert.equal(queryToken.json.error.code, 'query_credentials_rejected');
+  assert.ok(!queryToken.text.includes(server.tokens.submitter), 'query credential is not echoed');
+  const ambiguous = await api(server, '/api/forms/meter-log/fields', {
+    token: server.tokens.submitter, headers: { Cookie: 'lookie_forms_context=anything' },
+  });
+  assert.equal(ambiguous.status, 400, ambiguous.text);
+  assert.match(ambiguous.json.error.message, /Ambiguous credentials/);
+});

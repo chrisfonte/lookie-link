@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "source": "docs/SKILL-SPEC.md",
-  "sourceHash": "e22c60bfe728808bba4e04843f0feeb02d11f3b0073be52b0768aa6a1bd9eeaf",
+  "sourceHash": "d71d4c57768c372437dfdb3d5636c8b356305677d41a9b77bdf6afc675beb520",
   "generator": "scripts/generate-skill-packages.js",
   "outputs": [
     "claude-code/lookie-link/SKILL.md",
