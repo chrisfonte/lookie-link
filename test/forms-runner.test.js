@@ -2880,6 +2880,7 @@ test('the showWhen script hides and disables conditional fields on the form and 
     const inline = document.querySelector('.inline-edit-form');
     const inlineClub = inline.querySelector('select[name="club"]');
     assert.equal(inlineClub.closest('.field').hidden, false);
+    assert.equal(inlineClub.required, true, 'a conditional field visible on load is required');
     assert.equal(inlineClub.value, 'uptown');
     inline.querySelector('select[name="scale"]').value = 'home';
     inline.querySelector('select[name="scale"]').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
@@ -2905,6 +2906,8 @@ test('the showWhen script leaves a field visible when its target is not on the p
     const club = dom.window.document.querySelector('#field-club');
     assert.equal(club.closest('.field').hidden, false);
     assert.equal(club.disabled, false);
+    assert.equal(club.required, true, 'an unresolvable condition renders a plain required field');
+    assert.equal(club.hasAttribute('data-required'), false);
   } finally {
     await cleanup(fixture, server);
   }

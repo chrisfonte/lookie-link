@@ -362,3 +362,12 @@ test('a served child whose inherited condition broke still accepts entries with 
   void parentId;
   assert.ok(paths(validateTemplate(topLevel)).includes('fields[1].showWhen.optionIds[0]'));
 });
+
+test('a condition naming only disabled options leaves the field visible', () => {
+  const {fieldVisibility} = require('../lib/forms/schema');
+  const visibility = fieldVisibility([
+    field('scale', 'select', {options: [{id: 'home', label: 'Home'}, {id: 'gym', label: 'Gym', disabled: true}]}),
+    field('club', 'short-text', {showWhen: {fieldId: 'scale', optionIds: ['gym']}}),
+  ], {scale: 'home'});
+  assert.equal(visibility.get('club'), true);
+});

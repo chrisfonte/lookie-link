@@ -137,7 +137,8 @@ options:
   (`isDestroyed`) is allowed and leaves the field always visible. At submit
   time a condition that no longer resolves (for example, a parent edit that
   drops an option a child's condition names) also leaves the field visible
-  rather than refusing entries.
+  rather than refusing entries. Detaching a child copies its resolved fields,
+  so a drifted inherited condition must be fixed before the detach is accepted.
 - **History.** Stored entries are never rewritten. A correction is a new
   submission, so it applies the current conditions: correcting an old entry
   drops a value whose condition is now false.
