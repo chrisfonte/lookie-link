@@ -406,3 +406,61 @@ test('GET /api/forms/:id/fields refuses uniformly and never leaks invisible form
   assert.equal(ambiguous.status, 400, ambiguous.text);
   assert.match(ambiguous.json.error.message, /Ambiguous credentials/);
 });
+
+test('parseInstant refuses DST gaps and impossible dates, takes the earlier overlap, honors explicit offsets', () => {
+  const ny = 'America/New_York';
+  const at = (text) => cliForms.eventTimeFor(cliForms.parseInstant(text, ny), ny).eventAt;
+  // Spring forward: 02:00-02:59 does not exist on 2026-03-08 in New York.
+  assert.throws(() => cliForms.parseInstant('2026-03-08T02:30', ny), /does not exist in America\/New_York/);
+  assert.equal(at('2026-03-08T01:59'), '2026-03-08T01:59:00-05:00');
+  assert.equal(at('2026-03-08T03:00'), '2026-03-08T03:00:00-04:00');
+  // Fall back: 01:30 happens twice on 2026-11-01; the earlier (EDT) wins,
+  // and an explicit offset selects the later one.
+  assert.equal(at('2026-11-01T01:30'), '2026-11-01T01:30:00-04:00');
+  assert.equal(at('2026-11-01T01:30:00-05:00'), '2026-11-01T01:30:00-05:00');
+  assert.equal(at('2026-11-01T01:30:00-04:00'), '2026-11-01T01:30:00-04:00');
+  // Explicit offsets are kept as the instant and re-expressed in the zone.
+  assert.equal(at('2026-11-18T14:30:00Z'), '2026-11-18T09:30:00-05:00');
+  assert.equal(at('2026-11-18T15:30:00+01:00'), '2026-11-18T09:30:00-05:00');
+  // Impossible calendar values never roll into another day.
+  for (const bad of ['2026-02-30T10:00', '2026-13-01T10:00', '2026-11-18T24:00', '2026-11-18T09:60',
+    '2026-02-30T10:00:00Z', '2026-04-31T10:00:00-04:00', '2026-11-18T09:30:00+15:00', '2026-11-18T09:30:00+05:75']) {
+    assert.throws(() => cliForms.parseInstant(bad, ny), cliForms.CliFormsError, bad);
+  }
+  // A datetime value goes through the same rules.
+  assert.throws(() => cliForms.buildSubmission({
+    fields: METER_TEMPLATE.fields, assignments: ['read-at=2026-03-08T02:30', 'reading=1'], timeZone: ny,
+  }), /does not exist/);
+});
+
+test('an idempotency key needs a fixed event time so a retry replays the original receipt', async (t) => {
+  // Unit: two runs a minute apart would send different bodies, so it is refused.
+  assert.throws(() => cliForms.buildSubmission({
+    fields: METER_TEMPLATE.fields, assignments: ['reading=2'], timeZone: 'UTC', now: 0, idempotencyKey: 'k',
+  }), /--idempotency-key needs a fixed event time/);
+  const first = cliForms.buildSubmission({
+    fields: METER_TEMPLATE.fields, assignments: ['reading=2'], at: '2026-11-18T09:30', timeZone: 'UTC', now: 0, idempotencyKey: 'k',
+  }).body;
+  const later = cliForms.buildSubmission({
+    fields: METER_TEMPLATE.fields, assignments: ['reading=2'], at: '2026-11-18T09:30', timeZone: 'UTC', now: 60000, idempotencyKey: 'k',
+  }).body;
+  assert.deepEqual(later, first);
+
+  // End to end: the same keyed command run twice returns the same submission.
+  const server = await startServer();
+  t.after(() => server.close());
+  await createMeterTemplate(server);
+  const args = ['forms', 'submit', 'meter-log', '--value', 'reading=2', '--at', '2026-11-18T09:30', '--tz', 'UTC', '--idempotency-key', 'retry-example'];
+  const one = await server.cli(args, server.tokens.manager);
+  assert.equal(one.code, 0, one.stderr);
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  const two = await server.cli(args, server.tokens.manager);
+  assert.equal(two.code, 0, two.stderr);
+  assert.equal(JSON.parse(two.stdout).submissionId, JSON.parse(one.stdout).submissionId);
+  const unfixed = await server.cli(['forms', 'submit', 'meter-log', '--value', 'reading=2', '--tz', 'UTC', '--idempotency-key', 'k2'],
+    server.tokens.manager);
+  assert.equal(unfixed.code, 2);
+  assert.match(unfixed.stderr, /needs a fixed event time/);
+  const mine = JSON.parse((await server.cli(['forms', 'submissions', 'meter-log'], server.tokens.manager)).stdout);
+  assert.equal(mine.submissions.length, 1);
+});

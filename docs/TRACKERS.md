@@ -304,6 +304,9 @@ What `forms submit` does for you:
   from now when `--at` is absent. `--at` is RFC 3339 or a wall time read in
   `--tz`. `--tz` defaults to `LOOKIE_LINK_TIMEZONE`, then the host zone. The
   offset is the zone's offset at that instant: `-300` for EST, `-240` for EDT.
+  A wall time the clocks skip (spring forward) is refused. A repeated one
+  (fall back) takes the earlier instant; give an explicit offset for the
+  later one. Impossible dates such as Feb 30 are refused, never rolled over.
 - Fills defaults and the datetime explicitly. The server fills pinned selects
   and derives `eventAt`; the CLI fills defaults and the datetime explicitly.
   It sends every declared `default` you omit (the server applies none) and
@@ -314,7 +317,9 @@ What `forms submit` does for you:
   `supersedesRecord: {id, resourceKind: 'form-submission'}`, and refuses (exit
   `5`) when the entry is already superseded. Correct the latest entry instead.
   Old entries are never edited.
-- `--idempotency-key` makes a retry safe.
+- `--idempotency-key` makes a retry safe. It needs a fixed time (`--at` or a
+  datetime value), because "now" changes between runs and a changed body is
+  `409 idempotency_conflict`, not the original receipt.
 
 A `422` names the failing path, for example `values.reading: is required`.
 
