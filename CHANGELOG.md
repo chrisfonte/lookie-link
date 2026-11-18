@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — tracker JSON submit
+
+- `POST /api/forms/:id/submissions` fills an omitted pinned select (one live,
+  enabled option) as the entry page's hidden input does. It also derives
+  `eventAt`/`timezone`/`clientOffsetMinutes` from the first offset-bearing
+  datetime value when all three are absent. With the trio sent, a sole empty
+  datetime field takes `eventAt`. Field defaults are still not applied on the
+  JSON path, and partial trios are still refused. Stored record shape,
+  receipts and existing entries are unchanged.
+
 ## 2026-11-10 — Main convergence and Ops Kit 1.31
 
 - Integrate the recovered viewer, API, publication, kit, tracker, diagram and audio

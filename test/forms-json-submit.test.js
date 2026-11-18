@@ -1,0 +1,278 @@
+'use strict';
+
+// JSON submit conveniences: a pinned select is filled when omitted (as the
+// native page's hidden input does), field defaults are NOT applied, and the
+// event-time trio is derived from an offset-bearing datetime field value.
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
+const { Duplex } = require('node:stream');
+const yaml = require('js-yaml');
+const { JSDOM } = require('jsdom');
+
+const { createApp } = require('../server');
+
+const PUBLIC_ORIGIN = 'http://forms.example.test';
+
+function template(templateId, fields) {
+  return {
+    contractVersion: 1,
+    resourceKind: 'form-template',
+    templateId,
+    ownerId: 'operator',
+    revision: 1,
+    grammarVersion: 1,
+    title: templateId,
+    fields,
+  };
+}
+
+const TEMPLATES = [
+  template('machine-log', [
+    { id: 'logged-at', type: 'datetime', label: 'Logged at', required: true },
+    { id: 'machine', type: 'select', label: 'Machine', required: true, options: [{ id: 'rower', label: 'Rower' }] },
+    { id: 'minutes', type: 'number', label: 'Minutes', required: true },
+    {
+      id: 'effort', type: 'select', label: 'Effort', required: true, default: 'easy',
+      options: [{ id: 'easy', label: 'Easy' }, { id: 'hard', label: 'Hard' }],
+    },
+  ]),
+  template('retired-option-log', [
+    {
+      id: 'station', type: 'select', label: 'Station', required: true,
+      options: [{ id: 'old', label: 'Old', disabled: true }, { id: 'new', label: 'New' }],
+    },
+  ]),
+  template('two-clock-log', [
+    { id: 'started-at', type: 'datetime', label: 'Started', required: true },
+    { id: 'ended-at', type: 'datetime', label: 'Ended', required: true },
+  ]),
+];
+
+async function makeServer() {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lookie-forms-json-'));
+  const templatesPath = path.join(root, 'templates');
+  const submissionsPath = path.join(root, 'submissions');
+  await fs.mkdir(templatesPath);
+  for (const entry of TEMPLATES) {
+    await fs.writeFile(path.join(templatesPath, `${entry.templateId}.yaml`), yaml.dump(entry), 'utf8');
+  }
+  const app = createApp({
+    mappings: {},
+    accessConfig: { humanDefault: 'full' },
+    formsConfig: { enabled: true, templatesPath, submissionsPath },
+    formsPublicOrigin: PUBLIC_ORIGIN,
+    formsAudit: () => {},
+    formsTimezone: 'America/New_York',
+  });
+  return {
+    root,
+    submissionsPath,
+    request: (route, init) => inject(app, route, init),
+    cleanup: () => fs.rm(root, { recursive: true, force: true }),
+  };
+}
+
+function inject(app, route, init = {}) {
+  return new Promise((resolve, reject) => {
+    const socket = new Duplex({ read() {}, write(_chunk, _encoding, callback) { callback(); } });
+    socket.remoteAddress = '127.0.0.1';
+    const request = new http.IncomingMessage(socket);
+    request.method = init.method || 'GET';
+    request.url = route;
+    request.headers = { host: 'forms.example.test' };
+    for (const [name, value] of Object.entries(init.headers || {})) request.headers[name.toLowerCase()] = value;
+    const body = init.body === undefined ? Buffer.alloc(0) : Buffer.from(String(init.body));
+    if (body.length > 0) request.headers['content-length'] = String(body.length);
+    const response = new http.ServerResponse(request);
+    response.assignSocket(socket);
+    const chunks = [];
+    response.write = (chunk, encoding) => {
+      if (chunk !== undefined && chunk !== null) chunks.push(Buffer.from(chunk, encoding));
+      return true;
+    };
+    response.end = (chunk, encoding) => {
+      if (chunk !== undefined && chunk !== null) chunks.push(Buffer.from(chunk, encoding));
+      response.emit('finish');
+      return response;
+    };
+    response.on('finish', () => {
+      const text = Buffer.concat(chunks).toString('utf8');
+      const headers = response.getHeaders();
+      resolve({
+        status: response.statusCode,
+        header: (name) => {
+          const value = headers[name.toLowerCase()];
+          return Array.isArray(value) ? value.join(', ') : value ?? null;
+        },
+        text,
+        json: () => JSON.parse(text),
+      });
+    });
+    response.on('error', reject);
+    app.handle(request, response, reject);
+    request.push(body);
+    request.push(null);
+  });
+}
+
+async function jsonClient(server, templateId) {
+  const page = await server.request(`/forms/${templateId}`);
+  assert.equal(page.status, 200);
+  const cookie = page.header('set-cookie').split(';', 1)[0];
+  const token = new JSDOM(page.text).window.document.querySelector('input[name="_csrf"]').value;
+  return (payload) => server.request(`/api/forms/${templateId}/submissions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: PUBLIC_ORIGIN, 'X-CSRF-Token': token },
+    body: JSON.stringify(payload),
+  });
+}
+
+async function storedRecords(submissionsPath) {
+  const names = (await fs.readdir(submissionsPath).catch(() => [])).filter((name) => name.endsWith('.json')).sort();
+  return Promise.all(names.map(async (name) => JSON.parse(await fs.readFile(path.join(submissionsPath, name), 'utf8'))));
+}
+
+function eventTrio(record) {
+  return { eventAt: record.eventAt, timezone: record.timezone, clientOffsetMinutes: record.clientOffsetMinutes };
+}
+
+test('an omitted pinned select is filled exactly as if the caller had sent it', async () => {
+  const server = await makeServer();
+  try {
+    const submit = await jsonClient(server, 'machine-log');
+    const base = { 'logged-at': '2026-07-20T09:30:00-04:00', minutes: 20, effort: 'easy' };
+    const omitted = await submit({ values: base, idempotencyKey: 'pinned-omitted-0001' });
+    assert.equal(omitted.status, 201, omitted.text);
+    const stated = await submit({ values: { ...base, machine: 'rower' }, idempotencyKey: 'pinned-stated-0001' });
+    assert.equal(stated.status, 201, stated.text);
+    const [first, second] = [omitted.json().receipt, stated.json().receipt];
+    assert.deepEqual(first.values, second.values, 'same stored values whether the pinned value is sent or not');
+    assert.deepEqual(first.values.find((entry) => entry.fieldId === 'machine').selectedOptions, [
+      { optionId: 'rower', optionLabel: 'Rower' },
+    ]);
+
+    // A stated value is never overridden: an undeclared option still fails.
+    const wrong = await submit({ values: { ...base, machine: 'bike' } });
+    assert.equal(wrong.status, 422);
+    assert.ok(wrong.json().error.details.some((entry) => entry.path === 'values.machine'));
+    assert.equal((await storedRecords(server.submissionsPath)).length, 2);
+  } finally {
+    await server.cleanup();
+  }
+});
+
+test('field defaults are not applied on the JSON path', async () => {
+  const server = await makeServer();
+  try {
+    const submit = await jsonClient(server, 'machine-log');
+    const response = await submit({ values: { 'logged-at': '2026-07-20T09:30:00-04:00', minutes: 20 } });
+    assert.equal(response.status, 422);
+    const details = response.json().error.details;
+    assert.deepEqual(details.map((entry) => entry.path), ['values.effort']);
+    assert.equal(details[0].message, 'is required');
+    assert.deepEqual(await storedRecords(server.submissionsPath), []);
+  } finally {
+    await server.cleanup();
+  }
+});
+
+test('a select with one enabled option among retired ones is still a question', async () => {
+  const server = await makeServer();
+  try {
+    const page = await server.request('/forms/retired-option-log');
+    assert.doesNotMatch(page.text, /field-pinned/, 'the page asks too');
+    const submit = await jsonClient(server, 'retired-option-log');
+    const response = await submit({ values: {} });
+    assert.equal(response.status, 422);
+    assert.equal(response.json().error.details[0].path, 'values.station');
+  } finally {
+    await server.cleanup();
+  }
+});
+
+test('the event-time trio is derived from an offset-bearing datetime value', async () => {
+  const server = await makeServer();
+  try {
+    const submit = await jsonClient(server, 'machine-log');
+    const values = (loggedAt) => ({ 'logged-at': loggedAt, minutes: 20, effort: 'hard' });
+    const cases = [
+      // Server zone agrees at that instant (summer and winter).
+      ['2026-07-20T09:30:00-04:00', { timezone: 'America/New_York', clientOffsetMinutes: -240 }],
+      ['2026-01-20T09:30:00-05:00', { timezone: 'America/New_York', clientOffsetMinutes: -300 }],
+      // Server zone disagrees: a fixed IANA zone for whole hours.
+      ['2026-07-20T22:30:00+09:00', { timezone: 'Etc/GMT-9', clientOffsetMinutes: 540 }],
+      ['2026-07-20T13:30:00Z', { timezone: 'UTC', clientOffsetMinutes: 0 }],
+    ];
+    for (const [loggedAt, expected] of cases) {
+      const response = await submit({ values: values(loggedAt) });
+      assert.equal(response.status, 201, response.text);
+      const receipt = response.json().receipt;
+      assert.deepEqual(eventTrio(receipt), { eventAt: loggedAt, ...expected });
+      assert.equal(receipt.values.find((entry) => entry.fieldId === 'logged-at').value, loggedAt);
+    }
+
+    // A half-hour offset outside the server zone has no IANA zone to name, so
+    // nothing is invented: the entry falls back to its receipt time as before.
+    const unnamed = await submit({ values: values('2026-07-20T19:00:00+05:30') });
+    assert.equal(unnamed.status, 201, unnamed.text);
+    assert.equal(unnamed.json().receipt.eventAt, undefined);
+
+    const records = await storedRecords(server.submissionsPath);
+    assert.equal(records.length, cases.length + 1);
+    assert.equal(records.filter((record) => record.eventAt !== undefined).length, cases.length);
+  } finally {
+    await server.cleanup();
+  }
+});
+
+test('an explicit trio fills an omitted sole datetime field and stays all-or-none', async () => {
+  const server = await makeServer();
+  try {
+    const submit = await jsonClient(server, 'machine-log');
+    const trio = { eventAt: '2026-07-20T09:30:00-04:00', timezone: 'America/New_York', clientOffsetMinutes: -240 };
+    const filled = await submit({ values: { minutes: 20, effort: 'easy' }, ...trio });
+    assert.equal(filled.status, 201, filled.text);
+    const receipt = filled.json().receipt;
+    assert.deepEqual(eventTrio(receipt), trio);
+    assert.equal(receipt.values.find((entry) => entry.fieldId === 'logged-at').value, trio.eventAt);
+
+    // An explicit trio beside an explicit datetime keeps both as sent.
+    const both = await submit({ values: { 'logged-at': '2026-07-19T08:00:00-04:00', minutes: 20, effort: 'easy' }, ...trio });
+    assert.equal(both.status, 201, both.text);
+    assert.equal(both.json().receipt.eventAt, trio.eventAt);
+    assert.equal(both.json().receipt.values.find((entry) => entry.fieldId === 'logged-at').value, '2026-07-19T08:00:00-04:00');
+
+    // Partial trios are still refused, even with a datetime value to derive from.
+    const partial = await submit({
+      values: { 'logged-at': '2026-07-20T09:30:00-04:00', minutes: 20, effort: 'easy' },
+      timezone: 'America/New_York',
+    });
+    assert.equal(partial.status, 422);
+    assert.equal(partial.json().error.details[0].path, 'eventTime');
+    assert.equal((await storedRecords(server.submissionsPath)).length, 2);
+  } finally {
+    await server.cleanup();
+  }
+});
+
+test('with two datetime fields the trio fills neither, and derivation uses the first value', async () => {
+  const server = await makeServer();
+  try {
+    const submit = await jsonClient(server, 'two-clock-log');
+    const trio = { eventAt: '2026-07-20T09:30:00-04:00', timezone: 'America/New_York', clientOffsetMinutes: -240 };
+    const ambiguous = await submit({ values: {}, ...trio });
+    assert.equal(ambiguous.status, 422);
+    assert.deepEqual(ambiguous.json().error.details.map((entry) => entry.path).sort(), ['values.ended-at', 'values.started-at']);
+
+    const derived = await submit({ values: { 'started-at': '2026-07-20T09:00:00-04:00', 'ended-at': '2026-07-20T10:00:00-04:00' } });
+    assert.equal(derived.status, 201, derived.text);
+    assert.equal(derived.json().receipt.eventAt, '2026-07-20T09:00:00-04:00');
+  } finally {
+    await server.cleanup();
+  }
+});

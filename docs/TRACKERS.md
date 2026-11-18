@@ -258,6 +258,33 @@ access model.
 | Replace list state (CAS) | `PUT /api/forms/:id/list` |
 | Validate list state | `POST /api/forms/:id/list/validate` |
 
+### Submitting an entry as JSON
+
+`POST /api/forms/:id/submissions` takes `{ values, idempotencyKey?,
+eventAt?, timezone?, clientOffsetMinutes?, supersedesRecord? }` and runs the
+same submission service as the entry page. The server fills in two things the
+page would have posted, so an agent sends only what a person would answer:
+
+- **Pinned selects.** A select with exactly one live option, and that option
+  enabled, is shown on the page as a stamp rather than a question (the
+  per-machine child pattern). When its value is omitted the server uses that
+  option, so the stored entry is the same as if it had been sent. A value
+  that is sent is validated as usual and never replaced.
+- **Event time.** When `eventAt`, `timezone`, and `clientOffsetMinutes` are
+  all absent, the first datetime field (in field order) whose value carries
+  an explicit offset becomes the event time. The timezone is the server's
+  configured forms timezone when it has that offset at that instant,
+  otherwise `UTC` or a fixed `Etc/GMT±N` zone for whole-hour offsets. A
+  half-hour offset outside the server timezone has no zone to name, so the
+  entry keeps its receipt time, as before. When the trio is sent and the
+  template has exactly one datetime field with no value, the field takes
+  `eventAt`. A partial trio is still refused (`422`, path `eventTime`).
+
+Field `default`s are **not** applied on this path. On the page a person sees
+the default and accepts it. In JSON nobody stated it, so a required field
+with a default must still be sent. A select that has one enabled option
+among retired (disabled) ones is still a question too.
+
 Template keys accepted on create/patch include the structural set —
 `kind`, `containerId`, `memberOrder`, `parentId`, `related`, `inherit` —
 everything the GUI can do, the API can do.
