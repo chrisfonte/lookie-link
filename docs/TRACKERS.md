@@ -64,11 +64,13 @@ These invariants hold everywhere and explain most design decisions:
    the API — unknown aliases are refused, not defaulted (fail-closed). This is
    what keeps a template-authoring UI from becoming an arbitrary-write
    primitive.
-4. **Drafts revise; versions are frozen.** Templates use compare-and-set
-   revisions (stale writes are rejected with a conflict) and publishing
-   freezes an immutable numbered version. Removed fields are retained and
-   marked `isDestroyed` rather than deleted, so old data always has a schema
-   identity to resolve against.
+4. **The draft is live; versions are frozen snapshots.** Templates use
+   compare-and-set revisions (stale writes are rejected with a conflict).
+   The served form is always the current draft, so a saved revision is live
+   at once; publishing freezes an immutable numbered snapshot you can view
+   and restore later. Removed fields are retained and marked `isDestroyed`
+   rather than deleted, so old data always has a schema identity to resolve
+   against.
 
 ## Templates and lifecycle
 
@@ -81,6 +83,17 @@ Lifecycle: **create draft → revise (CAS on `revision`) → publish** (freezes 
 `form-template-version` document carrying the schema digest and the structural
 keys) → optionally **archive** (reversible; archived templates stop accepting
 entries but keep serving history and receipts) or **clone**.
+
+**There is no private staging draft.** The entry page, previews and
+`POST /api/forms/:id/submissions` all serve the current draft (resolved
+through its parent for a child). A `PATCH` or a Configure save is live for the
+next entry, and each stored record's `templateVersion` is the draft
+`revision` it was captured against. A tracker that has never been published
+(`state: 'draft'`) still takes entries. Publishing does not ship anything: it
+freezes a restorable snapshot. Configure can open a published version
+read-only (`?version=N`) and restore it into the draft as a new revision, and
+clone accepts a `templateVersion` to copy from. So patch only what you mean
+to ship, and publish when you want a point you can return to.
 
 Field types: `short-text`, `long-text`, `number`, `checkbox`, `date`, `time`,
 `datetime`, `select`, `multi-select`. Selects carry options with stable ids;
@@ -248,6 +261,179 @@ access model.
 Template keys accepted on create/patch include the structural set —
 `kind`, `containerId`, `memberOrder`, `parentId`, `related`, `inherit` —
 everything the GUI can do, the API can do.
+
+## Agent quickstart
+
+How an agent logs, corrects and verifies an entry through the JSON API. The
+platform has no forms CLI yet; these are plain HTTP calls.
+
+### 1. Discover the field ids
+
+```bash
+curl -s "$HOST/api/forms/templates/$ID" \
+  | jq '(.resolvedFields // .template.fields)[]
+        | select(.isDestroyed != true)
+        | {id, type, required, default, options: [.options[]? | select(.disabled != true) | .id]}'
+```
+
+For a child, read `resolvedFields` (what is actually served), not
+`template.fields` (the child's own overrides).
+
+### 2. Choose an envelope
+
+Mutations take **one** of two credentials, never both (a bearer together with
+the context cookie is `400 Ambiguous credentials`):
+
+- **Bearer** — `Authorization: Bearer <token>`. No cookie, no CSRF token, no
+  `Origin` requirement. Prefer this when the deployment issues the agent a key
+  with `forms.submit` on the tracker.
+- **Browser context** — for a caller that acts as a browser would:
+  1. `GET /forms/<id>` with a cookie jar. The response sets the
+     `lookie_forms_context` cookie and the page carries the synchronizer token
+     in its `<input type="hidden" name="_csrf">`.
+  2. `POST` with that cookie, `X-CSRF-Token: <token>`, and an `Origin` header
+     matching a configured `forms.publicOrigins` entry.
+  3. Never put `_csrf` in the JSON body: the body is an allowlist (below), so
+     it is refused as a shape error. Use a fresh context per mutation when in
+     doubt; a stale context is refused.
+
+Every JSON request needs `Content-Type: application/json` (otherwise `415`).
+
+### 3. Build the body
+
+```json
+{
+  "values": {
+    "session-date": "2026-11-18T09:20:00-05:00",
+    "machine": "leg-press",
+    "weight-lbs": 150,
+    "sets": 3,
+    "reps": 12
+  },
+  "eventAt": "2026-11-18T09:20:00-05:00",
+  "timezone": "America/New_York",
+  "clientOffsetMinutes": -300,
+  "idempotencyKey": "leg-press-2026-11-18T09:20"
+}
+```
+
+- **Top-level keys are an allowlist:** `values`, `eventAt`, `timezone`,
+  `clientOffsetMinutes`, `idempotencyKey`, `supersedesRecord`. Anything else —
+  flat field names, `_csrf`, `templateVersion`, `actor` — is
+  `400 Unknown or server-derived submission field.`
+- **`values` is an object keyed by field id.** A `select` takes one option
+  id, a `multi-select` an array of option ids, a `number` a JSON number, a
+  `checkbox` a boolean.
+- **The JSON path does not apply field `default`s.** A required field must be
+  sent even when the entry page shows it pre-filled — including a child's
+  pinned one-option select, which a person sees as a fixed stamp. Send the
+  `default` from `resolvedFields`.
+- **Send the time trio together.** The native form derives the event time
+  from the first `datetime` field; the JSON path does not. Without
+  `eventAt` / `timezone` / `clientOffsetMinutes` the record has no event time
+  and sorts as untimed. Fill the `datetime` field too if it is required, with
+  the same instant. The three must agree:
+  - `eventAt` is RFC 3339 with an explicit offset;
+  - `timezone` is an IANA zone name;
+  - `clientOffsetMinutes` is the offset of `eventAt` in minutes **east of UTC**
+    (`-300` for UTC−05:00, `+60` for UTC+01:00). That is the opposite sign of
+    JavaScript's `Date#getTimezoneOffset()`, so never pass that value through.
+  Supplying only some of the three is `422`; offsets that disagree are `400`.
+- **`idempotencyKey`** (or an `Idempotency-Key` header) makes a retry safe:
+  the same key with the same body returns the original record; the same key
+  with a different body is `409 idempotency_conflict`.
+
+### 4. Correct an entry
+
+Submissions are never edited. Send a new, complete submission naming its
+predecessor:
+
+```json
+{ "values": { "...": "..." }, "eventAt": "...", "timezone": "...", "clientOffsetMinutes": -300,
+  "supersedesRecord": { "id": "<submissionId>", "resourceKind": "form-submission" } }
+```
+
+`supersedesRecord` is an object, not a string: a bare id string, or an id
+from another tracker, returns `404 Not found` (the predecessor is not
+resolved). A record can be superseded
+once (a second correction of the same predecessor is
+`409 correction_conflict`); correct the latest record in the chain instead.
+
+### 5. Triage an error
+
+All JSON errors use `{ ok: false, error: { code, message, details? } }`.
+
+| Status | Meaning | Look at |
+|---|---|---|
+| `400` | Body shape: an unknown top-level key, a malformed `idempotencyKey`, or a time trio that disagrees | The top-level keys and the trio, not your credentials |
+| `401` | No usable credential | The bearer or the context cookie |
+| `403 origin_rejected` / `csrf_rejected` | The browser envelope | `Origin`, `X-CSRF-Token`, and the cookie from the same `GET` |
+| `404` | Unknown tracker, no `forms.submit` on it, a kind that takes no entries (group, list, parent, or a form that has children), or a `supersedesRecord` that does not resolve | The id, the caller's grants, and the predecessor reference |
+| `409` | `idempotency_conflict` or `correction_conflict` | The key, or which record you are superseding |
+| `415` | Not `application/json` | `Content-Type` |
+| `422 validation_error` | Values failed the schema | `error.details[].path` (for example `values.machine` with `is required`) |
+
+A `400` can look like an auth failure but is always the body.
+
+### 6. Verify it landed
+
+- A `201` returns `submissionId`, the stored `receipt`, and `receiptUrl`
+  (`/forms/<id>/receipts/<submissionId>`, relative to the server). The receipt
+  page is server-rendered, so a plain `GET` shows what was captured.
+- `GET /api/forms/<id>/submissions?limit=50` (maximum 100) lists the caller's
+  current entries, newest first. Each record's `values` is a **list** of
+  `{fieldId, fieldLabel, fieldType, value}` (selects add `selectedOptions`),
+  not an object — index it by `fieldId`.
+- **Superseded predecessors are not listed.** Only the head of each
+  correction chain appears; the full chain is at
+  `GET /api/forms/<id>/submissions/<submissionId>/history`. A predecessor
+  missing from the list is a correction, not a lost record.
+- A list-kind tracker has no submissions; read `GET /api/forms/<id>/list`.
+
+## Designing a tracker
+
+The platform will store whatever a template asks for, so the quality of the
+data is decided at design time. These rules come from trackers filled in by
+voice, by agents, and by thumb at the moment of the activity.
+
+1. **Count the entry cost.** For every field, ask whether the person can say
+   it in one breath to an agent and tap it in one go on a phone. A value that
+   is usually unknown at entry time is optional; a value that is usually the
+   same gets a `default`. Ask for what can be read off the object (a console,
+   a label, a plate), not recalled from memory.
+2. **Require only what makes the entry meaningless if missing.** Usually that
+   is the time plus the one thing being measured. Everything else is
+   optional. A required field the person cannot answer gets a guess, and a
+   guess is worse than a blank.
+3. **One option is not a question.** When a child narrows a select to one
+   value, pin it: it renders as a stamp, not a choice. (Agents still send it;
+   see the quickstart.)
+4. **Unknown is not false.** A checkbox stores `false` when nobody looked. Use
+   one only when unchecked truly means "no" and the fact is always observed.
+   For anything that may not have been noticed or asked, use an optional
+   `select` with `yes` / `no`, so blank stays "unknown". An optional
+   multi-select whose help says "leave empty if none" is fine.
+5. **Field order follows the moment.** Order fields as the person meets them:
+   when → what or where → the measurement → how it felt → notes. Rarely used
+   fields go after the core ones. Make one tracker per thing physically used
+   (a parent with children), with a group for the occasion that ties them
+   together.
+6. **Label with the name printed on the object.** Use the name on the machine
+   plate or the product label (or both). An option the person cannot
+   recognize gets logged as Other, and Other cannot be analyzed.
+7. **Keep an escape hatch.** Offer `Other (say what in Notes)` plus a `notes`
+   field, so a new case never blocks an entry. Add the real option the first
+   time it is used.
+8. **Numbers stay numbers.** Use `type: 'number'` (a `stepped-select`
+   component suits thumbs), put the unit in the label (`Weight (lb)`), and
+   choose `min` / `max` / `step` that accept every real reading. A step of 25
+   cannot store a reading of 66; never round a measurement to fit a
+   constraint — fix the constraint.
+9. **Never break history.** Change a tracker as a new revision. Retire a field
+   with `isDestroyed: true` instead of removing it, and make readers that
+   chart it accept the old field or its replacement across the boundary.
+   Relabeling an option is safe (receipts snapshot labels); changing a field's
+   type or an option id changes the record shape for anything that charts it.
 
 ## GUI surfaces
 
