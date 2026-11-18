@@ -343,3 +343,22 @@ test('fieldVisibility leaves unresolvable conditions visible', () => {
   assert.equal(visibility.get('club'), true);
   assert.equal(visibility.has('scale'), false);
 });
+
+test('a served child whose inherited condition broke still accepts entries with the field visible', () => {
+  // The registry serves a child with its parent's fields merged in; a parent edit
+  // removed the option the child's condition names.
+  const served = {
+    ...templateWith([
+      field('scale', 'select', {options: [{id: 'home', label: 'Home'}]}),
+      field('club', 'short-text', {required: false, showWhen: {fieldId: 'scale', optionIds: ['gym']}}),
+    ]),
+    parentId: 'weigh-in-parent',
+  };
+  const result = validateSubmissionValues(served, {scale: 'home', club: 'Downtown'});
+  assert.equal(result.valid, true, JSON.stringify(result.errors));
+  assert.equal(result.normalized.club, 'Downtown');
+  // The draft check still catches the same broken reference on a top-level form.
+  const {parentId, ...topLevel} = served;
+  void parentId;
+  assert.ok(paths(validateTemplate(topLevel)).includes('fields[1].showWhen.optionIds[0]'));
+});

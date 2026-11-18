@@ -125,14 +125,22 @@ options:
   API alike. A stored entry therefore never contradicts its own condition.
 - **In the browser.** The form, inline corrections and history editors hide and
   disable a conditional field while its condition is false. Without script the
-  field stays visible and the server still drops a hidden value.
+  field stays visible and the server still drops a hidden value. A required
+  conditional field is marked required only while shown, so a browser without
+  script can still submit when it does not apply.
 - **Builder.** Each field's settings have a **Show this field** select listing
   `Always` and every option of the template's selection fields. A condition with
   several options (set through the API) is kept and shown as one choice.
-- **Drift.** A condition whose target is later removed (`isDestroyed`) or
-  unresolvable leaves the field always visible. Removing an option a condition
-  names is refused at save until the condition is changed.
-- Old entries are unaffected: conditions apply only when an entry is submitted.
+- **Drift.** When a draft is saved, its conditions must resolve. Removing an
+  option a condition names, deleting its target, or changing the target's type
+  is refused until the condition is changed. Archiving the target
+  (`isDestroyed`) is allowed and leaves the field always visible. At submit
+  time a condition that no longer resolves (for example, a parent edit that
+  drops an option a child's condition names) also leaves the field visible
+  rather than refusing entries.
+- **History.** Stored entries are never rewritten. A correction is a new
+  submission, so it applies the current conditions: correcting an old entry
+  drops a value whose condition is now false.
 
 ## Groups (containers)
 

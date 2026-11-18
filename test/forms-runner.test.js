@@ -2796,6 +2796,9 @@ test('showWhen fields render visible without script and the server drops hidden 
     assert.equal(club.getAttribute('data-show-when'), 'scale');
     assert.equal(club.getAttribute('data-show-when-options'), 'gym');
     assert.equal(club.hidden, false, 'without script the conditional field stays usable');
+    const clubControl = context.document.querySelector('#field-club');
+    assert.equal(clubControl.required, false, 'a no-script browser is not forced to fill a conditional field');
+    assert.equal(clubControl.hasAttribute('data-required'), true);
     assert.equal(context.document.querySelector('#field-weight').closest('.field').hasAttribute('data-show-when'), false);
 
     const post = (fields) => server.request('/forms/weigh-in', {
@@ -2868,6 +2871,7 @@ test('the showWhen script hides and disables conditional fields on the form and 
     form.querySelector('#field-scale').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
     assert.equal(club.closest('.field').hidden, false);
     assert.equal(club.disabled, false);
+    assert.equal(club.required, true, 'required applies while shown');
     form.querySelector('#field-scale').value = 'home';
     form.querySelector('#field-scale').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
     assert.equal(club.closest('.field').hidden, true);
