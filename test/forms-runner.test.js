@@ -2979,3 +2979,59 @@ test('a pinned select and a datetime hidden by showWhen are dropped and do not s
     await cleanup(fixture, server);
   }
 });
+
+test('a parent edit that breaks a child showWhen leaves the child accepting entries with the field visible', async () => {
+  const fixture = await makeFixture();
+  const parent = {
+    contractVersion: 1,
+    resourceKind: 'form-template',
+    templateId: 'visit-parent',
+    ownerId: 'operator',
+    revision: 1,
+    grammarVersion: 1,
+    kind: 'parent',
+    title: 'Visit',
+    fields: [
+      { id: 'status', type: 'select', label: 'Status', required: true, options: [{ id: 'open', label: 'Open' }, { id: 'closed', label: 'Closed' }] },
+    ],
+  };
+  const child = {
+    contractVersion: 1,
+    resourceKind: 'form-template',
+    templateId: 'visit-child',
+    ownerId: 'operator',
+    revision: 1,
+    grammarVersion: 1,
+    parentId: 'visit-parent',
+    title: 'Visit (child)',
+    fields: [
+      { id: 'reason', type: 'short-text', label: 'Reason', required: false, showWhen: { fieldId: 'status', optionIds: ['open'] } },
+    ],
+  };
+  await fs.writeFile(path.join(fixture.templatesPath, 'visit-parent.yaml'), yaml.dump(parent), 'utf8');
+  await fs.writeFile(path.join(fixture.templatesPath, 'visit-child.yaml'), yaml.dump(child), 'utf8');
+  const server = await startServer(fixture);
+  try {
+    const context = await getBrowserContext(server, 'visit-child');
+    assert.equal(context.document.querySelector('#field-reason').closest('.field').getAttribute('data-show-when'), 'status');
+    const headers = { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'X-CSRF-Token': context.token };
+    const submit = (values) => server.request('/api/forms/visit-child/submissions', { method: 'POST', headers, body: JSON.stringify({ values }) });
+    // Before the edit the inherited condition is live: closed hides and drops reason.
+    const closed = await submit({ status: 'closed', reason: 'dropped' });
+    assert.equal(closed.status, 201);
+    assert.deepEqual((await closed.json()).receipt.values.map((entry) => entry.fieldId), ['status']);
+
+    // The parent drops the option the child's condition names. The child file is untouched.
+    parent.revision = 2;
+    parent.fields[0].options = [{ id: 'closed', label: 'Closed' }, { id: 'pending', label: 'Pending' }];
+    await fs.writeFile(path.join(fixture.templatesPath, 'visit-parent.yaml'), yaml.dump(parent), 'utf8');
+
+    const after = await submit({ status: 'closed', reason: 'kept' });
+    assert.equal(after.status, 201, 'the child still accepts entries');
+    assert.deepEqual((await after.json()).receipt.values.map((entry) => [entry.fieldId, entry.value]), [['status', 'closed'], ['reason', 'kept']]);
+    const page = new JSDOM(await (await server.request('/forms/visit-child', { headers: { Cookie: context.cookie } })).text()).window.document;
+    assert.equal(page.querySelector('#field-reason').closest('.field').hasAttribute('data-show-when'), false, 'a broken condition is not tagged for the script');
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
