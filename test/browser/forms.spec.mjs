@@ -73,6 +73,22 @@ const gymTemplate = {
   ],
 };
 
+const weighInTemplate = {
+  contractVersion: 1,
+  resourceKind: 'form-template',
+  templateId: 'weigh-in',
+  ownerId: 'operator',
+  revision: 1,
+  grammarVersion: 1,
+  destinationId: 'gym-log',
+  title: 'Weigh-in',
+  fields: [
+    {id: 'scale', type: 'select', label: 'Scale', required: true, options: [{id: 'home', label: 'Home'}, {id: 'gym', label: 'Gym'}]},
+    {id: 'club', type: 'select', label: 'Club', required: true, options: [{id: 'downtown', label: 'Downtown'}, {id: 'uptown', label: 'Uptown'}], showWhen: {fieldId: 'scale', optionIds: ['gym']}},
+    {id: 'weight', type: 'number', label: 'Weight (lb)', required: true, constraints: {minimum: 0, maximum: 1000}},
+  ],
+};
+
 let browser;
 let launchError;
 
@@ -101,6 +117,38 @@ async function startFixture() {
     logger: {warn() {}},
   });
   await registry.createDraft(structuredClone(gymTemplate));
+  await registry.createDraft(structuredClone(weighInTemplate));
+  await registry.createDraft({
+    ...structuredClone(weighInTemplate),
+    templateId: 'id-name-clash',
+    title: 'Id and name clash',
+    // Field "status" renders control id "field-status", which is also a valid
+    // name for another field; lookups must match the exact name.
+    fields: [
+      {id: 'status', type: 'select', label: 'Status', required: true, options: [{id: 'yes', label: 'Yes'}, {id: 'no', label: 'No'}]},
+      {id: 'field-status', type: 'select', label: 'Field status', required: true, options: [{id: 'yes', label: 'Yes'}, {id: 'no', label: 'No'}]},
+      {id: 'detail', type: 'short-text', label: 'Detail', required: true, showWhen: {fieldId: 'field-status', optionIds: ['yes']}},
+    ],
+  });
+  await registry.createDraft({
+    ...structuredClone(weighInTemplate),
+    templateId: 'elements-datetime',
+    title: 'Elements datetime',
+    fields: [
+      {id: 'elements', type: 'short-text', label: 'Elements', required: false},
+      {id: 'logged-at', type: 'datetime', label: 'Logged at', required: true},
+    ],
+  });
+  await registry.createDraft({
+    ...structuredClone(weighInTemplate),
+    templateId: 'elements-shadow',
+    title: 'Elements shadow',
+    // "elements" is a valid field id and is exposed as form.elements by name.
+    fields: [
+      {id: 'elements', type: 'select', label: 'Elements', required: true, options: [{id: 'fire', label: 'Fire'}, {id: 'water', label: 'Water'}]},
+      {id: 'heat', type: 'short-text', label: 'Heat', required: true, showWhen: {fieldId: 'elements', optionIds: ['fire']}},
+    ],
+  });
 
   // A mapped repo with a document, so browser tests can cover document pages too.
   // Without this the fixture serves forms only, and a header assertion written
@@ -616,4 +664,58 @@ browserTest('the theme control is labelled before script runs, not after', async
     'Ember',
     'the label follows the applied theme'
   );
+});
+
+browserTest('a showWhen field appears only for its selected option and submits without it otherwise', async ({page, fixture}) => {
+  await page.goto(`${fixture.origin}/forms/weigh-in`, {waitUntil: 'networkidle'});
+  const club = page.locator('#field-club');
+  assert.equal(await club.isVisible(), false, 'club is hidden until a gym scale is chosen');
+  await page.selectOption('#field-scale', 'gym');
+  assert.equal(await club.isVisible(), true);
+  await page.selectOption('#field-scale', 'home');
+  assert.equal(await club.isVisible(), false);
+  await page.fill('#field-weight', '180');
+  await Promise.all([
+    page.waitForURL(/\/receipts\//),
+    page.click('.form-primary-action'),
+  ]);
+  const receipt = await page.locator('main').innerText();
+  assert.match(receipt, /Home/);
+  assert.doesNotMatch(receipt, /Club/);
+});
+
+browserTest('a showWhen target named "elements" still drives visibility', async ({page, fixture}) => {
+  await page.goto(`${fixture.origin}/forms/elements-shadow`, {waitUntil: 'networkidle'});
+  const heat = page.locator('#field-heat');
+  assert.equal(await heat.isVisible(), false);
+  assert.equal(await heat.evaluate((input) => input.required), false);
+  await page.selectOption('#field-elements', 'fire');
+  assert.equal(await heat.isVisible(), true);
+  assert.equal(await heat.evaluate((input) => input.required), true);
+  await page.selectOption('#field-elements', 'water');
+  assert.equal(await heat.isVisible(), false);
+});
+
+browserTest('showWhen matches the exact control name, not a clashing id', async ({page, fixture}) => {
+  await page.goto(`${fixture.origin}/forms/id-name-clash`, {waitUntil: 'networkidle'});
+  const detail = page.locator('#field-detail');
+  assert.equal(await detail.isVisible(), false);
+  await page.selectOption('select[name="field-status"]', 'yes');
+  assert.equal(await detail.isVisible(), true, 'the field-status target, not the status control with that id, drives it');
+  assert.equal(await detail.evaluate((input) => input.required), true);
+  await page.selectOption('select[name="status"]', 'no');
+  assert.equal(await detail.isVisible(), true);
+  await page.selectOption('select[name="field-status"]', 'no');
+  assert.equal(await detail.isVisible(), false);
+});
+
+browserTest('datetime capture still records the browser timezone beside a field named "elements"', async ({page, fixture}) => {
+  await page.goto(`${fixture.origin}/forms/elements-datetime`, {waitUntil: 'networkidle'});
+  await page.fill('#field-logged-at', '2026-07-20T09:30');
+  const metadata = await page.evaluate(() => ({
+    offset: document.querySelector('input[name="logged-at__offset"]').value,
+    timezone: document.querySelector('input[name="logged-at__timezone"]').value,
+  }));
+  assert.match(metadata.offset, /^-?\d+$/);
+  assert.ok(metadata.timezone, 'timezone metadata is filled');
 });

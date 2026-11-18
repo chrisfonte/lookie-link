@@ -729,3 +729,49 @@ test('root quick-configure: inline basics + membership, publishes in one tap (#2
     await server.close();
   }
 });
+
+test('builder sets and clears showWhen, and the form honors it', async () => {
+  const server = await makeServer();
+  try {
+    const page = await browserPage(await server.request('/forms/training-log/configure'));
+    const picker = page.document.querySelector('select[name="field.1.showWhen"]');
+    assert.ok(picker, 'notes offers a condition on the lift select');
+    assert.deepEqual([...picker.options].map((option) => option.value), ['', 'lift=squat', 'lift=bench']);
+    assert.equal(picker.options[1].textContent, 'Squat <heavy>');
+    assert.equal(picker.options[1].parentElement.getAttribute('label'), 'When Lift <name> is');
+    assert.equal(page.document.querySelector('select[name="field.0.showWhen"]'), null, 'a field cannot condition on itself');
+    picker.value = 'lift=squat';
+    let response = await browserPost(server, '/forms/training-log/configure', formValues(page.document.querySelector('.builder-form'), 'save'), page.cookie);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await server.registry.getTemplate('training-log')).fields[1].showWhen, {fieldId: 'lift', optionIds: ['squat']});
+
+    const formPage = await browserPage(await server.request('/forms/training-log'));
+    assert.equal(formPage.document.querySelector('#field-notes').closest('.field').getAttribute('data-show-when'), 'lift');
+    const bench = await browserPost(server, '/forms/training-log', new URLSearchParams({
+      _csrf: formPage.document.querySelector('input[name="_csrf"]').value,
+      lift: 'bench',
+    }), formPage.cookie);
+    assert.equal(bench.status, 303, 'required notes is skipped while hidden');
+
+    // A multi-option condition set through the API survives a builder save untouched.
+    const current = await server.registry.getManagementTemplate('training-log');
+    await server.registry.reviseDraft('training-log', current.draft.revision, {
+      fields: current.draft.fields.map((field) => field.id === 'notes' ? {...field, showWhen: {fieldId: 'lift', optionIds: ['squat', 'bench']}} : field),
+    });
+    const multi = await browserPage(await server.request('/forms/training-log/configure'));
+    const multiPicker = multi.document.querySelector('select[name="field.1.showWhen"]');
+    assert.equal(multiPicker.value, 'lift=squat,bench');
+    assert.match(multiPicker.selectedOptions[0].textContent, /Squat <heavy> or Bench/);
+    response = await browserPost(server, '/forms/training-log/configure', formValues(multi.document.querySelector('.builder-form'), 'save'), multi.cookie);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await server.registry.getTemplate('training-log')).fields[1].showWhen.optionIds, ['squat', 'bench']);
+
+    const latest = await browserPage(response);
+    latest.document.querySelector('select[name="field.1.showWhen"]').value = '';
+    response = await browserPost(server, '/forms/training-log/configure', formValues(latest.document.querySelector('.builder-form'), 'save'), multi.cookie);
+    assert.equal(response.status, 200);
+    assert.equal(Object.hasOwn((await server.registry.getTemplate('training-log')).fields[1], 'showWhen'), false);
+  } finally {
+    await server.close();
+  }
+});

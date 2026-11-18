@@ -100,6 +100,60 @@ Field types: `short-text`, `long-text`, `number`, `checkbox`, `date`, `time`,
 number fields support min/max/step; any field can set `default`, `required`,
 `help`, and `showInList` (which values headline history rows).
 
+### Conditional fields (`showWhen`)
+
+A field can be shown only while a select or multi-select field holds given
+options:
+
+```json
+{"id": "club", "type": "select", "label": "Club", "required": false,
+ "options": [{"id": "downtown", "label": "Downtown"}],
+ "showWhen": {"fieldId": "scale", "optionIds": ["gym"]}}
+```
+
+- **Validation.** `fieldId` must name another field in the template that is a
+  `select` or `multi-select` with declared `options` (not a `providerSlot`),
+  every `optionIds` entry must be one of its option ids, and conditions must not
+  form a cycle. A child form may name an inherited parent field; that reference
+  resolves at serve time.
+- **Meaning.** The field is visible when its target is itself visible and the
+  target's value is one of `optionIds` (for a multi-select, any selected
+  option counts).
+- **Fill order.** Visibility is judged on the values after fills:
+  - The server fills an omitted pinned select (one enabled option) first, so
+    an omitted pinned target counts as chosen.
+  - The server applies no other field `default`. An API caller that omits
+    any other target hides the field.
+  - `lookie forms submit` fills declared defaults before sending, so the
+    server then drops any filled value whose condition is false.
+- **Hidden fields.** A hidden field is never required, and any value submitted
+  for it is dropped before the entry is stored, on the native form and the JSON
+  API alike. A stored entry therefore never contradicts its own condition.
+- **Event time.** `eventAt` is derived only from a datetime that stays visible.
+  A hidden datetime never sets it, on the native form or JSON.
+  - When an explicit trio fills a sole datetime field that is hidden, that
+    copied value is dropped. This is harmless: the trio still sets the event
+    time.
+- **In the browser.** The form, inline corrections and history editors hide and
+  disable a conditional field while its condition is false. Without script the
+  field stays visible and the server still drops a hidden value. A required
+  conditional field is marked required only while shown, so a browser without
+  script can still submit when it does not apply.
+- **Builder.** Each field's settings have a **Show this field** select listing
+  `Always` and every option of the template's selection fields. A condition with
+  several options (set through the API) is kept and shown as one choice.
+- **Drift.** When a draft is saved, its conditions must resolve. Removing an
+  option a condition names, deleting its target, or changing the target's type
+  is refused until the condition is changed. Archiving the target
+  (`isDestroyed`) is allowed and leaves the field always visible. At submit
+  time a condition that no longer resolves (for example, a parent edit that
+  drops an option a child's condition names) also leaves the field visible
+  rather than refusing entries. Detaching a child copies its resolved fields,
+  so a drifted inherited condition must be fixed before the detach is accepted.
+- **History.** Stored entries are never rewritten. A correction is a new
+  submission, so it applies the current conditions: correcting an old entry
+  drops a value whose condition is now false.
+
 ## Groups (containers)
 
 A group is a template of `kind: 'container'` — same registry, same lifecycle,
@@ -412,7 +466,7 @@ Every JSON request needs `Content-Type: application/json` (otherwise `415`).
 - **Supply the time trio together, or let JSON derive it.** When all three of
   `eventAt` / `timezone` / `clientOffsetMinutes` are absent, the first active
   datetime field in field order with an explicit-offset value supplies the
-  event time. The server uses its configured forms timezone when its offset
+  event time. A datetime hidden by a `showWhen` condition is skipped. The server uses its configured forms timezone when its offset
   agrees at that instant, otherwise `UTC` or a whole-hour `Etc/GMT` zone. If
   no matching zone is available (for example `+05:30` when the server zone is
   not on that offset), `eventAt` remains absent and the displayed time falls

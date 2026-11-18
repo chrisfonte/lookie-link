@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased — conditional form fields
+
+- Add the field key `showWhen: {fieldId, optionIds}`: a field shows only while a
+  select or multi-select field holds one of the listed options. Templates
+  validate the reference (existing selection target, declared options, no
+  self-reference or cycle). Hidden fields are not required and their submitted
+  values are dropped server-side for native and JSON submissions. The form and
+  inline editors hide and disable them with a small script. Without script they
+  stay visible. The builder gains a **Show this field** select. See
+  [TRACKERS.md](docs/TRACKERS.md#conditional-fields-showwhen).
+- The event time (`eventAt`) is derived only from a datetime that stays
+  visible, on the native form and on JSON submit. Visibility is judged after
+  the JSON pinned-select fill.
+- The datetime capture script looks up its metadata inputs by exact name, so a
+  field named `elements` no longer breaks its offset and timezone capture.
+
 ## Unreleased — `lookie forms` and bearer forms capabilities
 
 - Static tokens (`access.tokens.<name>.formsCapabilities`) and managed API keys

@@ -245,7 +245,7 @@ Agents present a bearer token. Browsers use the cookie `lookie_markers_context` 
 
 ## Tracker submissions
 
-`POST /api/forms/:templateId/submissions` stores one tracker entry. When the key of a pinned select (exactly one enabled option) is missing, that option is recorded. `null` or `""` is still `422`. Datetime values need an explicit offset; minute precision is accepted and stored with `:00` seconds. When `eventAt`/`timezone`/`clientOffsetMinutes` are all absent, they come from the first datetime value with an explicit offset, unless no zone matches that offset (then display falls back to `receiptAt`). Field defaults are not applied. A partial trio is `422` at path `eventTime`. See the [agent quickstart](TRACKERS.md#agent-quickstart). Bearer capabilities, field discovery and the CLI are in [Forms (trackers)](#forms-trackers).
+`POST /api/forms/:templateId/submissions` stores one tracker entry. When the key of a pinned select (exactly one enabled option) is missing, that option is recorded. `null` or `""` is still `422`. Datetime values need an explicit offset; minute precision is accepted and stored with `:00` seconds. When `eventAt`/`timezone`/`clientOffsetMinutes` are all absent, they come from the first visible datetime value with an explicit offset (a datetime hidden by `showWhen` is skipped, and its value is dropped), unless no zone matches that offset (then display falls back to `receiptAt`). This route applies no other field defaults; `lookie forms submit` fills them before sending. A partial trio is `422` at path `eventTime`. See the [agent quickstart](TRACKERS.md#agent-quickstart). Bearer capabilities, field discovery and the CLI are in [Forms (trackers)](#forms-trackers).
 
 ## Stale-write guards
 
