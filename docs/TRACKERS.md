@@ -64,11 +64,13 @@ These invariants hold everywhere and explain most design decisions:
    the API — unknown aliases are refused, not defaulted (fail-closed). This is
    what keeps a template-authoring UI from becoming an arbitrary-write
    primitive.
-4. **Drafts revise; versions are frozen.** Templates use compare-and-set
-   revisions (stale writes are rejected with a conflict) and publishing
-   freezes an immutable numbered version. Removed fields are retained and
-   marked `isDestroyed` rather than deleted, so old data always has a schema
-   identity to resolve against.
+4. **The draft is live; versions are frozen snapshots.** Templates use
+   compare-and-set revisions (stale writes are rejected with a conflict).
+   The served form is always the current draft, so a saved revision is live
+   at once; publishing freezes an immutable numbered snapshot you can view
+   and restore later. Removed fields are retained and marked `isDestroyed`
+   rather than deleted, so old data always has a schema identity to resolve
+   against.
 
 ## Templates and lifecycle
 
@@ -82,10 +84,75 @@ Lifecycle: **create draft → revise (CAS on `revision`) → publish** (freezes 
 keys) → optionally **archive** (reversible; archived templates stop accepting
 entries but keep serving history and receipts) or **clone**.
 
+**There is no private staging draft.** The entry page, previews and
+`POST /api/forms/:id/submissions` all serve the current draft (resolved
+through its parent for a child). A `PATCH` or a Configure save is live for the
+next entry, and each stored record's `templateVersion` is the draft
+`revision` it was captured against. A tracker that has never been published
+(`state: 'draft'`) still takes entries. Publishing does not ship anything: it
+freezes a restorable snapshot. Configure can open a published version
+read-only (`?version=N`) and restore it into the draft as a new revision, and
+clone accepts a `templateVersion` to copy from. So patch only what you mean
+to ship, and publish when you want a point you can return to.
+
 Field types: `short-text`, `long-text`, `number`, `checkbox`, `date`, `time`,
 `datetime`, `select`, `multi-select`. Selects carry options with stable ids;
 number fields support min/max/step; any field can set `default`, `required`,
 `help`, and `showInList` (which values headline history rows).
+
+### Conditional fields (`showWhen`)
+
+A field can be shown only while a select or multi-select field holds given
+options:
+
+```json
+{"id": "club", "type": "select", "label": "Club", "required": false,
+ "options": [{"id": "downtown", "label": "Downtown"}],
+ "showWhen": {"fieldId": "scale", "optionIds": ["gym"]}}
+```
+
+- **Validation.** `fieldId` must name another field in the template that is a
+  `select` or `multi-select` with declared `options` (not a `providerSlot`),
+  every `optionIds` entry must be one of its option ids, and conditions must not
+  form a cycle. A child form may name an inherited parent field; that reference
+  resolves at serve time.
+- **Meaning.** The field is visible when its target is itself visible and the
+  target's value is one of `optionIds` (for a multi-select, any selected
+  option counts).
+- **Fill order.** Visibility is judged on the values after fills:
+  - The server fills an omitted pinned select (one enabled option) first, so
+    an omitted pinned target counts as chosen.
+  - The server applies no other field `default`. An API caller that omits
+    any other target hides the field.
+  - `lookie forms submit` fills declared defaults before sending, so the
+    server then drops any filled value whose condition is false.
+- **Hidden fields.** A hidden field is never required, and any value submitted
+  for it is dropped before the entry is stored, on the native form and the JSON
+  API alike. A stored entry therefore never contradicts its own condition.
+- **Event time.** `eventAt` is derived only from a datetime that stays visible.
+  A hidden datetime never sets it, on the native form or JSON.
+  - When an explicit trio fills a sole datetime field that is hidden, that
+    copied value is dropped. This is harmless: the trio still sets the event
+    time.
+- **In the browser.** The form, inline corrections and history editors hide and
+  disable a conditional field while its condition is false. Without script the
+  field stays visible and the server still drops a hidden value. A required
+  conditional field is marked required only while shown, so a browser without
+  script can still submit when it does not apply.
+- **Builder.** Each field's settings have a **Show this field** select listing
+  `Always` and every option of the template's selection fields. A condition with
+  several options (set through the API) is kept and shown as one choice.
+- **Drift.** When a draft is saved, its conditions must resolve. Removing an
+  option a condition names, deleting its target, or changing the target's type
+  is refused until the condition is changed. Archiving the target
+  (`isDestroyed`) is allowed and leaves the field always visible. At submit
+  time a condition that no longer resolves (for example, a parent edit that
+  drops an option a child's condition names) also leaves the field visible
+  rather than refusing entries. Detaching a child copies its resolved fields,
+  so a drifted inherited condition must be fixed before the detach is accepted.
+- **History.** Stored entries are never rewritten. A correction is a new
+  submission, so it applies the current conditions: correcting an old entry
+  drops a value whose condition is now false.
 
 ## Groups (containers)
 
@@ -226,13 +293,15 @@ the row they came for.
 
 All under `/api/forms`, JSON. Browser mutations require the CSRF envelope
 (context cookie + `_csrf` token from a served form page + an allowed
-`Origin`); see [AGENT-ACCESS-CONTROL.md](AGENT-ACCESS-CONTROL.md) for the
-access model.
+`Origin`). Bearer callers skip it; see
+[Agents: CLI and bearer access](#agents-cli-and-bearer-access) and
+[AGENT-ACCESS-CONTROL.md](AGENT-ACCESS-CONTROL.md) for the access model.
 
 | Operation | Route |
 |---|---|
 | List templates | `GET /api/forms/templates` |
 | Read one (draft + `resolvedFields` for children) | `GET /api/forms/templates/:id` |
+| Serving fields + option ids (submitters too) | `GET /api/forms/:id/fields` |
 | Create draft | `POST /api/forms/templates` |
 | Revise draft (CAS: send `revision`) | `PATCH /api/forms/templates/:id` |
 | Publish | `POST /api/forms/templates/:id/publish` |
@@ -245,9 +314,279 @@ access model.
 | Replace list state (CAS) | `PUT /api/forms/:id/list` |
 | Validate list state | `POST /api/forms/:id/list/validate` |
 
+### Submitting an entry as JSON
+
+`POST /api/forms/:id/submissions` runs the same submission service as the
+entry page. The body, what the server fills in (pinned selects, event time),
+and the errors are in the [agent quickstart](#agent-quickstart), which is the
+one place that contract is written down.
+
 Template keys accepted on create/patch include the structural set —
 `kind`, `containerId`, `memberOrder`, `parentId`, `related`, `inherit` —
 everything the GUI can do, the API can do.
+
+## Agents: CLI and bearer access
+
+An agent logs or changes trackers with a bearer credential that carries forms
+capabilities: `formsCapabilities: [forms.submit]` to log entries, plus
+`forms.manage` to edit trackers. Set it on a static token in `access.tokens`
+(with `subject.agentId`) or when creating a managed API key. A grant covers
+every tracker on the instance. Check it with `lookie whoami`
+(`formsCapabilities`).
+
+| Task | Command |
+|---|---|
+| Find the tracker | `lookie forms list` |
+| Field and option ids (child trackers show resolved fields) | `lookie forms show <id>` |
+| Log an entry now | `lookie forms submit <id> --value reading=12` |
+| Log a past entry | `lookie forms submit <id> --at 2026-11-18T09:30 --tz America/New_York --value …` |
+| Log from a file | `lookie forms submit <id> --values-file entry.json` (or `-` for stdin) |
+| Check before sending | add `--dry-run` |
+| Verify | `lookie forms submissions <id> --limit 5` |
+| Correct an entry | `lookie forms submit <id> --supersedes <submissionId> --value reading=13` |
+| See a correction chain | `lookie forms history <id> <submissionId>` |
+| Change the tracker (serves at once) | `lookie forms patch <id> --revision N --body-file patch.json` |
+| Freeze a version | `lookie forms publish <id> --revision N` |
+
+What `forms submit` does for you:
+
+- Nests values under `values` and coerces `--value` strings by field type.
+  Numbers become numbers. Checkboxes take `true`/`false`. A select takes an
+  option id or its unique label. A multi-select takes a comma list or a JSON
+  array.
+- Computes `eventAt`, `timezone`, and `clientOffsetMinutes` from `--at`, or
+  from now when `--at` is absent. `--at` is RFC 3339 or a wall time read in
+  `--tz`. `--tz` defaults to `LOOKIE_LINK_TIMEZONE`, then the host zone. The
+  offset is the zone's offset at that instant: `-300` for EST, `-240` for EDT.
+  A wall time the clocks skip (spring forward) is refused. A repeated one
+  (fall back) takes the earlier instant; give an explicit offset for the
+  later one. Impossible dates such as Feb 30 are refused, never rolled over.
+- Fills defaults and the datetime explicitly. The server fills pinned selects
+  and derives `eventAt`; the CLI fills defaults and the datetime explicitly.
+  It sends every declared `default` you omit (the server applies none) and
+  sets an empty datetime field to `eventAt`. It always sends the full time
+  trio, so nothing depends on server inference. Without `--at`, a single
+  datetime value you supply becomes `eventAt`.
+- `--supersedes` starts from the corrected entry's values and `eventAt`, sends
+  `supersedesRecord: {id, resourceKind: 'form-submission'}`, and refuses (exit
+  `5`) when the entry is already superseded. Correct the latest entry instead.
+  Old entries are never edited.
+- `--idempotency-key` makes a retry safe. It needs a fixed time (`--at` or a
+  datetime value), because "now" changes between runs and a changed body is
+  `409 idempotency_conflict`, not the original receipt.
+
+A `422` names the failing path, for example `values.reading: is required`.
+
+## Agent quickstart
+
+How an agent logs, corrects and verifies an entry through the JSON API.
+These are the plain HTTP calls behind `lookie forms`
+([above](#agents-cli-and-bearer-access)); prefer the CLI where it runs.
+Who fills what: the server fills pinned selects and derives eventAt; the CLI
+fills defaults and the datetime explicitly.
+
+### 1. Discover the field ids
+
+Set `$HOST` to the deployment base URL and `$ID` to the tracker id.
+`GET /api/forms/$ID/fields` returns the serving fields (a child's resolved
+fields) to any caller with `forms.submit` or `forms.view`, which is
+`lookie forms show $ID`. Send the bearer without a context cookie.
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" "$HOST/api/forms/$ID/fields" \
+  | jq '.fields[]
+        | {id, type, required, default, options: [.options[]? | select(.disabled != true) | .id]}'
+```
+
+Managers can also read `GET /api/forms/templates/$ID` (draft, revision and
+versions). For a child, use its `resolvedFields` (what is actually served),
+not `template.fields` (the child's own overrides).
+
+### 2. Choose an envelope
+
+Mutations take **one** of two credentials, never both (a bearer together with
+the context cookie is `400 Ambiguous credentials`):
+
+- **Bearer** — `Authorization: Bearer <token>`. No cookie, no CSRF token, no
+  `Origin` requirement. Prefer this. The agent's static token or API key
+  needs `formsCapabilities` including `forms.submit`; check
+  `formsCapabilities` in `GET /api/whoami`.
+- **Browser context** — for a caller that acts as a browser would:
+  1. `GET /forms/<id>` with a cookie jar. The response sets the
+     `lookie_forms_context` cookie and the page carries the synchronizer token
+     in its `<input type="hidden" name="_csrf">`.
+  2. `POST` with that cookie, `X-CSRF-Token: <token>`, and an `Origin` header
+     matching a configured `forms.publicOrigins` entry.
+  3. Never put `_csrf` in the JSON body: the body is an allowlist (below), so
+     it is refused as a shape error. Use a fresh context per mutation when in
+     doubt; a stale context is refused.
+
+Every JSON request needs `Content-Type: application/json` (otherwise `415`).
+
+### 3. Build the body
+
+```json
+{
+  "values": {
+    "session-date": "2026-11-18T09:20:00-05:00",
+    "machine": "leg-press",
+    "weight-lbs": 150,
+    "sets": 3,
+    "reps": 12
+  },
+  "eventAt": "2026-11-18T09:20:00-05:00",
+  "timezone": "America/New_York",
+  "clientOffsetMinutes": -300,
+  "idempotencyKey": "leg-press-2026-11-18T09:20"
+}
+```
+
+- **Top-level keys are an allowlist:** `values`, `eventAt`, `timezone`,
+  `clientOffsetMinutes`, `idempotencyKey`, `supersedesRecord`. Anything else —
+  flat field names, `_csrf`, `templateVersion`, `actor` — is
+  `400 Unknown or server-derived submission field.`
+- **`values` is an object keyed by field id.** A `select` takes one option
+  id, a `multi-select` an array of option ids, a `number` a JSON number, a
+  `checkbox` a boolean.
+- **The server fills pinned selects and derives eventAt; the CLI fills
+  defaults and the datetime explicitly.** General field defaults are not
+  applied on the JSON path, so send required answers explicitly
+  (`lookie forms submit` sends each omitted field's declared `default` and
+  sets an empty datetime field to `eventAt`). A default is a suggested answer: send it only when it
+  accurately represents this entry. A pinned select is the exception: exactly
+  one enabled option makes it a fixed stamp, and when its key is missing from
+  `values` the server records that option, whether the field is required or
+  optional. Disabled options do not count. A supplied value is validated
+  rather than replaced, so `null` or `""` for a pinned select is
+  `422 validation_error`.
+- **Datetime values carry an explicit offset.** `2026-11-18T09:20:00-05:00`,
+  `…Z`, or minute precision `2026-11-18T09:20-05:00` (stored as
+  `2026-11-18T09:20:00-05:00`). A value without an offset is
+  `422 validation_error`; the server does not guess a zone.
+- **Supply the time trio together, or let JSON derive it.** When all three of
+  `eventAt` / `timezone` / `clientOffsetMinutes` are absent, the first active
+  datetime field in field order with an explicit-offset value supplies the
+  event time. A datetime hidden by a `showWhen` condition is skipped. The server uses its configured forms timezone when its offset
+  agrees at that instant, otherwise `UTC` or a whole-hour `Etc/GMT` zone. If
+  no matching zone is available (for example `+05:30` when the server zone is
+  not on that offset), `eventAt` remains absent and the displayed time falls
+  back to `receiptAt`; send an explicit trio to preserve the intended event
+  time. An explicit trio fills a datetime value whose key is missing only when
+  exactly one active datetime field exists. It does not overwrite a supplied
+  datetime value. The three must agree:
+  - `eventAt` is RFC 3339 with an explicit offset;
+  - `timezone` is an IANA zone name;
+  - `clientOffsetMinutes` is the offset of `eventAt` in minutes **east of UTC**
+    (`-300` for UTC−05:00, `+60` for UTC+01:00). That is the opposite sign of
+    JavaScript's `Date#getTimezoneOffset()`, so never pass that value through.
+  Supplying only some of the three is `422`; offsets that disagree are `400`.
+- **`idempotencyKey`** (1–128 visible ASCII characters) identifies one
+  intended submission for this actor and tracker. A nonempty
+  `Idempotency-Key` header takes precedence over the body key. Reusing the key returns the
+  original record only when the normalized captured submission is identical
+  (a body that differs only by values the server fills in counts as
+  identical); otherwise it returns `409 idempotency_conflict`. A live schema
+  revision can change that captured submission even with an unchanged HTTP
+  body. After a conflict, check existing records before choosing a new key.
+  Use a fresh key for a correction.
+
+### 4. Correct an entry
+
+Submissions are never edited. Send a new, complete submission naming its
+predecessor:
+
+```json
+{ "values": { "...": "..." }, "eventAt": "...", "timezone": "...", "clientOffsetMinutes": -300,
+  "supersedesRecord": { "id": "<submissionId>", "resourceKind": "form-submission" } }
+```
+
+`supersedesRecord` is an object, not a string: a bare id string, or an id
+from another tracker, returns `404 Not found` (the predecessor is not
+resolved). A record can be superseded
+once (a second correction of the same predecessor is
+`409 correction_conflict`); correct the latest record in the chain instead.
+
+### 5. Triage an error
+
+All JSON errors use `{ ok: false, error: { code, message, details? } }`.
+
+| Status | Meaning | Look at |
+|---|---|---|
+| `400` | Invalid request body or ambiguous credentials | Read `error.message`; check unknown keys, idempotency-key format and time-trio agreement, and ensure a bearer is not combined with `lookie_forms_context` |
+| `401` | No usable credential | The bearer or the context cookie |
+| `403 origin_rejected` / `csrf_rejected` | The browser envelope | `Origin`, `X-CSRF-Token`, and the cookie from the same `GET` |
+| `404` | Unknown tracker, no `forms.submit` on it, a kind that takes no entries (group, list, parent, or a form that has children), or a `supersedesRecord` that does not resolve | The id, the caller's grants, and the predecessor reference |
+| `409` | `idempotency_conflict` or `correction_conflict` | The key, or which record you are superseding |
+| `415` | Not `application/json` | `Content-Type` |
+| `422 validation_error` | Values failed the schema | `error.details[].path` (for example `values.machine` with `is required`) |
+
+A `400` can also reject mixed bearer and context-cookie credentials; use its
+message to distinguish that from a body error.
+
+### 6. Verify it landed
+
+- A `201` returns `submissionId`, the stored `receipt`, and `receiptUrl`
+  (`/forms/<id>/receipts/<submissionId>`, relative to the server). The receipt
+  page is server-rendered, so a plain `GET` shows what was captured.
+- `GET /api/forms/<id>/submissions?limit=50` (maximum 100) lists the caller's
+  current entries, newest receipt first (`receiptAt`, not `eventAt`). Each record's `values` is a **list** of
+  `{fieldId, fieldLabel, fieldType, value}` (selects add `selectedOptions`),
+  not an object — index it by `fieldId`.
+- **Superseded predecessors are not listed.** Only the head of each
+  correction chain appears; the full chain is at
+  `GET /api/forms/<id>/submissions/<submissionId>/history`. A predecessor
+  missing from the list is a correction, not a lost record.
+- A list-kind tracker has no submissions; read `GET /api/forms/<id>/list`.
+
+## Designing a tracker
+
+The platform will store whatever a template asks for, so the quality of the
+data is decided at design time. These rules come from trackers filled in by
+voice, by agents, and by thumb at the moment of the activity.
+
+1. **Count the entry cost.** For every field, ask whether the person can say
+   it in one breath to an agent and tap it in one go on a phone. A value that
+   is usually unknown at entry time is optional; a value that is usually the
+   same gets a `default`. Ask for what can be read off the object (a console,
+   a label, a plate), not recalled from memory.
+2. **Require only what makes the entry meaningless if missing.** Usually that
+   is the time plus the one thing being measured. Everything else is
+   optional. A required field the person cannot answer gets a guess, and a
+   guess is worse than a blank.
+3. **One enabled option is not a question.** A select with exactly one
+   enabled option renders as a stamp. Disabled leftovers do not count. JSON
+   callers may omit its value; see the quickstart.
+4. **Unknown is not false.** The native form submits an unchecked checkbox as
+   `false`; JSON preserves omission of an optional checkbox. Use a checkbox
+   only when unchecked truly means "no" and the fact is always observed.
+   For anything that may not have been noticed or asked, use an optional
+   `select` with `yes` / `no`, so blank stays "unknown". An optional
+   multi-select whose help says "leave empty if none" is fine.
+5. **Order fields within the platform's sections.** The entry page groups
+   selects and multi-selects first, numbers second, and other fields last,
+   preserving field order within each group. Put the most frequently answered
+   fields first within each section, and rarely used fields after the core
+   ones. Make one tracker per thing physically used
+   (a parent with children), with a group for the occasion that ties them
+   together.
+6. **Label with the name printed on the object.** Use the name on the machine
+   plate or the product label (or both). An option the person cannot
+   recognize gets logged as Other, and Other cannot be analyzed.
+7. **Keep an escape hatch.** Offer `Other (say what in Notes)` plus a `notes`
+   field, so a new case never blocks an entry. Add the real option the first
+   time it is used.
+8. **Numbers stay numbers.** Use `type: 'number'`, put the unit in the label
+   (`Weight (lb)`), and set `constraints.minimum`, `constraints.maximum`, and
+   `constraints.step` to accept every real reading. `component:
+   'stepped-select'` renders a picker when those constraints define a
+   supported finite range. Step alignment starts at `minimum`, or zero when
+   absent. With a zero base, step 25 rejects 66; fix the constraint instead of
+   rounding the measurement.
+9. **Never break history.** Change a tracker as a new revision. Retire a field
+   with `isDestroyed: true` instead of removing it, and make readers that
+   chart it accept the old field or its replacement across the boundary.
+   Relabeling an option is safe (receipts snapshot labels); changing a field's
+   type or an option id changes the record shape for anything that charts it.
 
 ## GUI surfaces
 

@@ -39,7 +39,7 @@ The inventory was checked against the route registrations in [`server.js`](../se
 | Publish list: `/api/publish` | `GET` | Repo-level `view` on the configured publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | Lists publications (summary projection, no `revisions[]`); optional `?state=active|revoked`; unknown query parameters are rejected (400); `revision` (a store-state hash), weak ETag, `no-cache`, 304 on `If-None-Match`. [`server.js`](../server.js) |
 | Publish get: `/api/publish/:slug` | `GET` | Repo-level `view` on the configured publish repo | `publish.areaPath`; disabled when `publish.enabled: false` | One publication with full `revisions[]`; a revoked slug still returns its record (`state: "revoked"`); `?version=N` adds that revision's file summary; unknown slug is `404 not_found`; ETag/304 as above. [`server.js`](../server.js) |
 | API-key list: `/api/agent-keys` | `GET` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Optional state/agent filters and audit projection. [`server.js`](../server.js) |
-| API-key create: `/api/agent-keys` | `POST` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Returns the new secret once; stores only its hash. [`server.js`](../server.js) |
+| API-key create: `/api/agent-keys` | `POST` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Returns the new secret once; stores only its hash. Optional `formsCapabilities[]` grants forms capabilities (see [Forms routes](#forms-routes-mounted-only-when-formsenabled-is-true)). [`server.js`](../server.js) |
 | API-key rotate: `/api/agent-keys/:keyId/rotate` | `POST` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Replaces and returns the secret once. [`server.js`](../server.js) |
 | API-key revoke: `/api/agent-keys/:keyId/revoke` | `POST` | API-key admin bearer token | `access.apiKeys.storePath` and `adminTokens` | Requires a reason. [`server.js`](../server.js) |
 | Grant list: `/api/grants` | `GET` | Grant admin token; bearer preferred, query accepted for this read | `access.grants.storePath` and `adminTokens` | Optional filters and audit projection. [`server.js`](../server.js) |
@@ -129,6 +129,7 @@ This three-column table is test-checked against `lib/agent-discovery.js` and the
 | `formsTemplates` | `/api/forms/templates` | `forms.enabled` is true |
 | `formsSubmissions` | `/api/forms/:templateId/submissions` | `forms.enabled` is true |
 | `formsList` | `/api/forms/:templateId/list` | `forms.enabled` is true |
+| `formsFields` | `/api/forms/:templateId/fields` | `forms.enabled` is true |
 | `audioInfo` | `/api/audio/:repo/*path` | Audio capability is available |
 | `audioPeaks` | `/api/peaks/:repo/*path` | Audio capability is available |
 | `markerTemplates` | `/api/markers/templates` | `markers.enabled` is true |
@@ -166,9 +167,9 @@ Both discovery responses contain these booleans. They are computed from register
 
 ## Discovery field inventory
 
-`GET /api/whoami` returns `ok`; the same `themes` appearance block as the agent card (below); `auth.mode`, `auth.type`, `auth.source`, and `auth.queryToken`; sanitized `subject` (`companyId`, `agentId`, `label`, or `null`); `permissions` (`view`, `write`, legacy-equivalent `edit`, `publish`); `repoScopes[]` (`repo`, `managed`, and `scopes[]` with `type` and `path`); plus `capabilities` and `endpoints` from the tables above.
+`GET /api/whoami` returns `ok`; the same `themes` appearance block as the agent card (below); `auth.mode`, `auth.type`, `auth.source`, and `auth.queryToken`; sanitized `subject` (`companyId`, `agentId`, `label`, or `null`); `permissions` (`view`, `write`, legacy-equivalent `edit`, `publish`); `repoScopes[]` (`repo`, `managed`, and `scopes[]` with `type` and `path`); `formsCapabilities[]` when forms are enabled (the forms capabilities this caller holds; every one for unrestricted callers); plus `capabilities` and `endpoints` from the tables above.
 
-`GET /.well-known/agent.json` returns `ok`, `schemaVersion`, `name`, package `version`, `generatedAt`; `instance.baseUrl` and `instance.mode`; `authentication.bearerToken` and `authentication.queryTokenForReadRequests`; `discovery.whoamiUrl`, `discovery.reposUrl`, `discovery.agentJsonUrl`, `discovery.openapiUrl`, and `discovery.apiDocsUrl`; `caller` containing the same `auth`, `subject`, `permissions`, and `repoScopes`; plus the same `capabilities` and `endpoints`. It also carries the appearance surface under `themes`: `parameters` (the five URL parameter names, see [URL selection](#url-selection-the-appearance-api)), `modes`, `wallpapers` (the `imageUrl` template, the `none` sentinel, and `panelOpacity` / `blur` ranges with their configured defaults), and `available[]` with each theme's `id`, `label`, `aliases`, and `wallpapers` (`dark[]` / `light[]` picture `id` + `label`, and that theme's effective `panelOpacity` / `blur`). A caller can build any valid appearance URL from this document alone.
+`GET /.well-known/agent.json` returns `ok`, `schemaVersion`, `name`, package `version`, `generatedAt`; `instance.baseUrl` and `instance.mode`; `authentication.bearerToken` and `authentication.queryTokenForReadRequests`; `discovery.whoamiUrl`, `discovery.reposUrl`, `discovery.agentJsonUrl`, `discovery.openapiUrl`, and `discovery.apiDocsUrl`; `caller` containing the same `auth`, `subject`, `permissions`, `formsCapabilities` (forms enabled only), and `repoScopes`; plus the same `capabilities` and `endpoints`. It also carries the appearance surface under `themes`: `parameters` (the five URL parameter names, see [URL selection](#url-selection-the-appearance-api)), `modes`, `wallpapers` (the `imageUrl` template, the `none` sentinel, and `panelOpacity` / `blur` ranges with their configured defaults), and `available[]` with each theme's `id`, `label`, `aliases`, and `wallpapers` (`dark[]` / `light[]` picture `id` + `label`, and that theme's effective `panelOpacity` / `blur`). A caller can build any valid appearance URL from this document alone.
 
 Neither response includes credentials, token names, repository roots, store paths, private metadata, or administrative capabilities. A restricted missing credential returns `401`; an invalid credential returns `403`, without capability data.
 
@@ -186,7 +187,8 @@ Neither response includes credentials, token names, repository roots, store path
 | `access.tokens.<name>.secretEnv` / `.secret` | Static credential secret source; environment is preferred |
 | `access.tokens.<name>.permissions.{view,write,edit,publish}` | Boolean permissions; `edit` and legacy `allowEditing` normalize to `write` |
 | `access.tokens.<name>.repos` | `all`, repo-name array, or repo map; repo scopes may be `all`, `true`, `null`, path array, or `{ paths: [...] }` |
-| `access.tokens.<name>.subject` | Optional caller metadata; discovery exposes only `companyId`, `agentId`, and `label` |
+| `access.tokens.<name>.subject` | Optional caller metadata; discovery exposes only `companyId`, `agentId`, and `label`. Forms routes need `subject.agentId` to identify a static-token caller |
+| `access.tokens.<name>.formsCapabilities[]` | Forms capabilities this token holds: any of `forms.view`, `forms.submit`, `forms.read_submissions`, `forms.manage`. Unknown names fail startup. Default none |
 | `access.tokens.<name>.issuer` / `.audit` | Optional opaque lineage retained in the access context, not exposed by discovery |
 | `access.apiKeys.storePath` | Enables hashed managed API keys and their audit store |
 | `access.apiKeys.adminTokens.<name>.secretEnv` / `.secret` | API-key lifecycle admin credentials |
@@ -281,11 +283,18 @@ The `lookie` executable resolves the instance in this order: global `--instance`
 | `lookie kit upload <name> <file>` | `PUT /api/kits/:name/files/:file` (admin) with `{content}` |
 | `lookie kit set <name> --revision R --token --radius=8px [--token …]` | `PATCH /api/kits/:name` (admin); `--token` value is `--name=value` |
 | `lookie kit delete <name>` | `DELETE /api/kits/:name` (admin; org kits only) |
+| `lookie forms list` | `GET /api/forms/templates`; forms the caller can submit to (managers also see drafts, state, and revision) |
+| `lookie forms show <id>` | `GET /api/forms/:templateId/fields`, plus `GET /api/forms/templates/:templateId` for managers; adds a `fields[]` summary of the serving fields (a child's resolved fields) with `id`, `type`, `label`, `required`, `default`, and option `id`/`label` |
+| `lookie forms submit <id> ...` | `POST /api/forms/:templateId/submissions` with values nested under `values`. Values come from `--values-file F` (`-` for stdin; a bare object or `{values:{...}}`) and repeated `--value key=value`, coerced by the field type (numbers, `true`/`false`, select option id or unique label, comma list or JSON array for multi-select). Computes `eventAt`, `timezone`, and `clientOffsetMinutes` from `--at` (RFC 3339, or wall time read in the zone; default now) and `--tz` (default `LOOKIE_LINK_TIMEZONE`, else the host zone); the offset is the zone's at that instant, east-positive. The server fills pinned selects and derives eventAt; the CLI fills defaults and the datetime explicitly: it sends every omitted field's declared `default` (the server applies none), sets an empty datetime field to `eventAt`, and always sends the full trio. With no `--at`, a single supplied datetime value becomes `eventAt`. `--supersedes ID` sends `supersedesRecord: {id, resourceKind: 'form-submission'}`, starts from that entry's values and `eventAt`, and exits `5` if the entry is already superseded. A wall time in a DST gap, an impossible date, or an out-of-range offset exits `2`. A repeated (fall-back) wall time takes the earlier instant; an explicit offset picks either. `--idempotency-key K` needs a fixed event time (`--at`, a datetime value, or `--supersedes`) so a retry sends the identical body and gets the original receipt; `--dry-run` prints the body without sending |
+| `lookie forms submissions <id> [--limit N]` | `GET /api/forms/:templateId/submissions` |
+| `lookie forms history <id> <submissionId>` | `GET /api/forms/:templateId/submissions/:submissionId/history` |
+| `lookie forms patch <id> --revision N (--body-file F\|- \| --body JSON)` | `PATCH /api/forms/templates/:templateId`; the draft serves at once. A stale revision exits `5` |
+| `lookie forms publish <id> [--revision N]` | `POST /api/forms/templates/:templateId/publish`; freezes an immutable version |
 | `lookie openapi` | Prints `/openapi.json` |
 | `lookie docs` | Prints the `/api/docs` URL (`--json` wraps it as `{ok,url}`) |
 | `lookie --help`, `lookie --version`, global `--json` | Help, version, and supported JSON output |
 
-Appearance writes (`set`, `upload`, `delete`) send `LOOKIE_LINK_ADMIN_TOKEN` as the bearer, falling back to the normal token. Exit codes: `0` ok, `2` usage, `3` auth (401/403), `4` not found, `5` conflict, `6` transport/other.
+Appearance writes (`set`, `upload`, `delete`) send `LOOKIE_LINK_ADMIN_TOKEN` as the bearer, falling back to the normal token. Exit codes: `0` ok, `2` usage, `3` auth (401/403), `4` not found, `5` conflict, `6` transport/other (including `422` validation, whose failing paths such as `values.reading` are appended to the message).
 
 The package also ships compatibility executables `lookie-read` and `lookie-annotations`; they remain as separate scripts. `lookie annotations` in the unified CLI covers the same operations (output is always JSON; the shim's `--pretty`/`--json-errors` are not ported).
 
@@ -336,8 +345,19 @@ These routes are **not** part of the default route set above: they are registere
 only when the opt-in `forms` configuration block is present, so the route-matrix
 equality test intentionally does not cover them. When mounted, discovery
 advertises the `forms` capability and the `forms`, `formsTemplates`,
-`formsSubmissions`, and `formsList` endpoint templates; per-template authorization still
+`formsSubmissions`, `formsList`, and `formsFields` endpoint templates; per-template authorization still
 applies on every forms route.
+
+**Who holds forms capabilities.** Unrestricted callers (`access.humanDefault: full`
+without a credential) hold all of them. A scoped bearer holds only what its
+credential lists in `formsCapabilities[]`: `access.tokens.<name>.formsCapabilities`
+for a static token (which also needs `subject.agentId`), or the `formsCapabilities`
+array given when a managed API key is created. Names outside `forms.view`,
+`forms.submit`, `forms.read_submissions`, and `forms.manage` are rejected. A grant
+applies to every form on the instance; managed grants and config admin tokens
+carry no forms capabilities. `whoami` reports the caller's list. Bearer callers
+skip the browser Origin/CSRF gate, so agents never need a form page's
+synchronizer token.
 
 | Route | Method | Effective auth | Enabled by | Notes |
 |---|---|---|---|---|
@@ -351,6 +371,7 @@ applies on every forms route.
 | Clone template (browser): `/forms/:templateId/clone` | `POST` | `forms.manage` | `forms.enabled` | Browser twin of the clone API. |
 | Restore version (browser): `/forms/:templateId/configure/restore-version` | `POST` | `forms.manage` | `forms.enabled` | Restores a published version as the draft. |
 | Delete template (API): `/api/forms/templates/:templateId` | `DELETE` | `forms.manage` (bearer or browser context) | `forms.enabled` | Soft-deletes the template; envelope on error. |
+| Field schema (API): `/api/forms/:templateId/fields` | `GET` | `forms.submit` or `forms.view` | `forms.enabled` | The serving fields (a child's resolved fields, destroyed fields omitted) with option ids, `schemaDigest`, and submit-visible `children[]`. Uniform 404 for archived, container, list, unknown, or invisible forms. |
 | Submissions list (API): `/api/forms/:templateId/submissions` | `GET` | `forms.view` | `forms.enabled` | The caller's submissions for the template; discovery template `formsSubmissions`. |
 | Submission history (API): `/api/forms/:templateId/submissions/:submissionId/history` | `GET` | `forms.view` | `forms.enabled` | Record lineage (corrections via `supersedesRecord`) with actor per entry. |
 | Entry history: `/forms/:templateId/entries` | `GET` | `forms.submit` or `forms.read_submissions` | `forms.enabled` | Owner-scoped server-rendered history; shares persistent form navigation. |
@@ -362,7 +383,7 @@ applies on every forms route.
 | Publish API: `/api/forms/templates/:templateId/publish` | `POST` | `forms.manage` | `forms.enabled` | Creates the next immutable version; accepts an optional positive draft revision CAS guard. |
 | Clone API: `/api/forms/templates/:templateId/clone` | `POST` | `forms.manage` | `forms.enabled` | Creates a revision-1 draft with a fresh identity and clone lineage; no submissions or published history are copied. |
 | Archive/restore API: `/api/forms/templates/:templateId/archive`, `/api/forms/templates/:templateId/restore` | `POST` | `forms.manage` | `forms.enabled` | CAS-guarded lifecycle changes. Archived forms refuse new submissions while history and receipts remain readable. |
-| JSON submit: `/api/forms/:templateId/submissions` | `POST` | `forms.submit` | `forms.enabled` | Same submission service as the native path. |
+| JSON submit: `/api/forms/:templateId/submissions` | `POST` | `forms.submit` | `forms.enabled` | Same submission service as the native path: an omitted pinned select (exactly one enabled option) is filled first, values for fields hidden by `showWhen` are then dropped and their `required` skipped, and an absent `eventAt`/`timezone`/`clientOffsetMinutes` trio is derived from the first offset-bearing datetime that stays visible (when a zone matches its offset; minute-precision offsets are stored with `:00` seconds), while field `default`s are filled by `lookie forms submit` before it sends rather than by this route. See the [agent quickstart](TRACKERS.md#agent-quickstart) and [conditional fields](TRACKERS.md#conditional-fields-showwhen). |
 | List state: `/api/forms/:templateId/list` | `GET`, `PUT` | `forms.view` or `forms.submit` (`GET`); `forms.submit` or `forms.manage` (`PUT`) | `forms.enabled` | Mutable checklist state for `kind: 'list'`. GET is read-only and returns virtual revision `0` when absent (no file created). PUT uses revision CAS (`0` creates). Discovery template `formsList`. |
 | List validate: `/api/forms/:templateId/list/validate` | `POST` | `forms.submit` or `forms.manage` | `forms.enabled` | Same validator as PUT; no write. |
 | Receipt: `/forms/:templateId/receipts/:submissionId` | `GET` | Submitter (or `read_submissions`) | `forms.enabled` | Uniform 404 for non-owners and unknown IDs. |

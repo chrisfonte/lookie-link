@@ -156,6 +156,31 @@ Readback uses the normal `view`, `asset`, and optional `raw` routes beneath the 
 
 `GET /api/publish` and `GET /api/publish/:slug` require whole-repo `view` (not `publish`) on the publish repo, and read what create/update/revoke wrote. Both carry a `revision` that changes whenever any publication changes, and set a weak `ETag`; poll with `If-None-Match` and treat `304` as "nothing changed" instead of re-fetching and diffing.
 
+## Forms (trackers)
+
+Forms are mounted only with `forms.enabled: true`. Their authorization uses forms capabilities (`forms.view`, `forms.submit`, `forms.read_submissions`, `forms.manage`), not repo permissions. A bearer holds the ones its credential lists in `formsCapabilities[]`, set on a static token in config or given when a managed API key is created (`POST /api/agent-keys` with `"formsCapabilities": ["forms.submit"]`). `whoami` reports them. Bearer callers skip the browser Origin/CSRF envelope: never scrape a synchronizer token from a form page.
+
+Submit with `POST /api/forms/:id/submissions`:
+
+```json
+{
+  "values": { "read-at": "2026-11-18T09:30:00-05:00", "machine": "unit-a", "reading": 12 },
+  "eventAt": "2026-11-18T09:30:00-05:00",
+  "timezone": "America/New_York",
+  "clientOffsetMinutes": -300,
+  "idempotencyKey": "meter-2026-11-18",
+  "supersedesRecord": { "id": "<submissionId>", "resourceKind": "form-submission" }
+}
+```
+
+- Values nest under `values`, keyed by field id; selects take option ids. `GET /api/forms/:id/fields` returns the serving fields and option ids to any caller who can submit or view.
+- Who fills what: the server fills pinned selects and derives `eventAt`; the CLI fills defaults and the datetime explicitly. The server fills an omitted select that has exactly one enabled option. When the trio is absent, it derives the trio from the first datetime value with an explicit offset. It never applies a field `default`, so a raw HTTP caller must send every other required value. `lookie forms submit` always sends the full trio, every declared `default` you omit, and the datetime field set to `eventAt`, so its body does not depend on server inference.
+- `clientOffsetMinutes` is the zone's offset from UTC at `eventAt`, east-positive: `-300` for New York in winter, `-240` in summer. It is not `Date#getTimezoneOffset()`, whose sign is inverted. The three values must agree, or the submission returns `422`.
+- `supersedesRecord` records a correction as a new entry. The prior entry is never edited.
+- `PATCH /api/forms/templates/:id` (with the draft `revision`) changes the draft, and the draft is what serves. `POST …/publish` freezes an immutable version.
+
+`lookie forms` wraps all of this: it computes the time trio, fills defaults and an empty datetime field, and nests values. See [TRACKERS.md](TRACKERS.md#agents-cli-and-bearer-access).
+
 ## Administrative stores
 
 API-key lifecycle routes require an API-key admin bearer token. Created and rotated secrets are returned once and stored only as hashes. Grant lifecycle routes require a grant admin token; mutation credentials must be bearer tokens. Grant requests also enforce issuer, subject, source-owner, expiry, approval, and cross-company allow-root policy.
@@ -217,6 +242,10 @@ A projection writes the saved values into a target file. Send `projection: { id,
 ### Browser and agent writes
 
 Agents present a bearer token. Browsers use the cookie `lookie_markers_context` set when the viewer page is served, send its token as `X-CSRF-Token`, and must send an `Origin` matching `markers.publicOrigins` (falling back to `forms.publicOrigins`): `403 origin_rejected` or `403 csrf_rejected` name the missing piece, and a bearer together with the cookie is `400 ambiguous_credentials`. Mutations never accept `?token=`. Reads may.
+
+## Tracker submissions
+
+`POST /api/forms/:templateId/submissions` stores one tracker entry. When the key of a pinned select (exactly one enabled option) is missing, that option is recorded. `null` or `""` is still `422`. Datetime values need an explicit offset; minute precision is accepted and stored with `:00` seconds. When `eventAt`/`timezone`/`clientOffsetMinutes` are all absent, they come from the first visible datetime value with an explicit offset (a datetime hidden by `showWhen` is skipped, and its value is dropped), unless no zone matches that offset (then display falls back to `receiptAt`). This route applies no other field defaults; `lookie forms submit` fills them before sending. A partial trio is `422` at path `eventTime`. See the [agent quickstart](TRACKERS.md#agent-quickstart). Bearer capabilities, field discovery and the CLI are in [Forms (trackers)](#forms-trackers).
 
 ## Stale-write guards
 
