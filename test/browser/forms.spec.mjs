@@ -73,6 +73,22 @@ const gymTemplate = {
   ],
 };
 
+const weighInTemplate = {
+  contractVersion: 1,
+  resourceKind: 'form-template',
+  templateId: 'weigh-in',
+  ownerId: 'operator',
+  revision: 1,
+  grammarVersion: 1,
+  destinationId: 'gym-log',
+  title: 'Weigh-in',
+  fields: [
+    {id: 'scale', type: 'select', label: 'Scale', required: true, options: [{id: 'home', label: 'Home'}, {id: 'gym', label: 'Gym'}]},
+    {id: 'club', type: 'select', label: 'Club', required: true, options: [{id: 'downtown', label: 'Downtown'}, {id: 'uptown', label: 'Uptown'}], showWhen: {fieldId: 'scale', optionIds: ['gym']}},
+    {id: 'weight', type: 'number', label: 'Weight (lb)', required: true, constraints: {minimum: 0, maximum: 1000}},
+  ],
+};
+
 let browser;
 let launchError;
 
@@ -101,6 +117,7 @@ async function startFixture() {
     logger: {warn() {}},
   });
   await registry.createDraft(structuredClone(gymTemplate));
+  await registry.createDraft(structuredClone(weighInTemplate));
 
   // A mapped repo with a document, so browser tests can cover document pages too.
   // Without this the fixture serves forms only, and a header assertion written
@@ -616,4 +633,22 @@ browserTest('the theme control is labelled before script runs, not after', async
     'Ember',
     'the label follows the applied theme'
   );
+});
+
+browserTest('a showWhen field appears only for its selected option and submits without it otherwise', async ({page, fixture}) => {
+  await page.goto(`${fixture.origin}/forms/weigh-in`, {waitUntil: 'networkidle'});
+  const club = page.locator('#field-club');
+  assert.equal(await club.isVisible(), false, 'club is hidden until a gym scale is chosen');
+  await page.selectOption('#field-scale', 'gym');
+  assert.equal(await club.isVisible(), true);
+  await page.selectOption('#field-scale', 'home');
+  assert.equal(await club.isVisible(), false);
+  await page.fill('#field-weight', '180');
+  await Promise.all([
+    page.waitForURL(/\/receipts\//),
+    page.click('.form-primary-action'),
+  ]);
+  const receipt = await page.locator('main').innerText();
+  assert.match(receipt, /Home/);
+  assert.doesNotMatch(receipt, /Club/);
 });

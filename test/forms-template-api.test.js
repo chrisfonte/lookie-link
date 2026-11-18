@@ -510,3 +510,29 @@ test('clone and archive APIs preserve source history, receipts, CAS, and authori
     await server.close();
   }
 });
+
+test('template API accepts a valid showWhen and rejects a broken reference with no write', async () => {
+  const server = await makeServer();
+  try {
+    const created = await server.request('/api/forms/templates', jsonMutation(draftBody('conditional-log')));
+    assert.equal(created.status, 201);
+    const before = await diskSnapshot(server.templatesPath);
+    const fields = draftBody().fields;
+    const broken = await server.request('/api/forms/templates/conditional-log', patchMutation({
+      revision: 1,
+      fields: [fields[0], {...fields[1], showWhen: {fieldId: 'lift', optionIds: ['deadlift']}}],
+    }));
+    assert.equal(broken.status, 422);
+    assert.deepEqual((await broken.json()).error.details.map((error) => error.path), ['fields[1].showWhen.optionIds[0]']);
+    assert.deepEqual(await diskSnapshot(server.templatesPath), before);
+
+    const revised = await server.request('/api/forms/templates/conditional-log', patchMutation({
+      revision: 1,
+      fields: [fields[0], {...fields[1], showWhen: {fieldId: 'lift', optionIds: ['squat']}}],
+    }));
+    assert.equal(revised.status, 200);
+    assert.deepEqual((await revised.json()).template.fields[1].showWhen, {fieldId: 'lift', optionIds: ['squat']});
+  } finally {
+    await server.close();
+  }
+});

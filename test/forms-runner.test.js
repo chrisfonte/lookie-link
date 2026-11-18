@@ -2758,3 +2758,150 @@ test('Trackers pages pick up theme CSS set after startup (live reload), not the 
     await server.close();
   }
 });
+
+const weighInTemplate = {
+  contractVersion: 1,
+  resourceKind: 'form-template',
+  templateId: 'weigh-in',
+  ownerId: 'operator',
+  revision: 1,
+  grammarVersion: 1,
+  title: 'Weigh-in',
+  fields: [
+    { id: 'scale', type: 'select', label: 'Scale', required: true, options: [{ id: 'home', label: 'Home' }, { id: 'gym', label: 'Gym' }] },
+    { id: 'club', type: 'select', label: 'Club', required: true, options: [{ id: 'downtown', label: 'Downtown' }, { id: 'uptown', label: 'Uptown' }], showWhen: { fieldId: 'scale', optionIds: ['gym'] } },
+    { id: 'weight', type: 'number', label: 'Weight (lb)', required: true, constraints: { minimum: 0, maximum: 1000 } },
+    { id: 'shoes', type: 'checkbox', label: 'Shoes on', required: false, showWhen: { fieldId: 'scale', optionIds: ['gym'] } },
+  ],
+};
+
+async function weighInFixture() {
+  const fixture = await makeFixture();
+  await fs.writeFile(path.join(fixture.templatesPath, 'weigh-in.yaml'), yaml.dump(weighInTemplate), 'utf8');
+  return fixture;
+}
+
+async function storedValues(submissionsPath) {
+  const files = await submissionFiles(submissionsPath);
+  const records = await Promise.all(files.map(async (name) => JSON.parse(await fs.readFile(path.join(submissionsPath, name), 'utf8'))));
+  return records.map((record) => Object.fromEntries(record.values.map((entry) => [entry.fieldId, entry.value])));
+}
+
+test('showWhen fields render visible without script and the server drops hidden native values', async () => {
+  const fixture = await weighInFixture();
+  const server = await startServer(fixture);
+  try {
+    const context = await getBrowserContext(server, 'weigh-in');
+    const club = context.document.querySelector('#field-club').closest('.field');
+    assert.equal(club.getAttribute('data-show-when'), 'scale');
+    assert.equal(club.getAttribute('data-show-when-options'), 'gym');
+    assert.equal(club.hidden, false, 'without script the conditional field stays usable');
+    assert.equal(context.document.querySelector('#field-weight').closest('.field').hasAttribute('data-show-when'), false);
+
+    const post = (fields) => server.request('/forms/weigh-in', {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: new URLSearchParams({ _csrf: context.token, ...fields }),
+    });
+    // Home scale: a stray club and the always-posted checkbox are dropped; club is not required.
+    assert.equal((await post({ scale: 'home', club: 'uptown', weight: '180' })).status, 303);
+    assert.equal((await post({ scale: 'home', weight: '181' })).status, 303);
+    // Gym scale: club is required while visible.
+    const missing = await post({ scale: 'gym', weight: '182' });
+    assert.equal(missing.status, 422);
+    assert.match(await missing.text(), /Club: is required/);
+    assert.equal((await post({ scale: 'gym', club: 'downtown', weight: '183', shoes: 'true' })).status, 303);
+
+    const stored = await storedValues(fixture.submissionsPath);
+    assert.equal(stored.length, 3);
+    assert.ok(stored.some((values) => values.weight === 180 && !('club' in values) && !('shoes' in values)));
+    assert.ok(stored.some((values) => values.weight === 183 && values.club === 'downtown' && values.shoes === true));
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('showWhen applies to JSON API submissions', async () => {
+  const fixture = await weighInFixture();
+  const server = await startServer(fixture);
+  try {
+    const context = await getBrowserContext(server, 'weigh-in');
+    const headers = { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'X-CSRF-Token': context.token };
+    const submit = (values) => server.request('/api/forms/weigh-in/submissions', { method: 'POST', headers, body: JSON.stringify({ values }) });
+    const home = await submit({ scale: 'home', club: 'uptown', weight: 180 });
+    assert.equal(home.status, 201);
+    assert.deepEqual((await home.json()).receipt.values.map((entry) => entry.fieldId), ['scale', 'weight']);
+    const missing = await submit({ scale: 'gym', weight: 180 });
+    assert.equal(missing.status, 422);
+    assert.ok((await missing.json()).error.details.some((entry) => entry.path === 'values.club'));
+    const gym = await submit({ scale: 'gym', club: 'uptown', weight: 180 });
+    assert.equal(gym.status, 201);
+    assert.deepEqual((await gym.json()).receipt.values.map((entry) => entry.fieldId), ['scale', 'club', 'weight']);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('the showWhen script hides and disables conditional fields on the form and inline edits', async () => {
+  const fixture = await weighInFixture();
+  const server = await startServer(fixture);
+  try {
+    const context = await getBrowserContext(server, 'weigh-in');
+    const submitted = await server.request('/forms/weigh-in', {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: new URLSearchParams({ _csrf: context.token, scale: 'gym', club: 'uptown', weight: '180' }),
+    });
+    assert.equal(submitted.status, 303);
+
+    const page = await server.request('/forms/weigh-in', { headers: { Cookie: context.cookie } });
+    const dom = scriptedForm(await page.text(), { now: new Date('2026-07-20T13:30:00Z'), offsetMinutes: 240, timezone: 'America/New_York' });
+    const document = dom.window.document;
+    const form = document.querySelector('form[method="post"]:not(.inline-edit-form)');
+    const club = form.querySelector('#field-club');
+    assert.equal(club.closest('.field').hidden, true, 'no scale chosen hides club');
+    assert.equal(club.disabled, true);
+    assert.equal(formValues(form).has('club'), false);
+    form.querySelector('#field-scale').value = 'gym';
+    form.querySelector('#field-scale').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    assert.equal(club.closest('.field').hidden, false);
+    assert.equal(club.disabled, false);
+    form.querySelector('#field-scale').value = 'home';
+    form.querySelector('#field-scale').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    assert.equal(club.closest('.field').hidden, true);
+
+    // The recent-entries inline editor starts from the stored gym entry, so club is shown.
+    const inline = document.querySelector('.inline-edit-form');
+    const inlineClub = inline.querySelector('select[name="club"]');
+    assert.equal(inlineClub.closest('.field').hidden, false);
+    assert.equal(inlineClub.value, 'uptown');
+    inline.querySelector('select[name="scale"]').value = 'home';
+    inline.querySelector('select[name="scale"]').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    assert.equal(inlineClub.closest('.field').hidden, true);
+    // The main form is unaffected by the inline editor's change.
+    assert.equal(form.querySelector('#field-scale').value, 'home');
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
+
+test('the showWhen script leaves a field visible when its target is not on the page', async () => {
+  const fixture = await makeFixture();
+  const orphan = structuredClone(weighInTemplate);
+  orphan.templateId = 'weigh-in-orphan';
+  orphan.fields[0].isDestroyed = true;
+  await fs.writeFile(path.join(fixture.templatesPath, 'weigh-in-orphan.yaml'), yaml.dump(orphan), 'utf8');
+  const server = await startServer(fixture);
+  try {
+    const page = await server.request('/forms/weigh-in-orphan');
+    assert.equal(page.status, 200);
+    const dom = scriptedForm(await page.text(), { now: new Date('2026-07-20T13:30:00Z'), offsetMinutes: 240, timezone: 'America/New_York' });
+    const club = dom.window.document.querySelector('#field-club');
+    assert.equal(club.closest('.field').hidden, false);
+    assert.equal(club.disabled, false);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});

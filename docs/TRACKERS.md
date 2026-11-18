@@ -100,6 +100,40 @@ Field types: `short-text`, `long-text`, `number`, `checkbox`, `date`, `time`,
 number fields support min/max/step; any field can set `default`, `required`,
 `help`, and `showInList` (which values headline history rows).
 
+### Conditional fields (`showWhen`)
+
+A field can be shown only while a select or multi-select field holds given
+options:
+
+```json
+{"id": "club", "type": "select", "label": "Club", "required": false,
+ "options": [{"id": "downtown", "label": "Downtown"}],
+ "showWhen": {"fieldId": "scale", "optionIds": ["gym"]}}
+```
+
+- **Validation.** `fieldId` must name another field in the template that is a
+  `select` or `multi-select` with declared `options` (not a `providerSlot`),
+  every `optionIds` entry must be one of its option ids, and conditions must not
+  form a cycle. A child form may name an inherited parent field; that reference
+  resolves at serve time.
+- **Meaning.** The field is visible when its target is itself visible and the
+  target's submitted value is one of `optionIds` (for a multi-select, any
+  selected option counts). Values are what was submitted: defaults are not
+  applied, so an API caller that omits the target hides the field.
+- **Hidden fields.** A hidden field is never required, and any value submitted
+  for it is dropped before the entry is stored, on the native form and the JSON
+  API alike. A stored entry therefore never contradicts its own condition.
+- **In the browser.** The form, inline corrections and history editors hide and
+  disable a conditional field while its condition is false. Without script the
+  field stays visible and the server still drops a hidden value.
+- **Builder.** Each field's settings have a **Show this field** select listing
+  `Always` and every option of the template's selection fields. A condition with
+  several options (set through the API) is kept and shown as one choice.
+- **Drift.** A condition whose target is later removed (`isDestroyed`) or
+  unresolvable leaves the field always visible. Removing an option a condition
+  names is refused at save until the condition is changed.
+- Old entries are unaffected: conditions apply only when an entry is submitted.
+
 ## Groups (containers)
 
 A group is a template of `kind: 'container'` — same registry, same lifecycle,

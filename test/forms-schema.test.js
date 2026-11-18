@@ -241,3 +241,105 @@ test('presentation rejects a theme that is a path rather than a slug, and a bogu
   badMode.presentation = {themeMode: 'sepia'};
   assert.ok(paths(validateTemplate(badMode)).includes('presentation.themeMode'));
 });
+
+// showWhen: a field shown only while another selection field holds given options.
+const scaleField = field('scale', 'select', {options: [{id: 'home', label: 'Home'}, {id: 'gym', label: 'Gym'}]});
+function conditionalTemplate(clubExtra = {}, extraFields = []) {
+  return templateWith([
+    scaleField,
+    field('club', 'select', {
+      options: [{id: 'downtown', label: 'Downtown'}, {id: 'uptown', label: 'Uptown'}],
+      showWhen: {fieldId: 'scale', optionIds: ['gym']},
+      ...clubExtra,
+    }),
+    field('weight', 'number', {constraints: {minimum: 0, maximum: 1000}}),
+    ...extraFields,
+  ]);
+}
+
+test('showWhen validates against a declared selection field and its options', () => {
+  assert.deepEqual(validateTemplate(conditionalTemplate()), {valid: true, errors: []});
+  assert.equal(validateTemplate(conditionalTemplate({showWhen: {fieldId: 'scale', optionIds: ['home', 'gym']}})).valid, true);
+
+  const cases = [
+    [{showWhen: 'scale'}, 'fields[1].showWhen'],
+    [{showWhen: {fieldId: 'scale'}}, 'fields[1].showWhen.optionIds'],
+    [{showWhen: {optionIds: ['gym']}}, 'fields[1].showWhen.fieldId'],
+    [{showWhen: {fieldId: 'scale', optionIds: []}}, 'fields[1].showWhen.optionIds'],
+    [{showWhen: {fieldId: 'scale', optionIds: ['gym', 'gym']}}, 'fields[1].showWhen.optionIds[1]'],
+    [{showWhen: {fieldId: 'scale', optionIds: ['gym'], extra: true}}, 'fields[1].showWhen.extra'],
+    [{showWhen: {fieldId: 'club', optionIds: ['downtown']}}, 'fields[1].showWhen.fieldId'],
+    [{showWhen: {fieldId: 'missing', optionIds: ['gym']}}, 'fields[1].showWhen.fieldId'],
+    [{showWhen: {fieldId: 'weight', optionIds: ['gym']}}, 'fields[1].showWhen.fieldId'],
+    [{showWhen: {fieldId: 'scale', optionIds: ['office']}}, 'fields[1].showWhen.optionIds[0]'],
+  ];
+  for (const [extra, expected] of cases) {
+    const result = validateTemplate(conditionalTemplate(extra));
+    assert.equal(result.valid, false, JSON.stringify(extra));
+    assert.ok(paths(result).includes(expected), `${JSON.stringify(extra)} -> ${paths(result).join(', ')}`);
+  }
+});
+
+test('showWhen rejects cycles and provider-backed targets, and soft-resolves inherited targets', () => {
+  const cycle = templateWith([
+    field('first', 'select', {options: [{id: 'a', label: 'A'}], showWhen: {fieldId: 'second', optionIds: ['b']}}),
+    field('second', 'select', {options: [{id: 'b', label: 'B'}], showWhen: {fieldId: 'first', optionIds: ['a']}}),
+  ]);
+  assert.ok(validateTemplate(cycle).errors.some((error) => /cycle/.test(error.message)));
+
+  const provider = templateWith([
+    field('source', 'select', {providerSlot: 'locations'}),
+    field('detail', 'short-text', {showWhen: {fieldId: 'source', optionIds: ['a']}}),
+  ]);
+  assert.ok(paths(validateTemplate(provider)).includes('fields[1].showWhen.fieldId'));
+
+  const child = {
+    ...templateWith([field('club', 'short-text', {showWhen: {fieldId: 'scale', optionIds: ['gym']}})]),
+    parentId: 'weigh-in-parent',
+  };
+  assert.deepEqual(validateTemplate(child), {valid: true, errors: []});
+});
+
+test('submission drops hidden values and skips their required check', () => {
+  const template = conditionalTemplate();
+  const home = validateSubmissionValues(template, {scale: 'home', club: 'downtown', weight: 180});
+  assert.equal(home.valid, true);
+  assert.deepEqual(home.normalized, {scale: 'home', weight: 180});
+  assert.deepEqual(home.hidden, ['club']);
+
+  assert.equal(validateSubmissionValues(template, {scale: 'home', weight: 180}).valid, true);
+  // A hidden value is ignored even when it would be invalid.
+  assert.equal(validateSubmissionValues(template, {scale: 'home', club: 'nowhere', weight: 180}).valid, true);
+
+  const gym = validateSubmissionValues(template, {scale: 'gym', club: 'uptown', weight: 180});
+  assert.deepEqual(gym.normalized, {scale: 'gym', club: 'uptown', weight: 180});
+  assert.ok(paths(validateSubmissionValues(template, {scale: 'gym', weight: 180})).includes('values.club'));
+  // An unknown key still fails, hidden or not.
+  assert.equal(validateSubmissionValues(template, {scale: 'home', weight: 180, bogus: 1}).valid, false);
+});
+
+test('showWhen chains through hidden targets and multi-select targets', () => {
+  const template = conditionalTemplate({}, [
+    field('locker', 'short-text', {required: false, showWhen: {fieldId: 'club', optionIds: ['downtown']}}),
+    field('tags', 'multi-select', {required: false, options: [{id: 'fasted', label: 'Fasted'}, {id: 'fed', label: 'Fed'}]}),
+    field('meal', 'short-text', {required: false, showWhen: {fieldId: 'tags', optionIds: ['fed']}}),
+  ]);
+  assert.equal(validateTemplate(template).valid, true);
+  // club is hidden at home, so locker is hidden too even though club names downtown.
+  const home = validateSubmissionValues(template, {scale: 'home', club: 'downtown', locker: '12', weight: 1});
+  assert.deepEqual(Object.keys(home.normalized).sort(), ['scale', 'weight']);
+  const gym = validateSubmissionValues(template, {scale: 'gym', club: 'downtown', locker: '12', weight: 1, tags: ['fasted', 'fed'], meal: 'oats'});
+  assert.deepEqual(gym.normalized, {scale: 'gym', club: 'downtown', locker: '12', weight: 1, tags: ['fasted', 'fed'], meal: 'oats'});
+  const fasted = validateSubmissionValues(template, {scale: 'gym', club: 'downtown', weight: 1, tags: ['fasted'], meal: 'oats'});
+  assert.equal(Object.hasOwn(fasted.normalized, 'meal'), false);
+});
+
+test('fieldVisibility leaves unresolvable conditions visible', () => {
+  const {fieldVisibility} = require('../lib/forms/schema');
+  const visibility = fieldVisibility([
+    field('club', 'short-text', {showWhen: {fieldId: 'scale', optionIds: ['gym']}}),
+    field('scale', 'select', {isDestroyed: true, options: [{id: 'gym', label: 'Gym'}]}),
+  ], {});
+  assert.equal(visibility.get('club'), true);
+  assert.equal(visibility.has('scale'), false);
+});
