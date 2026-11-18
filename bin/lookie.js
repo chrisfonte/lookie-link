@@ -12,6 +12,7 @@ const {
   resolveAuth,
   writeAuthFile,
 } = require('../lib/cli-auth');
+const cliForms = require('../lib/cli-forms');
 
 const EXIT_OK = 0;
 const EXIT_USAGE = 2;
@@ -97,8 +98,19 @@ function printUsage(stream = process.stdout) {
     '  kit upload <name> <file>',
     '  kit set <name> --revision R --token --radius=8px [--token …]',
     '  kit delete <name>',
+    '  forms list',
+    '  forms show <id>                       fields that serve, with field and option ids',
+    '  forms submit <id> [--values-file F|-] [--value key=value]... [--at TIME] [--tz ZONE]',
+    '                    [--supersedes SUBMISSION_ID] [--idempotency-key K] [--dry-run]',
+    '  forms submissions <id> [--limit N]',
+    '  forms history <id> <submissionId>',
+    '  forms patch <id> --revision N (--body-file F|- | --body JSON)',
+    '  forms publish <id> [--revision N]',
     '  openapi',
     '  docs',
+    '',
+    'forms submit computes eventAt/timezone/clientOffsetMinutes from --at (RFC 3339, or local wall',
+    'time in --tz; default now) and --tz (default LOOKIE_LINK_TIMEZONE, else the host zone).',
     '',
     'Tokens are accepted through auth login stdin or LOOKIE_LINK_TOKEN, never URL query parameters.',
     'Appearance and kit writes use LOOKIE_LINK_ADMIN_TOKEN (falls back to LOOKIE_LINK_TOKEN).',
@@ -203,9 +215,16 @@ async function handleApiResponse(response, auth) {
   const payload = await parseJsonResponse(response);
   const serverError = payload && payload.error;
   const serverMessage = serverError && typeof serverError === 'object' ? serverError.message : serverError;
-  const message = payload && (serverMessage || payload.message)
+  let message = payload && (serverMessage || payload.message)
     ? serverMessage || payload.message
     : `HTTP ${response.status}`;
+  // Validation envelopes name the failing paths (e.g. values.machine); show them.
+  const details = serverError && typeof serverError === 'object' && Array.isArray(serverError.details)
+    ? serverError.details.filter((detail) => detail && detail.path !== undefined)
+    : [];
+  if (details.length) {
+    message += ` (${details.map((detail) => `${detail.path || '(body)'}: ${detail.message}`).join('; ')})`;
+  }
   if (response.status === 401 || response.status === 403) die(EXIT_AUTH, message, [auth.token]);
   if (response.status === 404 || response.status === 410) die(EXIT_NOT_FOUND, message, [auth.token]);
   if (response.status === 409) die(EXIT_CONFLICT, message, [auth.token]);
@@ -787,6 +806,210 @@ async function kitCommand(auth, args) {
   return die(EXIT_USAGE, 'kit requires show, file, create, upload, set, or delete');
 }
 
+async function formsJson(auth, targetPath, init) {
+  return handleApiResponse(await request(auth, targetPath, init), auth);
+}
+
+function formsPath(templateId) {
+  return encodeURIComponent(requireArgument(templateId, 'form id'));
+}
+
+// The serving field schema; null when the form is unknown or not visible.
+async function readFormFields(auth, templateId) {
+  const response = await request(auth, `/api/forms/${formsPath(templateId)}/fields`);
+  if (response.status === 404) return null;
+  return handleApiResponse(response, auth);
+}
+
+async function readBodyArgument(args, index, arg) {
+  const source = optionValue(args, index, arg);
+  const text = source === '-' ? await readAllStdin() : await fs.readFile(source, 'utf8');
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    return die(EXIT_USAGE, `${arg} is not valid JSON: ${error.message}`);
+  }
+}
+
+// Managers get the draft/version metadata (revision for patch/publish) plus
+// the serving fields; submit-only callers get the serving fields.
+async function formsShowCommand(auth, args) {
+  if (args.length > 1) die(EXIT_USAGE, `unknown forms show option: ${args[1]}`);
+  const schema = await readFormFields(auth, args[0]);
+  const managementResponse = await request(auth, `/api/forms/templates/${formsPath(args[0])}`);
+  const management = managementResponse.status === 404 ? null : await handleApiResponse(managementResponse, auth);
+  if (!schema && !management) die(EXIT_NOT_FOUND, 'form not found', [auth.token]);
+  const fields = cliForms.activeFields(schema) || cliForms.activeFields(management);
+  formatOutput({
+    ok: true,
+    ...(schema || {}),
+    ...(management || {}),
+    fields: cliForms.fieldSummary(fields),
+  }, true);
+}
+
+async function formsSubmitCommand(auth, args) {
+  const templateId = requireArgument(args[0], 'form id');
+  const opts = { assignments: [], fileValues: {} };
+  let dryRun = false;
+  for (let index = 1; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--values-file') {
+      opts.fileValues = cliForms.unwrapValuesFile(await readBodyArgument(args, index, arg));
+      index += 1;
+    } else if (arg === '--value') {
+      opts.assignments.push(optionValue(args, index, arg));
+      index += 1;
+    } else if (arg === '--at') {
+      opts.at = optionValue(args, index, arg);
+      index += 1;
+    } else if (arg === '--tz') {
+      opts.timeZone = optionValue(args, index, arg);
+      index += 1;
+    } else if (arg === '--supersedes') {
+      opts.supersedes = optionValue(args, index, arg);
+      index += 1;
+    } else if (arg === '--idempotency-key') {
+      opts.idempotencyKey = optionValue(args, index, arg);
+      index += 1;
+    } else if (arg === '--dry-run') {
+      dryRun = true;
+    } else {
+      die(EXIT_USAGE, `unknown forms submit option: ${arg}`);
+    }
+  }
+  if (!opts.timeZone) opts.timeZone = cliForms.defaultTimeZone();
+
+  const fields = cliForms.activeFields(await readFormFields(auth, templateId));
+  let predecessor = null;
+  if (opts.supersedes) {
+    const history = await formsJson(auth, `/api/forms/${formsPath(templateId)}/submissions/${encodeURIComponent(opts.supersedes)}/history`);
+    predecessor = (history.submissions || []).find((record) => record.submissionId === opts.supersedes) || null;
+    if (!predecessor) die(EXIT_NOT_FOUND, `submission ${opts.supersedes} not found on this form`, [auth.token]);
+    if (history.latestSubmissionId && history.latestSubmissionId !== opts.supersedes) {
+      die(EXIT_CONFLICT, `submission ${opts.supersedes} is already superseded by ${history.latestSubmissionId}; correct the latest entry`, [auth.token]);
+    }
+  }
+  let built;
+  try {
+    built = cliForms.buildSubmission({ ...opts, fields, predecessor });
+  } catch (error) {
+    if (error instanceof cliForms.CliFormsError) die(EXIT_USAGE, error.message);
+    throw error;
+  }
+  if (!fields) {
+    process.stderr.write('lookie: field schema not readable; values sent as given, defaults and datetime fields not filled\n');
+  } else if (built.filled.length) {
+    process.stderr.write(`lookie: filled ${built.filled.join(', ')} from defaults/eventAt\n`);
+  }
+  if (dryRun) {
+    formatOutput({ ok: true, dryRun: true, templateId, body: built.body }, true);
+    return;
+  }
+  formatOutput(await formsJson(auth, `/api/forms/${formsPath(templateId)}/submissions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(built.body),
+  }), true);
+}
+
+async function formsSubmissionsCommand(auth, args) {
+  const templateId = requireArgument(args[0], 'form id');
+  const query = new URLSearchParams();
+  for (let index = 1; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--limit') {
+      query.set('limit', optionValue(args, index, arg));
+      index += 1;
+    } else {
+      die(EXIT_USAGE, `unknown forms submissions option: ${arg}`);
+    }
+  }
+  const suffix = query.size ? `?${query}` : '';
+  formatOutput(await formsJson(auth, `/api/forms/${formsPath(templateId)}/submissions${suffix}`), true);
+}
+
+function revisionOption(args, index, arg) {
+  const revision = Number(optionValue(args, index, arg));
+  if (!Number.isSafeInteger(revision) || revision < 1) die(EXIT_USAGE, `${arg} must be a positive integer`);
+  return revision;
+}
+
+async function formsPatchCommand(auth, args) {
+  const templateId = requireArgument(args[0], 'form id');
+  let body;
+  let revision;
+  for (let index = 1; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--body-file') {
+      if (body) die(EXIT_USAGE, 'choose one of --body-file or --body');
+      body = await readBodyArgument(args, index, arg);
+      index += 1;
+    } else if (arg === '--body') {
+      if (body) die(EXIT_USAGE, 'choose one of --body-file or --body');
+      try {
+        body = JSON.parse(optionValue(args, index, arg));
+      } catch (error) {
+        die(EXIT_USAGE, `--body is not valid JSON: ${error.message}`);
+      }
+      index += 1;
+    } else if (arg === '--revision') {
+      revision = revisionOption(args, index, arg);
+      index += 1;
+    } else {
+      die(EXIT_USAGE, `unknown forms patch option: ${arg}`);
+    }
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) die(EXIT_USAGE, 'forms patch requires --body-file or --body with a JSON object');
+  if (revision !== undefined) body = { ...body, revision };
+  if (!Number.isSafeInteger(body.revision)) die(EXIT_USAGE, 'forms patch requires --revision N (the draft revision from `lookie forms show`)');
+  formatOutput(await formsJson(auth, `/api/forms/templates/${formsPath(templateId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }), true);
+}
+
+async function formsPublishCommand(auth, args) {
+  const templateId = requireArgument(args[0], 'form id');
+  const body = {};
+  for (let index = 1; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--revision') {
+      body.revision = revisionOption(args, index, arg);
+      index += 1;
+    } else {
+      die(EXIT_USAGE, `unknown forms publish option: ${arg}`);
+    }
+  }
+  formatOutput(await formsJson(auth, `/api/forms/templates/${formsPath(templateId)}/publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }), true);
+}
+
+async function formsCommand(auth, args) {
+  const sub = args[0];
+  const rest = args.slice(1);
+  if (sub === 'list') {
+    if (rest.length) die(EXIT_USAGE, `unknown forms list option: ${rest[0]}`);
+    return formatOutput(await formsJson(auth, '/api/forms/templates'), true);
+  }
+  if (sub === 'show') return formsShowCommand(auth, rest);
+  if (sub === 'submit') return formsSubmitCommand(auth, rest);
+  if (sub === 'submissions') return formsSubmissionsCommand(auth, rest);
+  if (sub === 'history') {
+    const templateId = formsPath(rest[0]);
+    const submissionId = encodeURIComponent(requireArgument(rest[1], 'submission id'));
+    if (rest.length > 2) die(EXIT_USAGE, `unknown forms history option: ${rest[2]}`);
+    return formatOutput(await formsJson(auth, `/api/forms/${templateId}/submissions/${submissionId}/history`), true);
+  }
+  if (sub === 'patch') return formsPatchCommand(auth, rest);
+  if (sub === 'publish') return formsPublishCommand(auth, rest);
+  return die(EXIT_USAGE, 'forms requires list, show, submit, submissions, history, patch, or publish');
+}
+
 async function authCommand(args, outputJson) {
   const subcommand = args[0];
   if (subcommand === 'status') {
@@ -849,6 +1072,7 @@ async function main() {
     case 'appearance': return appearanceCommand(auth, args);
     case 'kits': return kitsCommand(auth);
     case 'kit': return kitCommand(auth, args);
+    case 'forms': return formsCommand(auth, args);
     case 'openapi': {
       const response = await request(auth, '/openapi.json');
       return formatOutput(await handleApiResponse(response, auth), true);

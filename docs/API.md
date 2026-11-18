@@ -156,6 +156,31 @@ Readback uses the normal `view`, `asset`, and optional `raw` routes beneath the 
 
 `GET /api/publish` and `GET /api/publish/:slug` require whole-repo `view` (not `publish`) on the publish repo, and read what create/update/revoke wrote. Both carry a `revision` that changes whenever any publication changes, and set a weak `ETag`; poll with `If-None-Match` and treat `304` as "nothing changed" instead of re-fetching and diffing.
 
+## Forms (trackers)
+
+Forms are mounted only with `forms.enabled: true`. Their authorization uses forms capabilities (`forms.view`, `forms.submit`, `forms.read_submissions`, `forms.manage`), not repo permissions. A bearer holds the ones its credential lists in `formsCapabilities[]`, set on a static token in config or given when a managed API key is created (`POST /api/agent-keys` with `"formsCapabilities": ["forms.submit"]`). `whoami` reports them. Bearer callers skip the browser Origin/CSRF envelope: never scrape a synchronizer token from a form page.
+
+Submit with `POST /api/forms/:id/submissions`:
+
+```json
+{
+  "values": { "read-at": "2026-11-18T09:30:00-05:00", "machine": "unit-a", "reading": 12 },
+  "eventAt": "2026-11-18T09:30:00-05:00",
+  "timezone": "America/New_York",
+  "clientOffsetMinutes": -300,
+  "idempotencyKey": "meter-2026-11-18",
+  "supersedesRecord": { "id": "<submissionId>", "resourceKind": "form-submission" }
+}
+```
+
+- Values nest under `values`, keyed by field id; selects take option ids. `GET /api/forms/:id/fields` returns the serving fields and option ids to any caller who can submit or view.
+- The JSON route applies no field `default` and does not derive `eventAt` from a datetime field. Send every required value, including a pinned one-option select, and send the datetime value and the `eventAt`/`timezone`/`clientOffsetMinutes` trio together.
+- `clientOffsetMinutes` is the zone's offset from UTC at `eventAt`, east-positive: `-300` for New York in winter, `-240` in summer. It is not `Date#getTimezoneOffset()`, whose sign is inverted. The three values must agree, or the submission returns `422`.
+- `supersedesRecord` records a correction as a new entry. The prior entry is never edited.
+- `PATCH /api/forms/templates/:id` (with the draft `revision`) changes the draft, and the draft is what serves. `POST …/publish` freezes an immutable version.
+
+`lookie forms` wraps all of this: it computes the time trio, fills defaults and an empty datetime field, and nests values. See [TRACKERS.md](TRACKERS.md#agents-cli-and-bearer-access).
+
 ## Administrative stores
 
 API-key lifecycle routes require an API-key admin bearer token. Created and rotated secrets are returned once and stored only as hashes. Grant lifecycle routes require a grant admin token; mutation credentials must be bearer tokens. Grant requests also enforce issuer, subject, source-owner, expiry, approval, and cross-company allow-root policy.

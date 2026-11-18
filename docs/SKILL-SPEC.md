@@ -146,6 +146,23 @@ lookie annotations replies knowledge/notes/topic.md <id> --add "Done"
 lookie annotations resolve knowledge/notes/topic.md <id>
 ```
 
+### Trackers (forms)
+
+```bash
+lookie forms list
+lookie forms show meter-log
+lookie forms submit meter-log --value reading=12
+lookie forms submit meter-log --at 2026-11-18T09:30 --tz America/New_York --value reading=12 --dry-run
+lookie forms submit meter-log --values-file ./entry.json --idempotency-key meter-2026-11-18
+lookie forms submissions meter-log --limit 5
+lookie forms submit meter-log --supersedes <submissionId> --value reading=13
+lookie forms history meter-log <submissionId>
+lookie forms patch meter-log --revision 4 --body-file ./patch.json
+lookie forms publish meter-log --revision 5
+```
+
+Your credential needs forms capabilities: `forms.submit` to log entries and `forms.manage` to change trackers. Check `formsCapabilities` in `lookie whoami`. Never scrape a CSRF token from a form page: bearer callers skip that gate. `forms show` gives field and option ids. `forms submit` nests values under `values` and coerces each `--value` by field type. It computes `eventAt`/`timezone`/`clientOffsetMinutes` from `--at` (default now) in `--tz` (default `LOOKIE_LINK_TIMEZONE` or the host zone; the offset is east-positive, `-300` EST / `-240` EDT). It also fills an empty datetime field and any declared `default` the JSON route would otherwise reject as missing. Correct an entry with `--supersedes`; never edit or delete an old entry. `forms patch` changes the draft, which serves at once, and needs the `revision` from `forms show`; a stale revision exits `5`. `forms publish` freezes a version. A `422` names the failing path, such as `values.reading`.
+
 ### Trash, appearance, and API discovery
 
 ```bash
@@ -198,6 +215,9 @@ For direct calls, use the configured instance as the origin, consult `docs/API.m
 | A fillable page template or example | `lookie kit file` |
 | A styled published page | `lookie publish --kit NAME` |
 | Organization kit lifecycle (create/version/overlay/delete) | `lookie kit create`/`upload`/`set`/`delete` (admin only) |
+| Log or correct a tracker entry | `lookie forms submit` (`--supersedes` to correct) |
+| A tracker's field and option ids | `lookie forms show` |
+| Change or publish a tracker definition | `lookie forms patch` / `lookie forms publish` (`forms.manage`) |
 
 ## Concurrency and conflict handling
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — `lookie forms` and bearer forms capabilities
+
+- Static tokens (`access.tokens.<name>.formsCapabilities`) and managed API keys
+  (`formsCapabilities` on create) can now carry an allowlisted set of forms
+  capabilities. Before this, no scoped bearer could reach forms (#183).
+  `whoami` and the agent card report the caller's `formsCapabilities` when
+  forms are enabled.
+- Add `GET /api/forms/:templateId/fields`: the serving field schema with option
+  ids, for callers who can submit to or view the form.
+- Add `lookie forms list|show|submit|submissions|history|patch|publish` (#103).
+  `submit` computes the `eventAt`/`timezone`/`clientOffsetMinutes` trio, fills
+  defaults and empty datetime fields, and builds `supersedesRecord`
+  corrections, so agents never scrape a CSRF token.
+- CLI error messages now append validation detail paths.
+
 ## Unreleased — tracker JSON submit
 
 - A select is pinned when exactly one option is enabled. Disabled leftovers

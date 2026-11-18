@@ -239,13 +239,15 @@ the row they came for.
 
 All under `/api/forms`, JSON. Browser mutations require the CSRF envelope
 (context cookie + `_csrf` token from a served form page + an allowed
-`Origin`); see [AGENT-ACCESS-CONTROL.md](AGENT-ACCESS-CONTROL.md) for the
-access model.
+`Origin`). Bearer callers skip it; see
+[Agents: CLI and bearer access](#agents-cli-and-bearer-access) and
+[AGENT-ACCESS-CONTROL.md](AGENT-ACCESS-CONTROL.md) for the access model.
 
 | Operation | Route |
 |---|---|
 | List templates | `GET /api/forms/templates` |
 | Read one (draft + `resolvedFields` for children) | `GET /api/forms/templates/:id` |
+| Serving fields + option ids (submitters too) | `GET /api/forms/:id/fields` |
 | Create draft | `POST /api/forms/templates` |
 | Revise draft (CAS: send `revision`) | `PATCH /api/forms/templates/:id` |
 | Publish | `POST /api/forms/templates/:id/publish` |
@@ -269,28 +271,75 @@ Template keys accepted on create/patch include the structural set —
 `kind`, `containerId`, `memberOrder`, `parentId`, `related`, `inherit` —
 everything the GUI can do, the API can do.
 
+## Agents: CLI and bearer access
+
+An agent logs or changes trackers with a bearer credential that carries forms
+capabilities: `formsCapabilities: [forms.submit]` to log entries, plus
+`forms.manage` to edit trackers. Set it on a static token in `access.tokens`
+(with `subject.agentId`) or when creating a managed API key. A grant covers
+every tracker on the instance. Check it with `lookie whoami`
+(`formsCapabilities`).
+
+| Task | Command |
+|---|---|
+| Find the tracker | `lookie forms list` |
+| Field and option ids (child trackers show resolved fields) | `lookie forms show <id>` |
+| Log an entry now | `lookie forms submit <id> --value reading=12` |
+| Log a past entry | `lookie forms submit <id> --at 2026-11-18T09:30 --tz America/New_York --value …` |
+| Log from a file | `lookie forms submit <id> --values-file entry.json` (or `-` for stdin) |
+| Check before sending | add `--dry-run` |
+| Verify | `lookie forms submissions <id> --limit 5` |
+| Correct an entry | `lookie forms submit <id> --supersedes <submissionId> --value reading=13` |
+| See a correction chain | `lookie forms history <id> <submissionId>` |
+| Change the tracker (serves at once) | `lookie forms patch <id> --revision N --body-file patch.json` |
+| Freeze a version | `lookie forms publish <id> --revision N` |
+
+What `forms submit` does for you:
+
+- Nests values under `values` and coerces `--value` strings by field type.
+  Numbers become numbers. Checkboxes take `true`/`false`. A select takes an
+  option id or its unique label. A multi-select takes a comma list or a JSON
+  array.
+- Computes `eventAt`, `timezone`, and `clientOffsetMinutes` from `--at`, or
+  from now when `--at` is absent. `--at` is RFC 3339 or a wall time read in
+  `--tz`. `--tz` defaults to `LOOKIE_LINK_TIMEZONE`, then the host zone. The
+  offset is the zone's offset at that instant: `-300` for EST, `-240` for EDT.
+- Fills an empty datetime field with `eventAt` and an omitted field with its
+  declared `default`, such as a pinned one-option `machine` select. The JSON
+  route itself applies neither. Without `--at`, a single datetime value you
+  supply becomes `eventAt`.
+- `--supersedes` starts from the corrected entry's values and `eventAt`, sends
+  `supersedesRecord: {id, resourceKind: 'form-submission'}`, and refuses (exit
+  `5`) when the entry is already superseded. Correct the latest entry instead.
+  Old entries are never edited.
+- `--idempotency-key` makes a retry safe.
+
+A `422` names the failing path, for example `values.reading: is required`.
+
 ## Agent quickstart
 
-How an agent logs, corrects and verifies an entry through the JSON API. The
-platform has no forms CLI yet; these are plain HTTP calls.
+How an agent logs, corrects and verifies an entry through the JSON API.
+These are the plain HTTP calls behind `lookie forms`
+([above](#agents-cli-and-bearer-access)); prefer the CLI where it runs.
+Who fills what: the server fills pinned selects and derives eventAt; the CLI
+fills defaults and the datetime explicitly.
 
 ### 1. Discover the field ids
 
-Set `$HOST` to the deployment base URL and `$ID` to the tracker id. This
-discovery endpoint requires `forms.manage`; a key with only `forms.submit`
-cannot read it. Include your authentication on this GET, for example
-`-H "Authorization: Bearer $TOKEN"` without a context cookie. A submit-only
-agent needs the resolved schema supplied by an authorized manager.
+Set `$HOST` to the deployment base URL and `$ID` to the tracker id.
+`GET /api/forms/$ID/fields` returns the serving fields (a child's resolved
+fields) to any caller with `forms.submit` or `forms.view`, which is
+`lookie forms show $ID`. Send the bearer without a context cookie.
 
 ```bash
-curl -s -H "Authorization: Bearer $TOKEN" "$HOST/api/forms/templates/$ID" \
-  | jq '(.resolvedFields // .template.fields)[]
-        | select(.isDestroyed != true)
+curl -s -H "Authorization: Bearer $TOKEN" "$HOST/api/forms/$ID/fields" \
+  | jq '.fields[]
         | {id, type, required, default, options: [.options[]? | select(.disabled != true) | .id]}'
 ```
 
-For a child, read `resolvedFields` (what is actually served), not
-`template.fields` (the child's own overrides).
+Managers can also read `GET /api/forms/templates/$ID` (draft, revision and
+versions). For a child, use its `resolvedFields` (what is actually served),
+not `template.fields` (the child's own overrides).
 
 ### 2. Choose an envelope
 
@@ -298,8 +347,9 @@ Mutations take **one** of two credentials, never both (a bearer together with
 the context cookie is `400 Ambiguous credentials`):
 
 - **Bearer** — `Authorization: Bearer <token>`. No cookie, no CSRF token, no
-  `Origin` requirement. Prefer this when the deployment issues the agent a key
-  with `forms.submit` on the tracker.
+  `Origin` requirement. Prefer this. The agent's static token or API key
+  needs `formsCapabilities` including `forms.submit`; check
+  `formsCapabilities` in `GET /api/whoami`.
 - **Browser context** — for a caller that acts as a browser would:
   1. `GET /forms/<id>` with a cookie jar. The response sets the
      `lookie_forms_context` cookie and the page carries the synchronizer token
@@ -337,8 +387,11 @@ Every JSON request needs `Content-Type: application/json` (otherwise `415`).
 - **`values` is an object keyed by field id.** A `select` takes one option
   id, a `multi-select` an array of option ids, a `number` a JSON number, a
   `checkbox` a boolean.
-- **General field defaults are not applied on the JSON path.** Send required
-  answers explicitly. A default is a suggested answer: send it only when it
+- **The server fills pinned selects and derives eventAt; the CLI fills
+  defaults and the datetime explicitly.** General field defaults are not
+  applied on the JSON path, so send required answers explicitly
+  (`lookie forms submit` sends each omitted field's declared `default` and
+  sets an empty datetime field to `eventAt`). A default is a suggested answer: send it only when it
   accurately represents this entry. A pinned select is the exception: exactly
   one enabled option makes it a fixed stamp, and when its key is missing from
   `values` the server records that option, whether the field is required or
