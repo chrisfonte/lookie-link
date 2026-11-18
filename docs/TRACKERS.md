@@ -260,29 +260,10 @@ access model.
 
 ### Submitting an entry as JSON
 
-`POST /api/forms/:id/submissions` takes `{ values, idempotencyKey?,
-eventAt?, timezone?, clientOffsetMinutes?, supersedesRecord? }` and runs the
-same submission service as the entry page. The server fills in two things the
-page would have posted, so an agent sends only what a person would answer:
-
-- **Pinned selects.** A select with exactly one enabled option is shown on
-  the page as a stamp rather than a question (the per-machine child pattern).
-  Disabled leftover options do not count: they can never be chosen. When its value is omitted the server uses that
-  option, so the stored entry is the same as if it had been sent. A value
-  that is sent is validated as usual and never replaced.
-- **Event time.** When `eventAt`, `timezone`, and `clientOffsetMinutes` are
-  all absent, the first datetime field (in field order) whose value carries
-  an explicit offset becomes the event time. The timezone is the server's
-  configured forms timezone when it has that offset at that instant,
-  otherwise `UTC` or a fixed `Etc/GMT±N` zone for whole-hour offsets. A
-  half-hour offset outside the server timezone has no zone to name, so the
-  entry keeps its receipt time, as before. When the trio is sent and the
-  template has exactly one datetime field with no value, the field takes
-  `eventAt`. A partial trio is still refused (`422`, path `eventTime`).
-
-Field `default`s are **not** applied on this path. On the page a person sees
-the default and accepts it. In JSON nobody stated it, so a required field
-with a default must still be sent.
+`POST /api/forms/:id/submissions` runs the same submission service as the
+entry page. The body, what the server fills in (pinned selects, event time),
+and the errors are in the [agent quickstart](#agent-quickstart), which is the
+one place that contract is written down.
 
 Template keys accepted on create/patch include the structural set —
 `kind`, `containerId`, `memberOrder`, `parentId`, `related`, `inherit` —
@@ -295,8 +276,14 @@ platform has no forms CLI yet; these are plain HTTP calls.
 
 ### 1. Discover the field ids
 
+Set `$HOST` to the deployment base URL and `$ID` to the tracker id. This
+discovery endpoint requires `forms.manage`; a key with only `forms.submit`
+cannot read it. Include your authentication on this GET, for example
+`-H "Authorization: Bearer $TOKEN"` without a context cookie. A submit-only
+agent needs the resolved schema supplied by an authorized manager.
+
 ```bash
-curl -s "$HOST/api/forms/templates/$ID" \
+curl -s -H "Authorization: Bearer $TOKEN" "$HOST/api/forms/templates/$ID" \
   | jq '(.resolvedFields // .template.fields)[]
         | select(.isDestroyed != true)
         | {id, type, required, default, options: [.options[]? | select(.disabled != true) | .id]}'
@@ -350,24 +337,44 @@ Every JSON request needs `Content-Type: application/json` (otherwise `415`).
 - **`values` is an object keyed by field id.** A `select` takes one option
   id, a `multi-select` an array of option ids, a `number` a JSON number, a
   `checkbox` a boolean.
-- **The JSON path does not apply field `default`s.** A required field must be
-  sent even when the entry page shows it pre-filled — including a child's
-  pinned one-option select, which a person sees as a fixed stamp. Send the
-  `default` from `resolvedFields`.
-- **Send the time trio together.** The native form derives the event time
-  from the first `datetime` field; the JSON path does not. Without
-  `eventAt` / `timezone` / `clientOffsetMinutes` the record has no event time
-  and sorts as untimed. Fill the `datetime` field too if it is required, with
-  the same instant. The three must agree:
+- **General field defaults are not applied on the JSON path.** Send required
+  answers explicitly. A default is a suggested answer: send it only when it
+  accurately represents this entry. A pinned select is the exception: exactly
+  one enabled option makes it a fixed stamp, and when its key is missing from
+  `values` the server records that option, whether the field is required or
+  optional. Disabled options do not count. A supplied value is validated
+  rather than replaced, so `null` or `""` for a pinned select is
+  `422 validation_error`.
+- **Datetime values carry an explicit offset.** `2026-11-18T09:20:00-05:00`,
+  `…Z`, or minute precision `2026-11-18T09:20-05:00` (stored as
+  `2026-11-18T09:20:00-05:00`). A value without an offset is
+  `422 validation_error`; the server does not guess a zone.
+- **Supply the time trio together, or let JSON derive it.** When all three of
+  `eventAt` / `timezone` / `clientOffsetMinutes` are absent, the first active
+  datetime field in field order with an explicit-offset value supplies the
+  event time. The server uses its configured forms timezone when its offset
+  agrees at that instant, otherwise `UTC` or a whole-hour `Etc/GMT` zone. If
+  no matching zone is available (for example `+05:30` when the server zone is
+  not on that offset), `eventAt` remains absent and the displayed time falls
+  back to `receiptAt`; send an explicit trio to preserve the intended event
+  time. An explicit trio fills a datetime value whose key is missing only when
+  exactly one active datetime field exists. It does not overwrite a supplied
+  datetime value. The three must agree:
   - `eventAt` is RFC 3339 with an explicit offset;
   - `timezone` is an IANA zone name;
   - `clientOffsetMinutes` is the offset of `eventAt` in minutes **east of UTC**
     (`-300` for UTC−05:00, `+60` for UTC+01:00). That is the opposite sign of
     JavaScript's `Date#getTimezoneOffset()`, so never pass that value through.
   Supplying only some of the three is `422`; offsets that disagree are `400`.
-- **`idempotencyKey`** (or an `Idempotency-Key` header) makes a retry safe:
-  the same key with the same body returns the original record; the same key
-  with a different body is `409 idempotency_conflict`.
+- **`idempotencyKey`** (1–128 visible ASCII characters) identifies one
+  intended submission for this actor and tracker. The `Idempotency-Key`
+  header takes precedence over the body key. Reusing the key returns the
+  original record only when the normalized captured submission is identical
+  (a body that differs only by values the server fills in counts as
+  identical); otherwise it returns `409 idempotency_conflict`. A live schema
+  revision can change that captured submission even with an unchanged HTTP
+  body. After a conflict, check existing records before choosing a new key.
+  Use a fresh key for a correction.
 
 ### 4. Correct an entry
 
@@ -391,7 +398,7 @@ All JSON errors use `{ ok: false, error: { code, message, details? } }`.
 
 | Status | Meaning | Look at |
 |---|---|---|
-| `400` | Body shape: an unknown top-level key, a malformed `idempotencyKey`, or a time trio that disagrees | The top-level keys and the trio, not your credentials |
+| `400` | Invalid request body or ambiguous credentials | Read `error.message`; check unknown keys, idempotency-key format and time-trio agreement, and ensure a bearer is not combined with `lookie_forms_context` |
 | `401` | No usable credential | The bearer or the context cookie |
 | `403 origin_rejected` / `csrf_rejected` | The browser envelope | `Origin`, `X-CSRF-Token`, and the cookie from the same `GET` |
 | `404` | Unknown tracker, no `forms.submit` on it, a kind that takes no entries (group, list, parent, or a form that has children), or a `supersedesRecord` that does not resolve | The id, the caller's grants, and the predecessor reference |
@@ -399,7 +406,8 @@ All JSON errors use `{ ok: false, error: { code, message, details? } }`.
 | `415` | Not `application/json` | `Content-Type` |
 | `422 validation_error` | Values failed the schema | `error.details[].path` (for example `values.machine` with `is required`) |
 
-A `400` can look like an auth failure but is always the body.
+A `400` can also reject mixed bearer and context-cookie credentials; use its
+message to distinguish that from a body error.
 
 ### 6. Verify it landed
 
@@ -407,7 +415,7 @@ A `400` can look like an auth failure but is always the body.
   (`/forms/<id>/receipts/<submissionId>`, relative to the server). The receipt
   page is server-rendered, so a plain `GET` shows what was captured.
 - `GET /api/forms/<id>/submissions?limit=50` (maximum 100) lists the caller's
-  current entries, newest first. Each record's `values` is a **list** of
+  current entries, newest receipt first (`receiptAt`, not `eventAt`). Each record's `values` is a **list** of
   `{fieldId, fieldLabel, fieldType, value}` (selects add `selectedOptions`),
   not an object — index it by `fieldId`.
 - **Superseded predecessors are not listed.** Only the head of each
@@ -431,17 +439,20 @@ voice, by agents, and by thumb at the moment of the activity.
    is the time plus the one thing being measured. Everything else is
    optional. A required field the person cannot answer gets a guess, and a
    guess is worse than a blank.
-3. **One option is not a question.** When a child narrows a select to one
-   value, pin it: it renders as a stamp, not a choice. (Agents still send it;
-   see the quickstart.)
-4. **Unknown is not false.** A checkbox stores `false` when nobody looked. Use
-   one only when unchecked truly means "no" and the fact is always observed.
+3. **One enabled option is not a question.** A select with exactly one
+   enabled option renders as a stamp. Disabled leftovers do not count. JSON
+   callers may omit its value; see the quickstart.
+4. **Unknown is not false.** The native form submits an unchecked checkbox as
+   `false`; JSON preserves omission of an optional checkbox. Use a checkbox
+   only when unchecked truly means "no" and the fact is always observed.
    For anything that may not have been noticed or asked, use an optional
    `select` with `yes` / `no`, so blank stays "unknown". An optional
    multi-select whose help says "leave empty if none" is fine.
-5. **Field order follows the moment.** Order fields as the person meets them:
-   when → what or where → the measurement → how it felt → notes. Rarely used
-   fields go after the core ones. Make one tracker per thing physically used
+5. **Order fields within the platform's sections.** The entry page groups
+   selects and multi-selects first, numbers second, and other fields last,
+   preserving field order within each group. Put the most frequently answered
+   fields first within each section, and rarely used fields after the core
+   ones. Make one tracker per thing physically used
    (a parent with children), with a group for the occasion that ties them
    together.
 6. **Label with the name printed on the object.** Use the name on the machine
@@ -450,11 +461,13 @@ voice, by agents, and by thumb at the moment of the activity.
 7. **Keep an escape hatch.** Offer `Other (say what in Notes)` plus a `notes`
    field, so a new case never blocks an entry. Add the real option the first
    time it is used.
-8. **Numbers stay numbers.** Use `type: 'number'` (a `stepped-select`
-   component suits thumbs), put the unit in the label (`Weight (lb)`), and
-   choose `min` / `max` / `step` that accept every real reading. A step of 25
-   cannot store a reading of 66; never round a measurement to fit a
-   constraint — fix the constraint.
+8. **Numbers stay numbers.** Use `type: 'number'`, put the unit in the label
+   (`Weight (lb)`), and set `constraints.minimum`, `constraints.maximum`, and
+   `constraints.step` to accept every real reading. `component:
+   'stepped-select'` renders a picker when those constraints define a
+   supported finite range. Step alignment starts at `minimum`, or zero when
+   absent. With a zero base, step 25 rejects 66; fix the constraint instead of
+   rounding the measurement.
 9. **Never break history.** Change a tracker as a new revision. Retire a field
    with `isDestroyed: true` instead of removing it, and make readers that
    chart it accept the old field or its replacement across the boundary.

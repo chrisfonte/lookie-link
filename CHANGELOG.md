@@ -8,10 +8,18 @@
 - `POST /api/forms/:id/submissions` fills an omitted pinned select as the entry
   page's hidden input does. It also derives
   `eventAt`/`timezone`/`clientOffsetMinutes` from the first offset-bearing
-  datetime value when all three are absent. With the trio sent, a sole empty
-  datetime field takes `eventAt`. Field defaults are still not applied on the
-  JSON path, and partial trios are still refused. Stored record shape,
-  receipts and existing entries are unchanged.
+  datetime value when all three are absent (unless no zone matches its
+  offset). With the trio sent, a sole datetime field whose key is missing
+  takes `eventAt`. Minute-precision datetime values with an offset are
+  accepted and stored with `:00` seconds. Field defaults are still not
+  applied on the JSON path, and partial trios are still refused.
+- Idempotent retries of requests stored before these fills replay the
+  original record instead of returning `409`. Stored record shape, receipts
+  and existing entries are unchanged.
+- TRACKERS.md agent quickstart corrections: discovery needs `forms.manage`,
+  `400` also covers mixed credentials, idempotency is per captured
+  submission, the list sorts by `receiptAt`, and the design rules match
+  constraint keys, checkbox omission and the page's field grouping.
 
 ## 2026-11-10 — Main convergence and Ops Kit 1.31
 

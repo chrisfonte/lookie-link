@@ -56,6 +56,12 @@ const TEMPLATES = [
       options: [{ id: 'old', label: 'Old', disabled: true }, { id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
     },
   ]),
+  template('edge-select-log', [
+    { id: 'count', type: 'number', label: 'Count', required: true },
+    { id: 'room', type: 'select', label: 'Room', required: false, options: [{ id: 'east', label: 'East' }] },
+    { id: 'retired', type: 'select', label: 'Retired', required: false, options: [{ id: 'gone', label: 'Gone', disabled: true }] },
+    { id: 'tags', type: 'multi-select', label: 'Tags', required: false, options: [{ id: 'solo', label: 'Solo' }] },
+  ]),
   template('two-clock-log', [
     { id: 'started-at', type: 'datetime', label: 'Started', required: true },
     { id: 'ended-at', type: 'datetime', label: 'Ended', required: true },
@@ -251,8 +257,9 @@ test('the event-time trio is derived from an offset-bearing datetime value', asy
       assert.equal(receipt.values.find((entry) => entry.fieldId === 'logged-at').value, loggedAt);
     }
 
-    // A half-hour offset outside the server zone has no IANA zone to name, so
-    // nothing is invented: the entry falls back to its receipt time as before.
+    // Half-hour offset outside the server zone: current behaviour is that no
+    // zone is invented and eventAt stays absent (display falls back to
+    // receiptAt). The fallback is an open owner decision; this pins today.
     const unnamed = await submit({ values: values('2026-07-20T19:00:00+05:30') });
     assert.equal(unnamed.status, 201, unnamed.text);
     assert.equal(unnamed.json().receipt.eventAt, undefined);
@@ -374,6 +381,88 @@ test('a retry after the fills replays whether or not the filled values are sent'
     assert.equal(explicit.status, 201, explicit.text);
     assert.equal(explicit.json().submissionId, id);
     assert.equal((await storedRecords(server.submissionsPath)).length, 1);
+  } finally {
+    await server.cleanup();
+  }
+});
+
+test('minute-precision offsets are accepted, stored with :00 seconds, and drive event time', async () => {
+  const server = await makeServer();
+  try {
+    const submit = await jsonClient(server, 'machine-log');
+    for (const [sent, stored, timezone, offset] of [
+      ['2026-07-20T09:30-04:00', '2026-07-20T09:30:00-04:00', 'America/New_York', -240],
+      ['2026-07-20T13:30Z', '2026-07-20T13:30:00Z', 'UTC', 0],
+    ]) {
+      const response = await submit({ values: { 'logged-at': sent, minutes: 20, effort: 'easy' } });
+      assert.equal(response.status, 201, response.text);
+      const receipt = response.json().receipt;
+      assert.equal(receipt.values.find((entry) => entry.fieldId === 'logged-at').value, stored);
+      assert.deepEqual(eventTrio(receipt), { eventAt: stored, timezone, clientOffsetMinutes: offset });
+    }
+  } finally {
+    await server.cleanup();
+  }
+});
+
+test('naive datetimes (no offset) are refused, not guessed', async () => {
+  const server = await makeServer();
+  try {
+    const submit = await jsonClient(server, 'machine-log');
+    for (const naive of ['2026-07-20T09:30:00', '2026-07-20T09:30']) {
+      const response = await submit({ values: { 'logged-at': naive, minutes: 20, effort: 'easy' } });
+      assert.equal(response.status, 422, naive);
+      assert.equal(response.json().error.details[0].path, 'values.logged-at');
+    }
+    assert.deepEqual(await storedRecords(server.submissionsPath), []);
+  } finally {
+    await server.cleanup();
+  }
+});
+
+test('null or empty for a pinned select is a 422, not a fill', async () => {
+  const server = await makeServer();
+  try {
+    const submit = await jsonClient(server, 'machine-log');
+    for (const empty of [null, '']) {
+      const response = await submit({ values: { 'logged-at': '2026-07-20T09:30:00-04:00', machine: empty, minutes: 20, effort: 'easy' } });
+      assert.equal(response.status, 422, JSON.stringify(empty));
+      assert.equal(response.json().error.details[0].path, 'values.machine');
+    }
+    assert.deepEqual(await storedRecords(server.submissionsPath), []);
+  } finally {
+    await server.cleanup();
+  }
+});
+
+test('optional pinned selects are recorded; multi-selects and all-disabled selects are not filled', async () => {
+  const server = await makeServer();
+  try {
+    const submit = await jsonClient(server, 'edge-select-log');
+    const response = await submit({ values: { count: 1 } });
+    assert.equal(response.status, 201, response.text);
+    const values = response.json().receipt.values;
+    assert.deepEqual(values.map((entry) => entry.fieldId), ['count', 'room']);
+    assert.deepEqual(values[1].selectedOptions, [{ optionId: 'east', optionLabel: 'East' }]);
+  } finally {
+    await server.cleanup();
+  }
+});
+
+test('a correction that omits the pinned value gets it filled like a new entry', async () => {
+  const server = await makeServer();
+  try {
+    const submit = await jsonClient(server, 'machine-log');
+    const created = await submit({ values: { 'logged-at': '2026-07-20T09:30:00-04:00', minutes: 20, effort: 'easy' } });
+    assert.equal(created.status, 201, created.text);
+    const corrected = await submit({
+      values: { 'logged-at': '2026-07-20T09:30:00-04:00', minutes: 25, effort: 'easy' },
+      supersedesRecord: { resourceKind: 'form-submission', id: created.json().submissionId },
+    });
+    assert.equal(corrected.status, 201, corrected.text);
+    const receipt = corrected.json().receipt;
+    assert.equal(receipt.values.find((entry) => entry.fieldId === 'machine').value, 'rower');
+    assert.equal(receipt.eventAt, '2026-07-20T09:30:00-04:00');
   } finally {
     await server.cleanup();
   }
