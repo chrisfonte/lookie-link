@@ -371,3 +371,25 @@ test('a condition naming only disabled options leaves the field visible', () => 
   ], {scale: 'home'});
   assert.equal(visibility.get('club'), true);
 });
+
+test('a cycle that only exists in the served parent-child field list leaves its fields visible', () => {
+  // Parent: a shows when b = yes. Child override: b shows when a = yes.
+  // Each draft validates alone; the merged list the registry serves cycles.
+  const served = {
+    ...templateWith([
+      field('a', 'select', {options: [{id: 'yes', label: 'Yes'}], showWhen: {fieldId: 'b', optionIds: ['yes']}}),
+      field('b', 'select', {options: [{id: 'yes', label: 'Yes'}], showWhen: {fieldId: 'a', optionIds: ['yes']}}),
+      field('c', 'short-text', {required: false, showWhen: {fieldId: 'a', optionIds: ['yes']}}),
+    ]),
+    parentId: 'pair-parent',
+  };
+  const {fieldVisibility, resolvableShowWhenIds} = require('../lib/forms/schema');
+  assert.deepEqual([...resolvableShowWhenIds(served.fields)], ['c'], 'only the condition off the cycle stays live');
+  const visibility = fieldVisibility(served.fields, {});
+  assert.equal(visibility.get('a'), true);
+  assert.equal(visibility.get('b'), true);
+  assert.equal(visibility.get('c'), false);
+  const missing = validateSubmissionValues(served, {});
+  assert.deepEqual(paths(missing).sort(), ['values.a', 'values.b'], 'both cycle fields are required, as the page shows them');
+  assert.equal(validateSubmissionValues(served, {a: 'yes', b: 'yes', c: 'x'}).valid, true);
+});

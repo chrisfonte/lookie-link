@@ -118,6 +118,16 @@ async function startFixture() {
   });
   await registry.createDraft(structuredClone(gymTemplate));
   await registry.createDraft(structuredClone(weighInTemplate));
+  await registry.createDraft({
+    ...structuredClone(weighInTemplate),
+    templateId: 'elements-shadow',
+    title: 'Elements shadow',
+    // "elements" is a valid field id and is exposed as form.elements by name.
+    fields: [
+      {id: 'elements', type: 'select', label: 'Elements', required: true, options: [{id: 'fire', label: 'Fire'}, {id: 'water', label: 'Water'}]},
+      {id: 'heat', type: 'short-text', label: 'Heat', required: true, showWhen: {fieldId: 'elements', optionIds: ['fire']}},
+    ],
+  });
 
   // A mapped repo with a document, so browser tests can cover document pages too.
   // Without this the fixture serves forms only, and a header assertion written
@@ -651,4 +661,16 @@ browserTest('a showWhen field appears only for its selected option and submits w
   const receipt = await page.locator('main').innerText();
   assert.match(receipt, /Home/);
   assert.doesNotMatch(receipt, /Club/);
+});
+
+browserTest('a showWhen target named "elements" still drives visibility', async ({page, fixture}) => {
+  await page.goto(`${fixture.origin}/forms/elements-shadow`, {waitUntil: 'networkidle'});
+  const heat = page.locator('#field-heat');
+  assert.equal(await heat.isVisible(), false);
+  assert.equal(await heat.evaluate((input) => input.required), false);
+  await page.selectOption('#field-elements', 'fire');
+  assert.equal(await heat.isVisible(), true);
+  assert.equal(await heat.evaluate((input) => input.required), true);
+  await page.selectOption('#field-elements', 'water');
+  assert.equal(await heat.isVisible(), false);
 });
