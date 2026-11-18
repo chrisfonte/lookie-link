@@ -2,8 +2,11 @@
 
 ## Unreleased — tracker JSON submit
 
-- `POST /api/forms/:id/submissions` fills an omitted pinned select (one live,
-  enabled option) as the entry page's hidden input does. It also derives
+- A select is pinned when exactly one option is enabled. Disabled leftovers
+  no longer turn the page's stamp back into a picker, and the page and JSON
+  submit share this definition.
+- `POST /api/forms/:id/submissions` fills an omitted pinned select as the entry
+  page's hidden input does. It also derives
   `eventAt`/`timezone`/`clientOffsetMinutes` from the first offset-bearing
   datetime value when all three are absent. With the trio sent, a sole empty
   datetime field takes `eventAt`. Field defaults are still not applied on the

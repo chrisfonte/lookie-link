@@ -265,9 +265,9 @@ eventAt?, timezone?, clientOffsetMinutes?, supersedesRecord? }` and runs the
 same submission service as the entry page. The server fills in two things the
 page would have posted, so an agent sends only what a person would answer:
 
-- **Pinned selects.** A select with exactly one live option, and that option
-  enabled, is shown on the page as a stamp rather than a question (the
-  per-machine child pattern). When its value is omitted the server uses that
+- **Pinned selects.** A select with exactly one enabled option is shown on
+  the page as a stamp rather than a question (the per-machine child pattern).
+  Disabled leftover options do not count: they can never be chosen. When its value is omitted the server uses that
   option, so the stored entry is the same as if it had been sent. A value
   that is sent is validated as usual and never replaced.
 - **Event time.** When `eventAt`, `timezone`, and `clientOffsetMinutes` are
@@ -282,8 +282,7 @@ page would have posted, so an agent sends only what a person would answer:
 
 Field `default`s are **not** applied on this path. On the page a person sees
 the default and accepts it. In JSON nobody stated it, so a required field
-with a default must still be sent. A select that has one enabled option
-among retired (disabled) ones is still a question too.
+with a default must still be sent.
 
 Template keys accepted on create/patch include the structural set —
 `kind`, `containerId`, `memberOrder`, `parentId`, `related`, `inherit` —

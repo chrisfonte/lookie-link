@@ -220,7 +220,7 @@ Agents present a bearer token. Browsers use the cookie `lookie_markers_context` 
 
 ## Tracker submissions
 
-`POST /api/forms/:templateId/submissions` stores one tracker entry. An omitted pinned select (one live, enabled option) is filled with that option. When `eventAt`/`timezone`/`clientOffsetMinutes` are all absent, they come from the first datetime value that has an explicit offset. Field defaults are not applied. A partial trio is `422` at path `eventTime`. See [TRACKERS.md](TRACKERS.md#submitting-an-entry-as-json).
+`POST /api/forms/:templateId/submissions` stores one tracker entry. An omitted pinned select (exactly one enabled option) is filled with that option. When `eventAt`/`timezone`/`clientOffsetMinutes` are all absent, they come from the first datetime value that has an explicit offset. Field defaults are not applied. A partial trio is `422` at path `eventTime`. See [TRACKERS.md](TRACKERS.md#submitting-an-entry-as-json).
 
 ## Stale-write guards
 

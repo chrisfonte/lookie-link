@@ -1,7 +1,7 @@
 'use strict';
 
-// JSON submit conveniences: a pinned select is filled when omitted (as the
-// native page's hidden input does), field defaults are NOT applied, and the
+// JSON submit conveniences: a pinned select (exactly one enabled option) is
+// stamped on the page and filled when omitted from JSON, field defaults are NOT applied, and the
 // event-time trio is derived from an offset-bearing datetime field value.
 
 const test = require('node:test');
@@ -45,6 +45,12 @@ const TEMPLATES = [
     {
       id: 'station', type: 'select', label: 'Station', required: true,
       options: [{ id: 'old', label: 'Old', disabled: true }, { id: 'new', label: 'New' }],
+    },
+  ]),
+  template('two-choice-log', [
+    {
+      id: 'station', type: 'select', label: 'Station', required: true,
+      options: [{ id: 'old', label: 'Old', disabled: true }, { id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
     },
   ]),
   template('two-clock-log', [
@@ -181,12 +187,37 @@ test('field defaults are not applied on the JSON path', async () => {
   }
 });
 
-test('a select with one enabled option among retired ones is still a question', async () => {
+test('one enabled option beside disabled leftovers is pinned on the page and in JSON', async () => {
   const server = await makeServer();
   try {
+    // The page stamps the enabled option and posts it as a hidden input.
     const page = await server.request('/forms/retired-option-log');
-    assert.doesNotMatch(page.text, /field-pinned/, 'the page asks too');
+    const document = new JSDOM(page.text).window.document;
+    assert.equal(document.querySelector('.field-pinned').textContent, 'New');
+    assert.equal(document.querySelector('input[type="hidden"][name="station"]').value, 'new');
+    assert.equal(document.querySelector('select[name="station"]'), null, 'no picker for a pinned select');
+
+    // JSON submit fills the same option when it is omitted.
     const submit = await jsonClient(server, 'retired-option-log');
+    const filled = await submit({ values: {} });
+    assert.equal(filled.status, 201, filled.text);
+    assert.deepEqual(filled.json().receipt.values[0].selectedOptions, [{ optionId: 'new', optionLabel: 'New' }]);
+
+    // The disabled leftover is still refused when it is stated.
+    const stale = await submit({ values: { station: 'old' } });
+    assert.equal(stale.status, 422);
+    assert.equal(stale.json().error.details[0].path, 'values.station');
+  } finally {
+    await server.cleanup();
+  }
+});
+
+test('two enabled options are a question even beside a disabled one', async () => {
+  const server = await makeServer();
+  try {
+    const page = await server.request('/forms/two-choice-log');
+    assert.doesNotMatch(page.text, /field-pinned/);
+    const submit = await jsonClient(server, 'two-choice-log');
     const response = await submit({ values: {} });
     assert.equal(response.status, 422);
     assert.equal(response.json().error.details[0].path, 'values.station');
