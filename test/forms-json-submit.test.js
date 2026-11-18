@@ -15,6 +15,9 @@ const yaml = require('js-yaml');
 const { JSDOM } = require('jsdom');
 
 const { createApp } = require('../server');
+const { TemplateRegistry } = require('../lib/forms/template-registry');
+const { SubmissionStore } = require('../lib/forms/submission-store');
+const { SubmissionService } = require('../lib/forms/submission-service');
 
 const PUBLIC_ORIGIN = 'http://forms.example.test';
 
@@ -77,6 +80,7 @@ async function makeServer() {
   });
   return {
     root,
+    templatesPath,
     submissionsPath,
     request: (route, init) => inject(app, route, init),
     cleanup: () => fs.rm(root, { recursive: true, force: true }),
@@ -303,6 +307,73 @@ test('with two datetime fields the trio fills neither, and derivation uses the f
     const derived = await submit({ values: { 'started-at': '2026-07-20T09:00:00-04:00', 'ended-at': '2026-07-20T10:00:00-04:00' } });
     assert.equal(derived.status, 201, derived.text);
     assert.equal(derived.json().receipt.eventAt, '2026-07-20T09:00:00-04:00');
+  } finally {
+    await server.cleanup();
+  }
+});
+
+test('an idempotent retry of a request stored before the fills replays instead of conflicting', async () => {
+  const server = await makeServer();
+  try {
+    const submit = await jsonClient(server, 'machine-log');
+    // Learn the caller's recorded actor from an ordinary entry.
+    const first = await submit({ values: { 'logged-at': '2026-07-18T09:30:00-04:00', minutes: 5, effort: 'easy' } });
+    assert.equal(first.status, 201, first.text);
+    const actor = first.json().receipt.actor;
+
+    // Store the request the way the JSON path did before this change: the
+    // pinned value sent, no event-time trio derived.
+    const legacyValues = { 'logged-at': '2026-07-20T09:30:00-04:00', machine: 'rower', minutes: 20, effort: 'easy' };
+    const legacyService = new SubmissionService({
+      registry: new TemplateRegistry({ templatesPath: server.templatesPath }),
+      store: new SubmissionStore({ storageRoot: server.submissionsPath }),
+    });
+    const legacy = await legacyService.submit({
+      templateId: 'machine-log', values: legacyValues, actor, idempotencyKey: 'pre-upgrade-0001',
+    });
+    assert.equal(legacy.error, undefined, JSON.stringify(legacy.error));
+    assert.equal(legacy.receipt.eventAt, undefined);
+    const before = await storedRecords(server.submissionsPath);
+
+    // The identical retry now gets the original receipt back, unchanged.
+    const replay = await submit({ values: legacyValues, idempotencyKey: 'pre-upgrade-0001' });
+    assert.equal(replay.status, 201, replay.text);
+    assert.equal(replay.json().submissionId, legacy.submissionId);
+    assert.equal(replay.json().receipt.eventAt, undefined);
+    // ...and so does the same retry with the pinned value left out.
+    const omitted = { ...legacyValues };
+    delete omitted.machine;
+    const replayOmitted = await submit({ values: omitted, idempotencyKey: 'pre-upgrade-0001' });
+    assert.equal(replayOmitted.status, 201, replayOmitted.text);
+    assert.equal(replayOmitted.json().submissionId, legacy.submissionId);
+
+    // A changed request under the same key is still a conflict.
+    const changed = await submit({ values: { ...legacyValues, minutes: 21 }, idempotencyKey: 'pre-upgrade-0001' });
+    assert.equal(changed.status, 409);
+    assert.deepEqual(await storedRecords(server.submissionsPath), before, 'stored records untouched');
+  } finally {
+    await server.cleanup();
+  }
+});
+
+test('a retry after the fills replays whether or not the filled values are sent', async () => {
+  const server = await makeServer();
+  try {
+    const submit = await jsonClient(server, 'machine-log');
+    const values = { 'logged-at': '2026-07-20T09:30:00-04:00', minutes: 20, effort: 'easy' };
+    const created = await submit({ values, idempotencyKey: 'post-upgrade-0001' });
+    assert.equal(created.status, 201, created.text);
+    const id = created.json().submissionId;
+    const same = await submit({ values, idempotencyKey: 'post-upgrade-0001' });
+    assert.equal(same.json().submissionId, id);
+    const explicit = await submit({
+      values: { ...values, machine: 'rower' },
+      eventAt: values['logged-at'], timezone: 'America/New_York', clientOffsetMinutes: -240,
+      idempotencyKey: 'post-upgrade-0001',
+    });
+    assert.equal(explicit.status, 201, explicit.text);
+    assert.equal(explicit.json().submissionId, id);
+    assert.equal((await storedRecords(server.submissionsPath)).length, 1);
   } finally {
     await server.cleanup();
   }
