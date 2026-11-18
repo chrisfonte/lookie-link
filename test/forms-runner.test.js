@@ -2912,3 +2912,70 @@ test('the showWhen script leaves a field visible when its target is not on the p
     await cleanup(fixture, server);
   }
 });
+
+test('a pinned select and a datetime hidden by showWhen are dropped and do not set the event time', async () => {
+  const fixture = await makeFixture();
+  const template = {
+    contractVersion: 1,
+    resourceKind: 'form-template',
+    templateId: 'weigh-in-gym',
+    ownerId: 'operator',
+    revision: 1,
+    grammarVersion: 1,
+    title: 'Weigh-in (gym details)',
+    fields: [
+      { id: 'scale', type: 'select', label: 'Scale', required: true, options: [{ id: 'home', label: 'Home' }, { id: 'gym', label: 'Gym' }] },
+      // Pinned: one option, rendered as a hidden input that is always posted.
+      { id: 'gym-scale', type: 'select', label: 'Gym scale', required: true, options: [{ id: 'front-desk', label: 'Front desk' }], showWhen: { fieldId: 'scale', optionIds: ['gym'] } },
+      { id: 'checked-in-at', type: 'datetime', label: 'Checked in', required: true, showWhen: { fieldId: 'scale', optionIds: ['gym'] } },
+      { id: 'weighed-at', type: 'datetime', label: 'Weighed at', required: false },
+      { id: 'weight', type: 'number', label: 'Weight (lb)', required: true },
+    ],
+  };
+  await fs.writeFile(path.join(fixture.templatesPath, 'weigh-in-gym.yaml'), yaml.dump(template), 'utf8');
+  const server = await startServer(fixture);
+  try {
+    const context = await getBrowserContext(server, 'weigh-in-gym');
+    assert.ok(context.document.querySelector('input[type="hidden"][name="gym-scale"][value="front-desk"]'), 'the pinned select posts its value');
+    const post = (fields) => server.request('/forms/weigh-in-gym', {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: context.cookie, Origin: PUBLIC_ORIGIN },
+      body: new URLSearchParams({ _csrf: context.token, ...fields }),
+    });
+    // Home: a no-script browser still posts the pinned value and the hidden datetime.
+    assert.equal((await post({
+      scale: 'home', 'gym-scale': 'front-desk',
+      'checked-in-at': '2026-07-20T06:00', 'checked-in-at__offset': '-240', 'checked-in-at__timezone': 'America/New_York',
+      'weighed-at': '2026-07-20T07:15', 'weighed-at__offset': '-240', 'weighed-at__timezone': 'America/New_York',
+      weight: '180',
+    })).status, 303);
+    // Gym: both conditional fields are kept and the first datetime sets the event time.
+    assert.equal((await post({
+      scale: 'gym', 'gym-scale': 'front-desk',
+      'checked-in-at': '2026-07-21T06:00', 'checked-in-at__offset': '-240', 'checked-in-at__timezone': 'America/New_York',
+      weight: '181',
+    })).status, 303);
+
+    const files = await submissionFiles(fixture.submissionsPath);
+    const records = await Promise.all(files.map(async (name) => JSON.parse(await fs.readFile(path.join(fixture.submissionsPath, name), 'utf8'))));
+    const home = records.find((record) => record.values.some((entry) => entry.fieldId === 'weight' && entry.value === 180));
+    const gym = records.find((record) => record.values.some((entry) => entry.fieldId === 'weight' && entry.value === 181));
+    assert.deepEqual(home.values.map((entry) => entry.fieldId), ['scale', 'weighed-at', 'weight']);
+    assert.equal(home.eventAt, '2026-07-20T07:15:00-04:00', 'event time comes from the visible datetime, not the dropped one');
+    assert.deepEqual(gym.values.map((entry) => entry.fieldId), ['scale', 'gym-scale', 'checked-in-at', 'weight']);
+    assert.equal(gym.eventAt, '2026-07-21T06:00:00-04:00');
+
+    // JSON API: the same hidden pinned and datetime values are dropped.
+    const headers = { 'Content-Type': 'application/json', Cookie: context.cookie, Origin: PUBLIC_ORIGIN, 'X-CSRF-Token': context.token };
+    const json = await server.request('/api/forms/weigh-in-gym/submissions', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ values: { scale: 'home', 'gym-scale': 'front-desk', 'checked-in-at': '2026-07-22T06:00:00-04:00', weight: 182 } }),
+    });
+    assert.equal(json.status, 201);
+    assert.deepEqual((await json.json()).receipt.values.map((entry) => entry.fieldId), ['scale', 'weight']);
+  } finally {
+    await cleanup(fixture, server);
+  }
+});
