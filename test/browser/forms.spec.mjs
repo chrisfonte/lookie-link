@@ -120,6 +120,27 @@ async function startFixture() {
   await registry.createDraft(structuredClone(weighInTemplate));
   await registry.createDraft({
     ...structuredClone(weighInTemplate),
+    templateId: 'id-name-clash',
+    title: 'Id and name clash',
+    // Field "status" renders control id "field-status", which is also a valid
+    // name for another field; lookups must match the exact name.
+    fields: [
+      {id: 'status', type: 'select', label: 'Status', required: true, options: [{id: 'yes', label: 'Yes'}, {id: 'no', label: 'No'}]},
+      {id: 'field-status', type: 'select', label: 'Field status', required: true, options: [{id: 'yes', label: 'Yes'}, {id: 'no', label: 'No'}]},
+      {id: 'detail', type: 'short-text', label: 'Detail', required: true, showWhen: {fieldId: 'field-status', optionIds: ['yes']}},
+    ],
+  });
+  await registry.createDraft({
+    ...structuredClone(weighInTemplate),
+    templateId: 'elements-datetime',
+    title: 'Elements datetime',
+    fields: [
+      {id: 'elements', type: 'short-text', label: 'Elements', required: false},
+      {id: 'logged-at', type: 'datetime', label: 'Logged at', required: true},
+    ],
+  });
+  await registry.createDraft({
+    ...structuredClone(weighInTemplate),
     templateId: 'elements-shadow',
     title: 'Elements shadow',
     // "elements" is a valid field id and is exposed as form.elements by name.
@@ -673,4 +694,28 @@ browserTest('a showWhen target named "elements" still drives visibility', async 
   assert.equal(await heat.evaluate((input) => input.required), true);
   await page.selectOption('#field-elements', 'water');
   assert.equal(await heat.isVisible(), false);
+});
+
+browserTest('showWhen matches the exact control name, not a clashing id', async ({page, fixture}) => {
+  await page.goto(`${fixture.origin}/forms/id-name-clash`, {waitUntil: 'networkidle'});
+  const detail = page.locator('#field-detail');
+  assert.equal(await detail.isVisible(), false);
+  await page.selectOption('select[name="field-status"]', 'yes');
+  assert.equal(await detail.isVisible(), true, 'the field-status target, not the status control with that id, drives it');
+  assert.equal(await detail.evaluate((input) => input.required), true);
+  await page.selectOption('select[name="status"]', 'no');
+  assert.equal(await detail.isVisible(), true);
+  await page.selectOption('select[name="field-status"]', 'no');
+  assert.equal(await detail.isVisible(), false);
+});
+
+browserTest('datetime capture still records the browser timezone beside a field named "elements"', async ({page, fixture}) => {
+  await page.goto(`${fixture.origin}/forms/elements-datetime`, {waitUntil: 'networkidle'});
+  await page.fill('#field-logged-at', '2026-07-20T09:30');
+  const metadata = await page.evaluate(() => ({
+    offset: document.querySelector('input[name="logged-at__offset"]').value,
+    timezone: document.querySelector('input[name="logged-at__timezone"]').value,
+  }));
+  assert.match(metadata.offset, /^-?\d+$/);
+  assert.ok(metadata.timezone, 'timezone metadata is filled');
 });
