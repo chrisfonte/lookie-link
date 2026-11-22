@@ -1,0 +1,58 @@
+name: FOSSA
+
+# Uploads this repository's dependency analysis to FOSSA when commits land on
+# main. What leaves the runner is the resolved dependency graph
+# (package names and versions from package-lock.json and fossa-deps.yml), the
+# project id from .fossa.yml, and the branch and commit. No source is uploaded.
+#
+# This workflow has no pull_request trigger on purpose. The upload key is a
+# repository secret, and a workflow that pull requests cannot start never
+# exposes it to code from a branch or a fork.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Uploads for main run one at a time, so two quick pushes cannot finish out of
+# order and leave an older commit as the latest analysis. A running upload is
+# never cancelled. A queued one can be replaced by a newer push, so during a
+# burst an intermediate commit may be skipped while the newest still uploads.
+concurrency:
+  group: fossa-main
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    name: Upload dependency analysis
+    # Belt and braces on top of the trigger above: only a push to main of the
+    # canonical repository runs this job. A fork that keeps this file has no
+    # secret and skips the job.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'chrisfonte/lookie-link'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Nothing in this job pushes, so the checkout token is not kept on disk.
+          persist-credentials: false
+
+      # Analyze and upload only. `run-tests` stays off: this job records the
+      # dependency graph and does not gate main on a policy result.
+      - name: Analyze and upload
+        uses: fossas/fossa-action@29693cc50323968e039056be419b32989fc5880c # v2.0.0
+        with:
+          # Push-only key: it can upload an analysis and read nothing back.
+          api-key: ${{ secrets.FOSSA_API_KEY }}
+          # Without this the action installs whatever CLI release is newest
+          # on the day. Pinned to a release that was run against this
+          # repository's .fossa.yml; raise it on purpose, after the same
+          # local check with the new version.
+          pinned-cli-version: v3.20.13
+          # Same id as .fossa.yml, repeated so an upload can never fall back to
+          # a project inferred from the Git remote.
+          project: lookie-link
+          branch: main
