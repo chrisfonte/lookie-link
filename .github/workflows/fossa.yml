@@ -1,7 +1,7 @@
 name: FOSSA
 
-# Uploads this repository's dependency analysis to FOSSA for each commit that
-# lands on main. What leaves the runner is the resolved dependency graph
+# Uploads this repository's dependency analysis to FOSSA when commits land on
+# main. What leaves the runner is the resolved dependency graph
 # (package names and versions from package-lock.json and fossa-deps.yml), the
 # project id from .fossa.yml, and the branch and commit. No source is uploaded.
 #
@@ -15,9 +15,10 @@ on:
 permissions:
   contents: read
 
-# Uploads for main run one at a time and are never cancelled, so two quick
-# pushes cannot finish out of order and leave an older commit as the latest
-# analysis.
+# Uploads for main run one at a time, so two quick pushes cannot finish out of
+# order and leave an older commit as the latest analysis. A running upload is
+# never cancelled. A queued one can be replaced by a newer push, so during a
+# burst an intermediate commit may be skipped while the newest still uploads.
 concurrency:
   group: fossa-main
   cancel-in-progress: false
