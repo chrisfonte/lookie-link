@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — Issue-number citation
+
+- AGENTS.md now carries the house rule to cite work by GitHub issue number in
+  branch names, commit messages and pull request titles, never by an internal
+  ticket id, and the rule against AI attribution trailers in commits, pull
+  request titles and pull request bodies.
+
 ## Unreleased — conditional form fields
 
 - Add the field key `showWhen: {fieldId, optionIds}`: a field shows only while a
