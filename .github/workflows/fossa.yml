@@ -15,6 +15,13 @@ on:
 permissions:
   contents: read
 
+# Uploads for main run one at a time and are never cancelled, so two quick
+# pushes cannot finish out of order and leave an older commit as the latest
+# analysis.
+concurrency:
+  group: fossa-main
+  cancel-in-progress: false
+
 jobs:
   analyze:
     name: Upload dependency analysis
@@ -39,6 +46,11 @@ jobs:
         with:
           # Push-only key: it can upload an analysis and read nothing back.
           api-key: ${{ secrets.FOSSA_API_KEY }}
+          # Without this the action installs whatever CLI release is newest
+          # on the day. Pinned to a release that was run against this
+          # repository's .fossa.yml; raise it on purpose, after the same
+          # local check with the new version.
+          pinned-cli-version: v3.20.13
           # Same id as .fossa.yml, repeated so an upload can never fall back to
           # a project inferred from the Git remote.
           project: lookie-link
