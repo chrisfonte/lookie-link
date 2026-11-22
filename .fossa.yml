@@ -1,0 +1,18 @@
+# FOSSA CLI configuration. Holds no credential: the API key is only ever
+# supplied through the FOSSA_API_KEY environment variable or a CI secret.
+#
+# `project.id` fixes the FOSSA project that an upload lands in, so local runs
+# and CI report to the same project instead of one inferred from the Git remote.
+# `project.name` is only read when a project is first created.
+#
+# Local check, uploads nothing and needs no key:
+#   fossa analyze --output --json
+version: 3
+
+project:
+  id: lookie-link
+  name: lookie-link
+
+telemetry:
+  # Quoted on purpose: a bare `off` is a YAML boolean and the CLI rejects it.
+  scope: "off"
