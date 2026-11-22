@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — Public-safe standards citations
+
+- AGENTS.md now cites house standards by file name and section only. It carries
+  no private paths and no private workspace references.
+
 ## Unreleased — Issue-number citation
 
 - AGENTS.md now carries the house rule to cite work by GitHub issue number in
