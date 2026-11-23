@@ -9,7 +9,7 @@ Lookie-Link is a private-network web viewer for configured local directories. It
 
 The authoritative route, authorization, configuration, CLI, discovery, and library inventory is [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md). Do not create another endpoint list or document forms, templates, or submissions as implemented.
 
-Before building, read the house standards router — the Tier-0 `AGENTS.md` in the maintainer's operations workspace — and its Rules Card. The Boundary below keeps that workspace's paths out of this repository; resolve them from the router itself, and never link public navigation or documentation to them.
+Before building, read the house standards that bind this project. House standards are cited here by file name and section, for example `git-workflow-best-practices.md`, **No AI attribution trailers**, and `issue-first-staged-implementation-best-practices.md`, section 7. This repo carries no private paths, and public navigation or documentation never links to them; the Boundary below governs.
 
 ## Boundary
 
@@ -29,11 +29,18 @@ This repository is public. Treat every tracked file as publishable.
   configuration, CLI, discovery, and library inventory.
 - Commit messages and branch names must not contain internal ticket IDs (e.g.
   `FON-*`) or internal planning-doc names; reference issues generically or via
-  public issue numbers only.
+  public issue numbers only. Cite work by its GitHub issue number (for example
+  `#123`) in branch names, commit messages and pull request titles, never by an
+  internal ticket id (`issue-first-staged-implementation-best-practices.md`,
+  section 7). Until the repo has its first GitHub issue, cite its public-safe
+  `docs/ISSUES.md` id instead. Do not add AI attribution trailers —
+  Co-Authored-By lines naming an AI, or "Generated with" lines — to commits,
+  pull request titles or pull request bodies
+  (`git-workflow-best-practices.md`, **No AI attribution trailers**).
 
 ## Standards this project inherits (read before building)
 
-House standards bind this project but live outside it, in the maintainer's operations workspace; the Boundary above keeps their paths out of this repository. Cite them rather than re-deriving rules — the Rules Card in the Tier-0 router resolves each keyword below.
+House standards bind this project but live outside it; the Boundary above keeps their paths out of this repository. Cite them rather than re-deriving rules, by file name and section; each keyword below names the standard that governs it.
 
 Inherits the house project standards list "For a New Product", list version 1.0.0.
 
