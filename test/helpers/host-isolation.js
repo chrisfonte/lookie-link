@@ -20,7 +20,9 @@
 //   - points LOOKIE_LINK_CONFIG at an empty config inside that directory, so
 //     no fallback candidate (home or checkout root) is ever consulted. Tests
 //     that need config still set LOOKIE_LINK_CONFIG to their own fixture;
-//   - keeps Playwright pointed at the browsers installed under the real home.
+//   - keeps Playwright pointed at the browsers it would have used before HOME
+//     changed (PLAYWRIGHT_BROWSERS_PATH, its npm config forms, or the default
+//     cache under the real home).
 //
 // Child processes inherit the isolated environment. A nested load (for example
 // a `node --test` child of an isolated runner) reuses the parent's directory.
@@ -48,9 +50,17 @@ function isolate() {
     return inherited;
   }
 
-  if (!env.PLAYWRIGHT_BROWSERS_PATH) {
-    env.PLAYWRIGHT_BROWSERS_PATH = defaultPlaywrightBrowsersPath(env, os.homedir());
-  }
+  // Resolve the browser cache the way Playwright does (explicit variable, then
+  // the npm config forms), falling back to its default under the real home, and
+  // pin it before HOME changes. An explicit empty or '0' value is kept as is.
+  const configuredBrowsers = [
+    'PLAYWRIGHT_BROWSERS_PATH',
+    'npm_config_playwright_browsers_path',
+    'npm_package_config_playwright_browsers_path',
+  ].map((key) => env[key]).find((value) => value !== undefined);
+  env.PLAYWRIGHT_BROWSERS_PATH = configuredBrowsers !== undefined
+    ? configuredBrowsers
+    : defaultPlaywrightBrowsersPath(env, os.homedir());
 
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lookie-test-host-')));
   const home = path.join(root, 'home');
@@ -66,8 +76,11 @@ function isolate() {
   const configFile = path.join(configDir, 'lookie-link.yaml');
   fs.writeFileSync(configFile, '# Empty config written by test/helpers/host-isolation.js\n{}\n');
 
+  // Compare names case-insensitively: Windows environment lookup ignores case,
+  // so a host `Port` or `lookie_link_enable_editing` would otherwise survive.
   for (const key of Object.keys(env)) {
-    if (key.startsWith('LOOKIE_LINK_') || STRIPPED_KEYS.has(key)) delete env[key];
+    const upper = key.toUpperCase();
+    if (upper.startsWith('LOOKIE_LINK_') || STRIPPED_KEYS.has(upper)) delete env[key];
   }
   env.HOME = home;
   env.USERPROFILE = home;
@@ -85,4 +98,4 @@ function isolate() {
   return home;
 }
 
-module.exports = { isolatedHome: isolate(), MARKER };
+module.exports = { isolatedHome: isolate(), MARKER, STRIPPED_KEYS };

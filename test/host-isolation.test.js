@@ -40,12 +40,48 @@ test('the default config is the empty isolated config, never a home or checkout 
 
 test('host LOOKIE_LINK_* and legacy overrides do not reach the suite', () => {
   for (const key of Object.keys(process.env)) {
+    const upper = key.toUpperCase();
     if (key === 'LOOKIE_LINK_CONFIG') continue;
-    assert.equal(key.startsWith('LOOKIE_LINK_'), false, `${key} leaked from the host`);
+    assert.equal(upper.startsWith('LOOKIE_LINK_'), false, `${key} leaked from the host`);
+    assert.equal(['PORT', 'HOSTNAME', 'ROOT_MAPPINGS'].includes(upper), false, `${key} leaked from the host`);
   }
-  for (const key of ['PORT', 'HOSTNAME', 'ROOT_MAPPINGS']) {
-    assert.equal(process.env[key], undefined, `${key} leaked from the host`);
-  }
+});
+
+function runIsolated(env, script) {
+  const result = spawnSync(process.execPath, [
+    '--require', path.resolve(__dirname, 'helpers/host-isolation.js'), '-e', script,
+  ], { env, encoding: 'utf8', timeout: 10000 });
+  assert.equal(result.status, 0, result.stderr);
+  return JSON.parse(result.stdout.trim().split('\n').pop());
+}
+
+// A host-like environment for a fresh isolated child: no inherited isolation
+// and no browser-cache setting unless the case under test supplies one.
+function hostEnv(extra) {
+  const env = { ...process.env };
+  for (const key of [
+    MARKER, 'LOOKIE_LINK_CONFIG', 'XDG_CACHE_HOME', 'PLAYWRIGHT_BROWSERS_PATH',
+    'npm_config_playwright_browsers_path', 'npm_package_config_playwright_browsers_path',
+  ]) delete env[key];
+  return { ...env, ...extra };
+}
+
+test('host overrides are stripped whatever the case of their names', () => {
+  const observed = runIsolated(hostEnv({ Port: '1234', lookie_link_enable_editing: 'true', Root_Mappings: 'x=/tmp' }), `
+    process.stdout.write(JSON.stringify(Object.keys(process.env).filter((key) =>
+      /^(port|hostname|root_mappings)$/i.test(key) || (/^lookie_link_/i.test(key) && key !== 'LOOKIE_LINK_CONFIG'))));
+  `);
+  assert.deepEqual(observed, []);
+});
+
+test('the Playwright browser cache Playwright would have used is kept', () => {
+  const script = 'process.stdout.write(JSON.stringify(process.env.PLAYWRIGHT_BROWSERS_PATH));';
+  assert.equal(runIsolated(hostEnv({ npm_config_playwright_browsers_path: '/opt/pw-a' }), script), '/opt/pw-a');
+  assert.equal(runIsolated(hostEnv({ npm_package_config_playwright_browsers_path: '/opt/pw-b' }), script), '/opt/pw-b');
+  assert.equal(runIsolated(hostEnv({ PLAYWRIGHT_BROWSERS_PATH: '/opt/pw-c', npm_config_playwright_browsers_path: '/opt/pw-a' }), script), '/opt/pw-c');
+  const fallback = runIsolated(hostEnv({ HOME: '/home/pw-host' }), script);
+  if (process.platform === 'linux') assert.equal(fallback, '/home/pw-host/.cache/ms-playwright');
+  else assert.ok(fallback.includes('ms-playwright'));
 });
 
 test('the preload isolates a run that starts with a decoy host home', (t) => {
