@@ -30,7 +30,7 @@ jobs:
       - run: npm ci
 
       - name: Unit tests
-        run: node --test test/*.test.js
+        run: npm run test:unit
 
       # Validators are separate executables, not part of `node --test`. They have
       # been red on main before without anyone noticing, because their output was

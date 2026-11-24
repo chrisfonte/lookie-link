@@ -12,12 +12,13 @@
     "check:skill-packages": "node scripts/generate-skill-packages.js --check",
     "search:battery": "node scripts/search-battery.js",
     "generate:skill-packages": "node scripts/generate-skill-packages.js",
-    "test": "node --test test/*.test.js && npm run test:browser",
-    "verify": "node --test test/*.test.js && npm run test:browser && npm run validate:raw-html && npm run check:skill-packages",
+    "test": "npm run test:unit && npm run test:browser",
+    "verify": "npm run test:unit && npm run test:browser && npm run validate:raw-html && npm run check:skill-packages",
     "test:browser": "node test/browser/forms.spec.mjs && node test/browser/list.spec.mjs && node test/browser/embed-annotations.spec.mjs && node test/browser/youtube-player.spec.mjs && node test/browser/diagrams.spec.mjs && node test/browser/audio-markers.spec.mjs",
+    "test:unit": "node --require ./test/helpers/host-isolation.js --test test/*.test.js",
     "start": "node server.js",
-    "validate:editable": "node scripts/validate-editable-mode.js",
-    "validate:raw-html": "node scripts/validate-raw-html.js"
+    "validate:editable": "node --require ./test/helpers/host-isolation.js scripts/validate-editable-mode.js",
+    "validate:raw-html": "node --require ./test/helpers/host-isolation.js scripts/validate-raw-html.js"
   },
   "engines": {
     "node": ">=20"

@@ -105,7 +105,9 @@ test('rendered output never discloses home paths or repository root mappings', a
       `[cross repo](${path.join(betaRoot, 'beta-notes.md')})`,
       '[[beta-notes]]',
       '[[duplicate]]',
-      `[host home](${path.join(os.homedir(), 'outside.md')})`,
+      // A home-shaped path outside every mapping, fixed so the case does not
+    // depend on where the machine running the suite keeps its home directory.
+    '[host home](/home/host-user/outside.md)',
       '[mac home](/Users/generic-user/outside.md)',
     ].join('\n\n');
 

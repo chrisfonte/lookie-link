@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — Host-independent tests (#406)
+
+- The Node suite, browser specs, and validators no longer read the host's
+  Lookie-Link config, home directory, or exported `LOOKIE_LINK_*` settings.
+  `test/helpers/host-isolation.js` gives each run a temporary home and XDG
+  directories and an empty `LOOKIE_LINK_CONFIG`. A guard test fails when the
+  suite runs without it. CI runs the unit tests through `npm run test:unit`.
+
 ## Unreleased — Public-safe standards citations
 
 - AGENTS.md now cites house standards by file name and section only. It carries

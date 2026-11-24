@@ -1,3 +1,5 @@
+// Isolate the host home, config and LOOKIE_LINK_* settings before anything else loads.
+import '../helpers/host-isolation.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import http from 'node:http';
