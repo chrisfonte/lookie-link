@@ -24,12 +24,22 @@ tests to run without skips; install Chromium before claiming release acceptance.
 Failure screenshots are
 left in the gitignored `test/browser/.artifacts/` directory.
 
-A configuration file is not a required CI input. For clean-environment checks, use
-an empty writable HOME and remove `LOOKIE_LINK_*`, `PORT`, `HOSTNAME`, and
-`ROOT_MAPPINGS` overrides; retain the explicit Playwright browser-cache path if
-needed. On macOS, put that HOME under the normal user cache directory and use
-canonical `/private/tmp` for TMPDIR. This avoids unrelated user configuration and
-path-redaction fixture differences. Keep configured-mode checks separate.
+A configuration file is not a required CI input, and the suites never read the
+host's. Every test entry point loads `test/helpers/host-isolation.js` first: the
+npm `test:unit`, `validate:editable`, and `validate:raw-html` scripts and CI
+preload it with `node --require`, and each browser spec imports it. It points
+`HOME`, `USERPROFILE`, and the XDG base directories at a fresh temporary
+directory, removes inherited `LOOKIE_LINK_*`, `PORT`, `HOSTNAME`, and
+`ROOT_MAPPINGS` overrides, and sets `LOOKIE_LINK_CONFIG` to an empty config, so
+neither `~/.config/lookie-link` nor a `lookie-link.yaml` in the checkout root is
+consulted. Playwright keeps using the browsers installed under the real home;
+set `PLAYWRIGHT_BROWSERS_PATH` to override. Tests that need configuration write
+their own fixture and set `LOOKIE_LINK_CONFIG`.
+
+Run single files the same way, for example
+`node --require ./test/helpers/host-isolation.js --test test/kits.test.js`.
+`test/host-isolation.test.js` fails when the Node suite starts without the
+preload. Keep configured-mode checks separate.
 
 If `docs/SKILL-SPEC.md` changes, run `npm run generate:skill-packages` before the checks.
 
