@@ -79,9 +79,18 @@ test('the Playwright browser cache Playwright would have used is kept', () => {
   assert.equal(runIsolated(hostEnv({ npm_config_playwright_browsers_path: '/opt/pw-a' }), script), '/opt/pw-a');
   assert.equal(runIsolated(hostEnv({ npm_package_config_playwright_browsers_path: '/opt/pw-b' }), script), '/opt/pw-b');
   assert.equal(runIsolated(hostEnv({ PLAYWRIGHT_BROWSERS_PATH: '/opt/pw-c', npm_config_playwright_browsers_path: '/opt/pw-a' }), script), '/opt/pw-c');
-  const fallback = runIsolated(hostEnv({ HOME: '/home/pw-host' }), script);
-  if (process.platform === 'linux') assert.equal(fallback, '/home/pw-host/.cache/ms-playwright');
-  else assert.ok(fallback.includes('ms-playwright'));
+  assert.equal(runIsolated(hostEnv({ PLAYWRIGHT_BROWSERS_PATH: '0' }), script), '0');
+  const expected = process.platform === 'linux' ? '/home/pw-host/.cache/ms-playwright' : null;
+  for (const extra of [
+    {},
+    { PLAYWRIGHT_BROWSERS_PATH: '' },
+    { npm_config_playwright_browsers_path: '' },
+    { PLAYWRIGHT_BROWSERS_PATH: '', npm_config_playwright_browsers_path: '/opt/pw-a' },
+  ]) {
+    const fallback = runIsolated(hostEnv({ HOME: '/home/pw-host', ...extra }), script);
+    if (expected) assert.equal(fallback, expected, JSON.stringify(extra));
+    else assert.ok(fallback.includes('ms-playwright'), JSON.stringify(extra));
+  }
 });
 
 test('the preload isolates a run that starts with a decoy host home', (t) => {

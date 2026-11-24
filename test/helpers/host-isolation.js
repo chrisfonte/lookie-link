@@ -52,15 +52,15 @@ function isolate() {
 
   // Resolve the browser cache the way Playwright does (explicit variable, then
   // the npm config forms), falling back to its default under the real home, and
-  // pin it before HOME changes. An explicit empty or '0' value is kept as is.
+  // pin it before HOME changes. Like Playwright, the first defined form wins;
+  // '0' (browsers inside node_modules) is kept, and an empty value means the
+  // default cache, which must stay under the real home rather than the temp one.
   const configuredBrowsers = [
     'PLAYWRIGHT_BROWSERS_PATH',
     'npm_config_playwright_browsers_path',
     'npm_package_config_playwright_browsers_path',
   ].map((key) => env[key]).find((value) => value !== undefined);
-  env.PLAYWRIGHT_BROWSERS_PATH = configuredBrowsers !== undefined
-    ? configuredBrowsers
-    : defaultPlaywrightBrowsersPath(env, os.homedir());
+  env.PLAYWRIGHT_BROWSERS_PATH = configuredBrowsers || defaultPlaywrightBrowsersPath(env, os.homedir());
 
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lookie-test-host-')));
   const home = path.join(root, 'home');
